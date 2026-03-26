@@ -1,0 +1,19 @@
+RewriteEngine On
+RewriteBase /demonlist/
+
+RewriteCond %{THE_REQUEST} \s/+demonlist/index\.php(?:[?\s]|$) [NC]
+RewriteRule ^index\.php$ /demonlist/ [R=301,L]
+
+RewriteCond %{THE_REQUEST} \s/+demonlist/demon\.php\?id=([0-9]+)(?:&[^\s]*)?\s [NC]
+RewriteRule ^demon\.php$ /demonlist/id=%1 [R=301,L]
+
+RewriteCond %{THE_REQUEST} \s/+demonlist/(players|guidelines|submit|admin|account|profile|login|logout|register)\.php(?:[?\s]|$) [NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register)\.php$ /demonlist/$1 [R=301,L]
+
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+RewriteRule ^$ index.php [L]
+RewriteRule ^id=([0-9]+)$ demon.php?id=$1 [QSA,L,NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register)$ $1.php [QSA,L,NC]
