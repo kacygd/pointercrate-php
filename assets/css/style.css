@@ -1703,10 +1703,23 @@ body {
 
 #lists {
   text-align: center;
+  position: relative;
+  z-index: 120;
+  overflow: visible;
+}
+
+#lists > div {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 #lists .button {
   width: 100%;
+  box-sizing: border-box;
+}
+
+#lists .dropdown {
+  z-index: 500;
 }
 
 .search input {
@@ -2259,6 +2272,27 @@ header nav .nav-profile-dropdown button {
 
 .demon-hero-thumb {
   background-size: cover;
+}
+
+@keyframes soft-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-shell .panel {
+  animation: soft-page-enter 280ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-shell .panel {
+    animation: none;
+  }
 }
 
 
