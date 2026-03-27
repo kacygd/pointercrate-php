@@ -82,6 +82,27 @@ function css_background_image(string $url): string
     return "background-image: url('{$safe}');";
 }
 
+function demon_creator_name(array $demon): string
+{
+    $creator = trim((string) ($demon['creator'] ?? ''));
+    if ($creator !== '') {
+        return $creator;
+    }
+
+    return trim((string) ($demon['publisher'] ?? ''));
+}
+
+function render_player_role_link(string $name): string
+{
+    $trimmed = trim($name);
+    if ($trimmed === '') {
+        return '-';
+    }
+
+    $url = base_url('players.php?user=' . rawurlencode($trimmed));
+    return '<a class="player-link" href="' . e($url) . '"><b>' . e($trimmed) . '</b></a>';
+}
+
 function render_list_dropdown(string $id, string $title, string $description, array $demons): void
 {
     ?>
@@ -105,7 +126,7 @@ function render_list_dropdown(string $id, string $title, string $description, ar
                         <a href="<?= e(base_url('demon.php?id=' . (int) $demon['id'])) ?>">
                             #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
                             <br>
-                            <i><?= e((string) $demon['publisher']) ?></i>
+                            <i>published by <?= e((string) $demon['publisher']) ?></i>
                         </a>
                     </li>
                 <?php endforeach; ?>
@@ -115,13 +136,11 @@ function render_list_dropdown(string $id, string $title, string $description, ar
     <?php
 }
 
-$allDemons = db()->query('SELECT d.*, COUNT(c.id) AS completion_count,
-                                 pu.country_code AS publisher_country
-                          FROM demons d
-                          LEFT JOIN completions c ON c.demon_id = d.id
-                          LEFT JOIN users pu ON LOWER(pu.username) = LOWER(d.publisher)
-                          GROUP BY d.id
-                          ORDER BY d.position ASC')->fetchAll();
+$allDemons = db()->query('SELECT d.*, COUNT(c.id) AS completion_count
+                           FROM demons d
+                           LEFT JOIN completions c ON c.demon_id = d.id
+                           GROUP BY d.id
+                           ORDER BY d.position ASC')->fetchAll();
 
 $main = [];
 $extended = [];
@@ -153,11 +172,6 @@ $listEditors = db()->query('SELECT username, country_code
                             ORDER BY created_at ASC, username ASC
                             LIMIT 20')->fetchAll();
 
-$totalCompletions = (int) db()->query('SELECT COUNT(*)
-                                       FROM completions c
-                                       INNER JOIN demons d ON d.id = c.demon_id
-                                       WHERE d.legacy = 0
-                                         AND d.position <= 150')->fetchColumn();
 $discordWidgetUrl = discord_server_widget_url();
 
 render_header('Main List', 'list', [
@@ -187,13 +201,14 @@ render_header('Main List', 'list', [
             <?php
             $thumb = card_thumbnail_url($demon);
             $thumbStyle = css_background_image($thumb);
-            $cardSearchText = strtolower((string) ($demon['name'] . ' ' . $demon['publisher'] . ' ' . $demon['difficulty']));
+            $creator = demon_creator_name($demon);
+            $publisher = trim((string) ($demon['publisher'] ?? ''));
+            $verifier = trim((string) ($demon['verifier'] ?? ''));
+            $cardSearchText = strtolower((string) ($demon['name'] . ' ' . $creator . ' ' . $publisher . ' ' . $verifier . ' ' . $demon['difficulty']));
             $requirement = (int) $demon['requirement'];
             $position = (int) $demon['position'];
             $minimumScore = number_format(pointercrate_score($position, $requirement, $requirement), 2);
             $fullScore = number_format(pointercrate_score($position, $requirement, 100), 2);
-            $publisherCountry = normalize_country_code((string) ($demon['publisher_country'] ?? ''));
-            $publisherFlag = country_flag_html($publisherCountry, true);
             ?>
             <section class="panel fade flex mobile-col" style="overflow: hidden;" data-search-value="<?= e($cardSearchText) ?>">
                 <a
@@ -208,8 +223,8 @@ render_header('Main List', 'list', [
                                 #<?= $position ?> &#8211; <?= e((string) $demon['name']) ?>
                             </a>
                         </h2>
-                        <h3 style="text-align: left; margin-bottom: 0;">
-                            published by <a class="player-link" href="<?= e(base_url('profile.php?user=' . rawurlencode((string) $demon['publisher']))) ?>"><b><?= $publisherFlag ?><?= e((string) $demon['publisher']) ?></b></a>
+                        <h3 class="demon-card-byline" style="text-align: left; margin-bottom: 0;">
+                            published by <?= render_player_role_link($publisher) ?><?php if ($verifier !== ''): ?>, verified by <?= render_player_role_link($verifier) ?><?php endif; ?>
                         </h3>
                         <div class="demon-points" style="text-align: left; font-size: 0.8em;">
                             <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) points
@@ -247,15 +262,20 @@ render_header('Main List', 'list', [
 
         <section id="submit" class="panel fade">
             <h2 class="underlined pad">Submit Record</h2>
-            <p>Submit a completion from your account and wait for admin approval.</p>
-            <a class="blue hover button" href="<?= e(base_url('submit.php')) ?>">Open Submit Form</a>
+            <p>
+                Note: Please do not submit nonsense, it only makes it harder for us all and will get you banned. 
+                Also note that the form rejects duplicate submissions.
+            </p>
+            <a class="blue hover button" href="<?= e(base_url('submit.php')) ?>">Open Submit</a>
         </section>
 
-        <section id="stats" class="panel fade">
-            <h2 class="underlined pad">Stats</h2>
-            <p><b><?= count($showcase) ?></b> ranked list entries</p>
-            <p><b><?= $totalCompletions ?></b> accepted completions</p>
-            <a class="white hover button" href="<?= e(base_url('players.php')) ?>">View Full Rankings</a>
+        <section id="stats-viewer" class="panel fade">
+            <h2 class="underlined pad">Stats Viewer</h2>
+            <p>
+                Get a detailed overview of who completed the most, created the most demons, or beat the hardest demons.
+                Compare your progress and climb the leaderboard.
+            </p>
+            <a class="blue hover button" href="<?= e(base_url('players.php')) ?>">Open stats viewer!</a>
         </section>
 
         <?php if ($discordWidgetUrl !== null): ?>

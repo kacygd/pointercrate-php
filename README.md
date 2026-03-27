@@ -1,4 +1,4 @@
-﻿# Pointercrate-PHP
+# Pointercrate-PHP
 
 Pointercrate-inspired demonlist built with PHP + MySQL.
 
@@ -38,12 +38,16 @@ Pointercrate-inspired demonlist built with PHP + MySQL.
 - `server_id`: used if `server_widget_url` is empty
 - `server_theme`: `dark` or `light`
 
+## Update database
+
+Accessing `https://your-gdps.com/demonlist/update.php` will fully update database and it will be automatically deleted once the update is complete.
+
 ## Roles and Permissions
 
 - Player account is required to submit records.
-- Only admin can add/edit levels and review submissions.
+- Only accounts with `role = admin` can add/edit levels and review submissions.
 
 ## Security
 
 - Do not commit secrets in `config.php` (db password, real webhook).
-- Change default `admin.password` before production.
+- Keep at least one user with `role = admin` for moderation access.

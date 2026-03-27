@@ -83,6 +83,27 @@ function css_background_image(string $url): string
     return "background-image: url('{$safe}');";
 }
 
+function demon_creator_name(array $demon): string
+{
+    $creator = trim((string) ($demon['creator'] ?? ''));
+    if ($creator !== '') {
+        return $creator;
+    }
+
+    return trim((string) ($demon['publisher'] ?? ''));
+}
+
+function render_player_role_link(string $name): string
+{
+    $trimmed = trim($name);
+    if ($trimmed === '') {
+        return '-';
+    }
+
+    $url = base_url('players.php?user=' . rawurlencode($trimmed));
+    return '<a class="player-link" href="' . e($url) . '"><b>' . e($trimmed) . '</b></a>';
+}
+
 function video_host_label(string $url): string
 {
     $host = strtolower((string) parse_url($url, PHP_URL_HOST));
@@ -122,7 +143,7 @@ function render_demon_dropdown(string $id, string $title, string $description, a
                         <a href="<?= e(base_url('demon.php?id=' . (int) $demon['id'])) ?>">
                             #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
                             <br>
-                            <i><?= e((string) $demon['publisher']) ?></i>
+                            <i>by <?= e(demon_creator_name($demon)) ?></i>
                         </a>
                     </li>
                 <?php endforeach; ?>
@@ -137,14 +158,13 @@ if ($id < 1) {
     redirect('index.php');
 }
 
-$allDemons = db()->query('SELECT id, position, name, publisher, legacy
-                          FROM demons
-                          ORDER BY position ASC')->fetchAll();
+$allDemons = db()->query('SELECT id, position, name, creator, publisher, legacy
+                           FROM demons
+                           ORDER BY position ASC')->fetchAll();
 
-$stmt = db()->prepare('SELECT d.*, pu.country_code AS publisher_country, COUNT(c.id) AS completion_count
+$stmt = db()->prepare('SELECT d.*, COUNT(c.id) AS completion_count
                        FROM demons d
                        LEFT JOIN completions c ON c.demon_id = d.id
-                       LEFT JOIN users pu ON LOWER(pu.username) = LOWER(d.publisher)
                        WHERE d.id = :id
                        GROUP BY d.id');
 $stmt->execute([':id' => $id]);
@@ -221,11 +241,6 @@ $listEditors = db()->query('SELECT username, country_code
                             ORDER BY created_at ASC, username ASC
                             LIMIT 20')->fetchAll();
 
-$totalCompletions = (int) db()->query('SELECT COUNT(*)
-                                       FROM completions c
-                                       INNER JOIN demons d ON d.id = c.demon_id
-                                       WHERE d.legacy = 0
-                                         AND d.position <= 150')->fetchColumn();
 $discordWidgetUrl = discord_server_widget_url();
 
 $embed = youtube_embed_url((string) $demon['video_url']);
@@ -238,15 +253,18 @@ $minimumScore = number_format(pointercrate_score($position, $requirement, $requi
 $fullScore = number_format(pointercrate_score($position, $requirement, 100), 2);
 $isLegacyEntry = (int) ($demon['legacy'] ?? 0) === 1 || $position > 150;
 $category = $isLegacyEntry ? 'Legacy List' : ($position <= 75 ? 'Main List' : 'Extended List');
-$publisherCountry = normalize_country_code((string) ($demon['publisher_country'] ?? ''));
-$publisherFlag = country_flag_html($publisherCountry, true);
-$publisherProfileUrl = base_url('profile.php?user=' . rawurlencode((string) $demon['publisher']));
+$creator = demon_creator_name($demon);
+$publisher = trim((string) ($demon['publisher'] ?? ''));
+$verifier = trim((string) ($demon['verifier'] ?? ''));
+$verifiedMetaSuffix = $verifier !== '' ? ', verified by ' . $verifier : '';
 
 $metaDescription = sprintf(
-    '#%d - %s by %s. %d%% to qualify, %s points at 100%%.',
+    '#%d - %s by %s, published by %s%s. %d%% to qualify, %s points at 100%%.',
     $position,
     (string) $demon['name'],
-    (string) $demon['publisher'],
+    $creator !== '' ? $creator : 'Unknown',
+    $publisher !== '' ? $publisher : 'Unknown',
+    $verifiedMetaSuffix,
     $requirement,
     $fullScore
 );
@@ -279,7 +297,7 @@ render_header((string) $demon['name'], 'list', [
                         #<?= $position ?> &#8211; <?= e((string) $demon['name']) ?>
                     </h1>
                     <p class="demon-hero-byline">
-                        published by <a class="player-link" href="<?= e($publisherProfileUrl) ?>"><b><?= $publisherFlag ?><?= e((string) $demon['publisher']) ?></b></a>
+                        by <?= render_player_role_link($creator) ?>, published by <?= render_player_role_link($publisher) ?><?php if ($verifier !== ''): ?>, verified by <?= render_player_role_link($verifier) ?><?php endif; ?>
                     </p>
                     <p class="demon-hero-score">
                         <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) points
@@ -304,6 +322,9 @@ render_header((string) $demon['name'], 'list', [
                         <div><dt>Category</dt><dd><?= e($category) ?></dd></div>
                         <div><dt>Difficulty</dt><dd><?= e((string) $demon['difficulty']) ?></dd></div>
                         <div><dt>Requirement</dt><dd><?= $requirement ?>%</dd></div>
+                        <div><dt>Created by</dt><dd><?= render_player_role_link($creator) ?></dd></div>
+                        <div><dt>Published by</dt><dd><?= render_player_role_link($publisher) ?></dd></div>
+                        <div><dt>Verified by</dt><dd><?= $verifier !== '' ? render_player_role_link($verifier) : '-' ?></dd></div>
                         <div><dt>Level ID</dt><dd><?= e((string) ($demon['level_id'] ?: '-')) ?></dd></div>
                         <div><dt>Level Length</dt><dd><?= e((string) ($demon['level_length'] ?: '-')) ?></dd></div>
                         <div><dt>Song</dt><dd><?= e((string) ($demon['song'] ?: '-')) ?></dd></div>
@@ -340,41 +361,43 @@ render_header((string) $demon['name'], 'list', [
             <?php if ($completions === []): ?>
                 <h3>No records yet</h3>
             <?php else: ?>
-                <table class="data-table">
-                    <tbody>
-                        <tr>
-                            <th class="blue">#</th>
-                            <th class="blue">Record Holder</th>
-                            <th class="blue">Progress</th>
-                            <th class="blue">Video Proof</th>
-                            <th class="blue">Date</th>
-                        </tr>
-                        <?php foreach ($completions as $completion): ?>
-                            <?php
-                            $progress = (int) ($completion['progress'] ?? 100);
-                            $countryCode = normalize_country_code((string) ($completion['country_code'] ?? ''));
-                            $playerFlag = country_flag_html($countryCode, true);
-                            $playerName = (string) $completion['player'];
-                            $playerProfileUrl = base_url('profile.php?user=' . rawurlencode($playerName));
-                            ?>
-                            <tr style="<?= $progress === 100 ? 'font-weight: bold;' : '' ?>">
-                                <td><?= $completion['placement'] !== null ? '#' . (int) $completion['placement'] : '-' ?></td>
-                                <td>
-                                    <span class="player-inline">
-                                        <?= $playerFlag ?><a class="player-link" href="<?= e($playerProfileUrl) ?>"><?= e($playerName) ?></a>
-                                    </span>
-                                </td>
-                                <td><?= $progress ?>%</td>
-                                <td>
-                                    <a class="link" target="_blank" rel="noreferrer" href="<?= e((string) $completion['video_url']) ?>">
-                                        <?= e(video_host_label((string) $completion['video_url'])) ?>
-                                    </a>
-                                </td>
-                                <td><?= e(date('Y-m-d', strtotime((string) $completion['created_at']))) ?></td>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <tbody>
+                            <tr>
+                                <th class="blue">#</th>
+                                <th class="blue">Record Holder</th>
+                                <th class="blue">Progress</th>
+                                <th class="blue">Video Proof</th>
+                                <th class="blue">Date</th>
                             </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+                            <?php foreach ($completions as $completion): ?>
+                                <?php
+                                $progress = (int) ($completion['progress'] ?? 100);
+                                $countryCode = normalize_country_code((string) ($completion['country_code'] ?? ''));
+                                $playerFlag = country_flag_html($countryCode, true);
+                                $playerName = (string) $completion['player'];
+                                $playerProfileUrl = base_url('players.php?user=' . rawurlencode($playerName));
+                                ?>
+                                <tr style="<?= $progress === 100 ? 'font-weight: bold;' : '' ?>">
+                                    <td><?= $completion['placement'] !== null ? '#' . (int) $completion['placement'] : '-' ?></td>
+                                    <td>
+                                        <span class="player-inline">
+                                            <?= $playerFlag ?><a class="player-link" href="<?= e($playerProfileUrl) ?>"><?= e($playerName) ?></a>
+                                        </span>
+                                    </td>
+                                    <td><?= $progress ?>%</td>
+                                    <td>
+                                        <a class="link" target="_blank" rel="noreferrer" href="<?= e((string) $completion['video_url']) ?>">
+                                            <?= e(video_host_label((string) $completion['video_url'])) ?>
+                                        </a>
+                                    </td>
+                                    <td><?= e(date('Y-m-d', strtotime((string) $completion['created_at']))) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
             <?php endif; ?>
         </section>
 
@@ -440,15 +463,20 @@ render_header((string) $demon['name'], 'list', [
 
         <section id="submit" class="panel fade">
             <h2 class="underlined pad">Submit Record</h2>
-            <p>Want your run listed here? Submit your proof and wait for moderation approval.</p>
-            <a class="blue hover button" href="<?= e(base_url('submit.php')) ?>">Open Submit Form</a>
+            <p>
+                Note: Please do not submit nonsense, it only makes it harder for us all and will get you banned.
+                Also note that the form rejects duplicate submissions.
+            </p>
+            <a class="blue hover button" href="<?= e(base_url('submit.php')) ?>">Open Submit</a>
         </section>
 
-        <section id="stats" class="panel fade">
-            <h2 class="underlined pad">Stats</h2>
-            <p><b><?= count($allDemons) ?></b> total list entries</p>
-            <p><b><?= $totalCompletions ?></b> accepted completions</p>
-            <a class="white hover button" href="<?= e(base_url('players.php')) ?>">View Full Rankings</a>
+        <section id="stats-viewer" class="panel fade">
+            <h2 class="underlined pad">Stats Viewer</h2>
+            <p>
+                Get a detailed overview of who completed the most, created the most demons, or beat the hardest demons.
+                Compare your progress and climb the leaderboard.
+            </p>
+            <a class="blue hover button" href="<?= e(base_url('players.php')) ?>">Open stats viewer!</a>
         </section>
 
         <?php if ($discordWidgetUrl !== null): ?>

@@ -1,4 +1,4 @@
-/* ----- source: _pointercrate_ref/pointercrate-core-pages/static/css/core.css ----- */
+﻿/* ----- source: _pointercrate_ref/pointercrate-core-pages/static/css/core.css ----- */
 /* Basic css classes that can be applied to various components to make them look fancy*/
 
 /* https://stackoverflow.com/questions/16679146/force-footer-on-bottom-on-pages-with-little-content */
@@ -1706,6 +1706,9 @@ body {
   position: relative;
   z-index: 120;
   overflow: visible;
+  width: calc(100% - 20px);
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 
 #lists > div {
@@ -1925,8 +1928,13 @@ textarea {
 /* Main-list card info closer to pointercrate */
 main.left .demon-byline h3 {
   text-transform: none;
-  font-size: 1.08em;
-  font-weight: 600;
+  font-size: 0.98em;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+main.left .demon-card-byline {
+  line-height: 1.45;
 }
 
 main.left .demon-points {
@@ -2043,7 +2051,8 @@ header nav .nav-profile-dropdown button:hover {
 
 .demon-hero-byline {
   text-align: left;
-  font-size: 1.05em;
+  font-size: 0.98em;
+  line-height: 1.45;
   margin: 0 0 8px;
 }
 
@@ -2297,3 +2306,667 @@ header nav .nav-profile-dropdown button {
 
 
 
+
+/* Stats Viewer page */
+.stats-viewer-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.stats-viewer-sidebar {
+  border: 1px solid var(--color-border);
+  background: #fff;
+  padding: 10px;
+}
+
+.stats-viewer-country {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  text-align: left;
+}
+
+.stats-viewer-country span {
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #5e6775;
+  text-transform: uppercase;
+}
+
+.stats-viewer-country select {
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-text-accent);
+  font: inherit;
+  padding: 6px 8px;
+}
+
+.stats-viewer-search {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+}
+
+.stats-viewer-search input {
+  border: 0;
+  outline: none;
+  width: 100%;
+  font-size: 1.05em;
+  padding: 2px 0;
+}
+
+.stats-viewer-search button {
+  border: 0;
+  background: transparent;
+  color: #666;
+  font-size: 1.2em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.stats-player-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.stats-player-item + .stats-player-item {
+  border-top: 1px solid #e4e8ef;
+}
+
+.stats-player-button {
+  width: 100%;
+  border: 0;
+  background: #fff;
+  color: var(--color-text-accent);
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.stats-player-item.active .stats-player-button {
+  background: #f1f3f6;
+  box-shadow: inset 3px 0 0 #8c98a9;
+}
+
+.stats-player-button:hover {
+  background: #f7f8fa;
+}
+
+.stats-player-rank {
+  font-weight: 700;
+}
+
+.stats-player-name {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.stats-player-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-player-score {
+  color: #566073;
+  font-size: 0.88em;
+  font-weight: 600;
+}
+
+.stats-viewer-pagination {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.stats-viewer-detail {
+  border: 1px solid var(--color-border);
+  background: #fff;
+  padding: 12px 14px;
+  min-height: 560px;
+}
+
+.stats-viewer-player-head {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.stats-viewer-player-title {
+  margin: 0;
+  font-size: clamp(1.25rem, 2.6vw, 1.55rem);
+}
+
+.stats-viewer-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.stats-viewer-summary-card {
+  border: 1px solid #dde2ea;
+  background: #f8f9fb;
+  text-align: center;
+  padding: 9px 10px;
+}
+
+.stats-viewer-summary-card h3 {
+  margin: 0 0 3px;
+  font-size: 0.9em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5e6775;
+}
+
+.stats-viewer-summary-card p {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 600;
+  color: #2d3440;
+}
+
+.stats-viewer-lines {
+  margin-top: 14px;
+}
+
+.stats-viewer-lines article {
+  padding-top: 11px;
+  border-top: 1px solid #e3e7ef;
+}
+
+.stats-viewer-lines h3 {
+  margin: 0;
+  text-align: center;
+  font-size: 1.05em;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+}
+
+.stats-viewer-lines p {
+  margin: 4px 0 0;
+  text-align: center;
+  color: #5e6675;
+  font-size: 0.94em;
+  line-height: 1.45;
+}
+
+a.stats-demon-link {
+  white-space: nowrap;
+  color: #2f3744;
+  text-decoration: underline;
+}
+
+a.stats-demon-link:hover {
+  color: var(--color-pc-button-bg);
+}
+
+a.stats-demon-link:after {
+  content: none !important;
+}
+
+@media (max-width: 980px) {
+  .stats-viewer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-viewer-detail {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .stats-viewer-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-player-button {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .stats-player-score {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+
+
+
+
+
+
+
+.stats-viewer-panel .panel-head p {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.stats-viewer-grid {
+  display: grid;
+  grid-template-columns: minmax(265px, 330px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.stats-viewer-sidebar {
+  border: 1px solid #d4d8df;
+  background: #f3f4f7;
+  padding: 10px;
+}
+
+.stats-viewer-country {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  text-align: left;
+}
+
+.stats-viewer-country span {
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #5e6775;
+  text-transform: uppercase;
+}
+
+.stats-viewer-country select {
+  border: 1px solid #cfd4dd;
+  background: #fff;
+  color: var(--color-text-accent);
+  font: inherit;
+  padding: 6px 8px;
+}
+
+.stats-viewer-search {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cfd4dd;
+  background: #fff;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+}
+
+.stats-viewer-search input {
+  border: 0;
+  outline: none;
+  width: 100%;
+  font-size: 1em;
+  padding: 2px 0;
+}
+
+.stats-viewer-search button {
+  border: 0;
+  background: transparent;
+  color: #666;
+  font-size: 1.2em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.stats-player-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #cfd4dd;
+  background: #fff;
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.stats-player-item + .stats-player-item {
+  border-top: 1px solid #e4e8ef;
+}
+
+.stats-player-button {
+  width: 100%;
+  border: 0;
+  background: #fff;
+  color: var(--color-text-accent);
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.stats-player-item.active .stats-player-button {
+  background: #edf0f5;
+  box-shadow: inset 3px 0 0 #818c9f;
+}
+
+.stats-player-button:hover {
+  background: #f7f8fa;
+}
+
+.stats-player-rank {
+  font-weight: 700;
+}
+
+.stats-player-name {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.stats-player-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-player-score {
+  color: #566073;
+  font-size: 0.88em;
+  font-weight: 600;
+}
+
+.stats-viewer-pagination {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.stats-viewer-detail {
+  border: 1px solid #d4d8df;
+  background: #f3f4f7;
+  padding: 12px 14px;
+  min-height: 560px;
+}
+
+.stats-viewer-player-head {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.stats-viewer-player-title {
+  margin: 0;
+  font-size: clamp(1.25rem, 2.4vw, 1.55rem);
+}
+
+.stats-viewer-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.stats-viewer-summary-card {
+  border: 1px solid #cbd1db;
+  background: #ebeef3;
+  text-align: center;
+  padding: 10px 11px;
+}
+
+.stats-viewer-summary-card h3 {
+  margin: 0 0 5px;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #5a6372;
+}
+
+.stats-viewer-summary-card p {
+  margin: 0;
+  font-size: 1.34em;
+  font-weight: 700;
+  color: #2f3642;
+  line-height: 1.22;
+}
+
+.stats-viewer-summary-wide {
+  grid-column: 1 / -1;
+}
+
+#stats-breakdown,
+#stats-contrib {
+  font-size: 1.12em;
+}
+
+.stats-viewer-lines {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.stats-viewer-lines article {
+  border: 1px solid #d7dce4;
+  background: #fff;
+  padding: 10px;
+}
+
+.stats-viewer-lines h3 {
+  margin: 0;
+  text-align: left;
+  font-size: 0.82em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #5f6776;
+  line-height: 1.3;
+}
+
+.stats-viewer-lines p {
+  margin: 6px 0 0;
+  text-align: left;
+  color: #525b6b;
+  font-size: 0.93em;
+  line-height: 1.45;
+}
+
+a.stats-demon-link {
+  white-space: normal;
+  color: #2f3744;
+  text-decoration: underline;
+}
+
+a.stats-demon-link:hover {
+  color: var(--color-pc-button-bg);
+}
+
+a.stats-demon-link:after {
+  content: none !important;
+}
+
+@media (max-width: 980px) {
+  .stats-viewer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-viewer-detail {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 820px) {
+  .stats-viewer-summary,
+  .stats-viewer-lines {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .stats-player-button {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
+  .stats-player-score {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+/* ----- Stats Viewer line list: classic (no boxed cards) ----- */
+.stats-viewer-lines {
+  margin-top: 14px;
+  display: block;
+}
+
+.stats-viewer-lines article {
+  padding-top: 11px;
+  border-top: 1px solid #e3e7ef;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.stats-viewer-lines article:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.stats-viewer-lines h3 {
+  margin: 0;
+  text-align: center;
+  font-size: 1.05em;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  text-transform: none;
+  color: inherit;
+}
+
+.stats-viewer-lines p {
+  margin: 4px 0 0;
+  text-align: center;
+  color: #5e6675;
+  font-size: 0.94em;
+  line-height: 1.45;
+}
+
+/* ----- Stats Viewer summary: closer to original layout ----- */
+.stats-viewer-sidebar,
+.stats-viewer-detail {
+  border: 1px solid var(--color-border);
+  background: #fff;
+}
+
+.stats-viewer-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.stats-viewer-summary-card {
+  border: 1px solid #dde2ea;
+  background: #f8f9fb;
+  text-align: center;
+  padding: 9px 10px;
+}
+
+.stats-viewer-summary-card h3 {
+  margin: 0 0 3px;
+  font-size: 0.9em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5e6775;
+}
+
+.stats-viewer-summary-card p {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 600;
+  color: #2d3440;
+  line-height: 1.3;
+}
+
+.stats-viewer-summary-wide {
+  grid-column: auto;
+}
+
+#stats-breakdown,
+#stats-contrib {
+  font-size: 1em;
+}
+
+
+
+/* ----- Stats Viewer summary: centered 3+2 layout ----- */
+.stats-viewer-summary {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.stats-viewer-summary .stats-viewer-summary-card:nth-child(1),
+.stats-viewer-summary .stats-viewer-summary-card:nth-child(2),
+.stats-viewer-summary .stats-viewer-summary-card:nth-child(3) {
+  grid-column: span 2;
+}
+
+.stats-viewer-summary .stats-viewer-summary-card:nth-child(4),
+.stats-viewer-summary .stats-viewer-summary-card:nth-child(5) {
+  grid-column: span 3;
+}
+
+@media (max-width: 820px) {
+  .stats-viewer-summary .stats-viewer-summary-card {
+    grid-column: auto;
+  }
+}
+
+
+/* Records table mobile fix */
+.records .table-wrap {
+  margin-top: 10px;
+}
+
+.records .data-table {
+  width: 100%;
+  margin: 0;
+  min-width: 560px;
+}
+
+.records .player-inline {
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .records .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 8px -6px 0;
+    padding: 0 6px;
+  }
+
+  .records .data-table {
+    min-width: 520px;
+  }
+
+  .records .data-table th,
+  .records .data-table td {
+    white-space: nowrap;
+    font-size: 0.9em;
+  }
+}

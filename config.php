@@ -24,10 +24,4 @@ return [
         'server_id' => '', // Server ID used when server_widget_url is empty
         'server_theme' => 'dark', // dark | light
     ],
-    'admin' => [
-        'password' => 'changeme',
-    ],
 ];
-
-
-

@@ -71,7 +71,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
             <a class="nav-item hover white <?= $activeNav === 'list' ? 'active' : '' ?>" href="<?= e(base_url('index.php')) ?>">Main List</a>
         </div>
         <div class="nav-group">
-            <a class="nav-item hover white <?= $activeNav === 'players' ? 'active' : '' ?>" href="<?= e(base_url('players.php')) ?>">Players</a>
+            <a class="nav-item hover white <?= $activeNav === 'players' ? 'active' : '' ?>" href="<?= e(base_url('players.php')) ?>">Stats Viewer</a>
         </div>
 
         <?php if ($showAdminLink): ?>
@@ -110,7 +110,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
 
         <div class="nav-drop-down" id="mobile-nav-dropdown">
             <a class="nav-item hover white" href="<?= e(base_url('index.php')) ?>">Main List</a>
-            <a class="nav-item hover white" href="<?= e(base_url('players.php')) ?>">Players</a>
+            <a class="nav-item hover white" href="<?= e(base_url('players.php')) ?>">Stats Viewer</a>
             <?php if ($showAdminLink): ?>
                 <a class="nav-item hover white" href="<?= e(base_url('admin.php')) ?>">Admin</a>
             <?php endif; ?>
@@ -158,7 +158,7 @@ function render_footer(): void
         <nav>
             <h2>Navigation</h2>
             <a class="link" href="<?= e(base_url('index.php')) ?>">Main List</a><br>
-            <a class="link" href="<?= e(base_url('players.php')) ?>">Players</a><br>
+            <a class="link" href="<?= e(base_url('players.php')) ?>">Stats Viewer</a><br>
             <a class="link" href="<?= e(base_url('guidelines.php')) ?>">Guidelines</a><br>
             <a class="link" href="<?= e(base_url('submit.php')) ?>">Submit Record</a>
         </nav>

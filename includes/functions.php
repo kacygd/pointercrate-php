@@ -468,7 +468,7 @@ function current_user(): ?array
     }
 
     try {
-        $stmt = db()->prepare('SELECT id, username, email, country_code, password_hash, role, created_at
+        $stmt = db()->prepare('SELECT id, username, email, country_code, password_hash, role, points, created_at
                                FROM users
                                WHERE id = :id
                                LIMIT 1');
@@ -532,10 +532,6 @@ function require_login(?string $next = null): void
 
 function is_admin(): bool
 {
-    if (!empty($_SESSION['admin_logged_in'])) {
-        return true;
-    }
-
     $user = current_user();
     return $user !== null && (($user['role'] ?? '') === 'admin');
 }
@@ -549,3 +545,4 @@ function require_admin(): void
     flash('error', 'Admin permission required.');
     redirect('admin.php');
 }
+

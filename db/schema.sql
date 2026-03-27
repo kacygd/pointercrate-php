@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS users (
+﻿CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(40) NOT NULL,
     display_name VARCHAR(80) NOT NULL,
@@ -6,12 +6,14 @@ CREATE TABLE IF NOT EXISTS users (
     country_code CHAR(2) NULL,
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('player', 'admin') NOT NULL DEFAULT 'player',
+    points DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_users_username (username),
     UNIQUE KEY uq_users_email (email),
     KEY idx_users_role (role),
-    KEY idx_users_country (country_code)
+    KEY idx_users_country (country_code),
+    KEY idx_users_points (points)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS demons (
@@ -20,6 +22,7 @@ CREATE TABLE IF NOT EXISTS demons (
     name VARCHAR(120) NOT NULL,
     difficulty VARCHAR(50) NOT NULL DEFAULT 'Extreme Demon',
     requirement TINYINT UNSIGNED NOT NULL DEFAULT 100,
+    creator VARCHAR(160) NULL,
     publisher VARCHAR(120) NOT NULL,
     verifier VARCHAR(120) NULL,
     video_url VARCHAR(255) NOT NULL,
@@ -102,3 +105,5 @@ CREATE TABLE IF NOT EXISTS demon_position_history (
         REFERENCES users (id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+

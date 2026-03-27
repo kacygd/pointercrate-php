@@ -9,6 +9,5 @@ if (!method_is_post() || !validate_csrf($_POST['_token'] ?? null)) {
 }
 
 logout_user();
-unset($_SESSION['admin_logged_in']);
 flash('success', 'You have been logged out.');
 redirect('index.php');

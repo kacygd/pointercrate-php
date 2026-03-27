@@ -62,6 +62,7 @@ if (method_is_post()) {
         $difficulty = trim((string) ($_POST['difficulty'] ?? 'Extreme Demon'));
         $positionInput = trim((string) ($_POST['position'] ?? ''));
         $requirement = (int) ($_POST['requirement'] ?? 100);
+        $creator = trim((string) ($_POST['creator'] ?? ''));
         $publisher = trim((string) ($_POST['publisher'] ?? ''));
         $verifier = trim((string) ($_POST['verifier'] ?? ''));
         $videoUrl = trim((string) ($_POST['video_url'] ?? ''));
@@ -75,6 +76,9 @@ if (method_is_post()) {
         $errors = [];
         if ($name === '') {
             $errors[] = 'Level name is required.';
+        }
+        if ($creator === '') {
+            $errors[] = 'Creator is required.';
         }
         if ($publisher === '') {
             $errors[] = 'Publisher is required.';
@@ -147,15 +151,16 @@ if (method_is_post()) {
             }
 
             $insert = $pdo->prepare('INSERT INTO demons
-                (position, name, difficulty, requirement, publisher, verifier, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy)
+                (position, name, difficulty, requirement, creator, publisher, verifier, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy)
                 VALUES
-                (:position, :name, :difficulty, :requirement, :publisher, :verifier, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy)');
+                (:position, :name, :difficulty, :requirement, :creator, :publisher, :verifier, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy)');
 
             $insert->execute([
                 ':position' => $position,
                 ':name' => $name,
                 ':difficulty' => $difficulty !== '' ? $difficulty : 'Extreme Demon',
                 ':requirement' => $requirement,
+                ':creator' => $creator,
                 ':publisher' => $publisher,
                 ':verifier' => $verifier !== '' ? $verifier : null,
                 ':video_url' => $videoUrl,
@@ -177,7 +182,9 @@ if (method_is_post()) {
                 'color' => 5814783,
                 'fields' => [
                     ['name' => 'Level', 'value' => '#' . $position . ' - ' . $name, 'inline' => false],
+                    ['name' => 'Creator', 'value' => $creator, 'inline' => true],
                     ['name' => 'Publisher', 'value' => $publisher, 'inline' => true],
+                    ['name' => 'Verifier', 'value' => $verifier !== '' ? $verifier : '-', 'inline' => true],
                     ['name' => 'Requirement', 'value' => $requirement . '%', 'inline' => true],
                     ['name' => 'By', 'value' => (string) (current_user_display_name() ?? 'System'), 'inline' => true],
                 ],
@@ -204,6 +211,7 @@ if (method_is_post()) {
         $newNameInput = trim((string) ($_POST['name'] ?? ''));
         $difficultyInput = trim((string) ($_POST['difficulty'] ?? ''));
         $requirementInput = trim((string) ($_POST['requirement'] ?? ''));
+        $creatorInput = trim((string) ($_POST['creator'] ?? ''));
         $publisherInput = trim((string) ($_POST['publisher'] ?? ''));
         $verifierInput = trim((string) ($_POST['verifier'] ?? ''));
         $videoUrlInput = trim((string) ($_POST['video_url'] ?? ''));
@@ -283,6 +291,11 @@ if (method_is_post()) {
             $finalName = $newNameInput !== '' ? $newNameInput : (string) $target['name'];
             $finalDifficulty = $difficultyInput !== '' ? $difficultyInput : (string) $target['difficulty'];
             $finalRequirement = $requirementInput !== '' ? (int) $requirementInput : (int) $target['requirement'];
+            $targetCreator = trim((string) ($target['creator'] ?? ''));
+            if ($targetCreator === '') {
+                $targetCreator = (string) $target['publisher'];
+            }
+            $finalCreator = $creatorInput !== '' ? $creatorInput : $targetCreator;
             $finalPublisher = $publisherInput !== '' ? $publisherInput : (string) $target['publisher'];
             $finalVerifier = $verifierInput !== '' ? $verifierInput : (string) ($target['verifier'] ?? '');
             $finalVideoUrl = $videoUrlInput !== '' ? $videoUrlInput : (string) $target['video_url'];
@@ -304,6 +317,9 @@ if (method_is_post()) {
 
             if ($finalName === '') {
                 throw new RuntimeException('Level name cannot be empty.');
+            }
+            if ($finalCreator === '') {
+                throw new RuntimeException('Creator cannot be empty.');
             }
             if ($finalPublisher === '') {
                 throw new RuntimeException('Publisher cannot be empty.');
@@ -401,6 +417,7 @@ if (method_is_post()) {
                     name = :name,
                     difficulty = :difficulty,
                     requirement = :requirement,
+                    creator = :creator,
                     publisher = :publisher,
                     verifier = :verifier,
                     video_url = :video_url,
@@ -417,6 +434,7 @@ if (method_is_post()) {
                 ':name' => $finalName,
                 ':difficulty' => $finalDifficulty,
                 ':requirement' => $finalRequirement,
+                ':creator' => $finalCreator,
                 ':publisher' => $finalPublisher,
                 ':verifier' => $finalVerifier !== '' ? $finalVerifier : null,
                 ':video_url' => $finalVideoUrl,
@@ -914,7 +932,11 @@ render_header('Admin', 'admin');
             </label>
         </div>
 
-        <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="detail-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+            <label class="field">
+                <span>Creator(s)</span>
+                <input type="text" name="creator" required>
+            </label>
             <label class="field">
                 <span>Publisher</span>
                 <input type="text" name="publisher" required>
@@ -998,10 +1020,14 @@ render_header('Admin', 'admin');
             </label>
         </div>
 
-        <div class="detail-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+        <div class="detail-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
             <label class="field">
                 <span>Requirement % (optional)</span>
                 <input type="number" min="1" max="100" name="requirement" placeholder="Keep current">
+            </label>
+            <label class="field">
+                <span>Creator(s) (optional)</span>
+                <input type="text" name="creator" placeholder="Keep current">
             </label>
             <label class="field">
                 <span>Publisher (optional)</span>
