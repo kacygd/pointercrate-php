@@ -30,17 +30,9 @@ Pointercrate-inspired demonlist built with PHP + MySQL.
 - `timezone`: app timezone
 - `debug`: debug mode
 
-### If Upgrading From Older DB
+### Update database
 
-Run:
-
-- `php update_db_schema.php`
-
-Or open in browser:
-
-- `update_db_schema.php?run=1`
-
-This will update missing columns and remove deprecated `users.display_name`.
+When updating, remember to change the value `'updated' => 0` to update the database.
 
 ### Discord
 

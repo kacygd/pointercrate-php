@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
 
-$adminPassword = (string) config('admin.password', 'changeme');
 
 function record_position_event(PDO $pdo, int $demonId, ?int $oldPosition, int $newPosition, ?int $changedByUserId, ?string $note = null): void
 {
@@ -54,6 +53,94 @@ function ensure_user_banned_column(PDO $pdo): void
     }
 
     $pdo->exec('ALTER TABLE users MODIFY COLUMN is_banned TINYINT(1) NOT NULL DEFAULT 0');
+}
+
+function admin_index_exists(PDO $pdo, string $table, string $index): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*)
+         FROM information_schema.statistics
+         WHERE table_schema = DATABASE()
+           AND table_name = :table
+           AND index_name = :index_name"
+    );
+    $stmt->execute([
+        ':table' => $table,
+        ':index_name' => $index,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function admin_fk_exists(PDO $pdo, string $table, string $constraint): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*)
+         FROM information_schema.referential_constraints
+         WHERE constraint_schema = DATABASE()
+           AND table_name = :table
+           AND constraint_name = :constraint_name"
+    );
+    $stmt->execute([
+        ':table' => $table,
+        ':constraint_name' => $constraint,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function ensure_demon_claim_columns(PDO $pdo): void
+{
+    if (!admin_column_exists($pdo, 'demons', 'publisher_user_id')) {
+        $pdo->exec('ALTER TABLE demons ADD COLUMN publisher_user_id INT UNSIGNED NULL AFTER publisher');
+    }
+    $pdo->exec('ALTER TABLE demons MODIFY COLUMN publisher_user_id INT UNSIGNED NULL');
+
+    if (!admin_column_exists($pdo, 'demons', 'verifier_user_id')) {
+        $pdo->exec('ALTER TABLE demons ADD COLUMN verifier_user_id INT UNSIGNED NULL AFTER verifier');
+    }
+    $pdo->exec('ALTER TABLE demons MODIFY COLUMN verifier_user_id INT UNSIGNED NULL');
+
+    if (!admin_index_exists($pdo, 'demons', 'idx_demons_publisher_user_id')) {
+        $pdo->exec('ALTER TABLE demons ADD INDEX idx_demons_publisher_user_id (publisher_user_id)');
+    }
+    if (!admin_index_exists($pdo, 'demons', 'idx_demons_verifier_user_id')) {
+        $pdo->exec('ALTER TABLE demons ADD INDEX idx_demons_verifier_user_id (verifier_user_id)');
+    }
+
+    if (!admin_fk_exists($pdo, 'demons', 'fk_demons_publisher_user')) {
+        $pdo->exec('ALTER TABLE demons
+                    ADD CONSTRAINT fk_demons_publisher_user
+                    FOREIGN KEY (publisher_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL');
+    }
+
+    if (!admin_fk_exists($pdo, 'demons', 'fk_demons_verifier_user')) {
+        $pdo->exec('ALTER TABLE demons
+                    ADD CONSTRAINT fk_demons_verifier_user
+                    FOREIGN KEY (verifier_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL');
+    }
+}
+
+function admin_user_id_by_username(PDO $pdo, string $username): ?int
+{
+    $normalized = trim($username);
+    if ($normalized === '') {
+        return null;
+    }
+
+    $stmt = $pdo->prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(:username) LIMIT 1');
+    $stmt->execute([':username' => $normalized]);
+    $value = $stmt->fetchColumn();
+    if ($value === false) {
+        return null;
+    }
+
+    $userId = (int) $value;
+    return $userId > 0 ? $userId : null;
 }
 
 function admin_webhook_actor_label(): string
@@ -117,7 +204,7 @@ function admin_notify_level_added(array $level): void
     ];
 
     if ((int) ($level['id'] ?? 0) > 0) {
-        $embed['url'] = absolute_url('demon.php?id=' . (int) $level['id']);
+        $embed['url'] = absolute_url((string) (int) $level['position']);
     }
 
     send_discord_webhook('', [$embed]);
@@ -174,7 +261,7 @@ function admin_notify_level_updated(array $before, array $after, string $moveNot
     ];
 
     if ((int) ($after['id'] ?? 0) > 0) {
-        $embed['url'] = absolute_url('demon.php?id=' . (int) $after['id']);
+        $embed['url'] = absolute_url((string) (int) $after['position']);
     }
 
     send_discord_webhook('', [$embed]);
@@ -199,7 +286,7 @@ function admin_notify_level_moved(string $name, int $demonId, int $oldPosition, 
     ];
 
     if ($demonId > 0) {
-        $embed['url'] = absolute_url('demon.php?id=' . $demonId);
+        $embed['url'] = absolute_url((string) $newPosition);
     }
 
     send_discord_webhook('', [$embed]);
@@ -302,35 +389,188 @@ function admin_notify_submission_reviewed(array $submission, string $decision, s
 if (method_is_post()) {
     $action = (string) ($_POST['action'] ?? '');
 
-    if ($action === 'login') {
+
+    if ($action === 'update_scoring' && can_manage_scoring()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php');
+            redirect('admin.php#admin-scoring');
         }
 
-        $password = (string) ($_POST['password'] ?? '');
-        if ($password === $adminPassword) {
-            $_SESSION['admin_logged_in'] = true;
-            flash('success', 'Admin login successful.');
-        } else {
-            flash('error', 'Wrong admin password.');
+        $topOneInput = trim((string) ($_POST['top1_points'] ?? ''));
+        if ($topOneInput === '' || !is_numeric($topOneInput)) {
+            flash('error', 'Top #1 points must be a valid number.');
+            redirect('admin.php#admin-scoring');
         }
 
-        redirect('admin.php');
+        $topOnePoints = round((float) $topOneInput, 2);
+        if (!demonlist_set_top1_points($topOnePoints)) {
+            flash(
+                'error',
+                'Top #1 points must be between '
+                . number_format(demonlist_top1_points_min(), 2)
+                . ' and '
+                . number_format(demonlist_top1_points_max(), 2)
+                . '.'
+            );
+            redirect('admin.php#admin-scoring');
+        }
+
+        $syncMessage = '. Demon score values are now scaled proportionally.';
+        try {
+            $syncSummary = demonlist_sync_user_points();
+            $syncMessage .= ' Updated '
+                . (int) ($syncSummary['updated_users'] ?? 0)
+                . ' / '
+                . (int) ($syncSummary['processed_users'] ?? 0)
+                . ' user point totals.';
+        } catch (Throwable) {
+            $syncMessage .= ' Point sync failed in this request. Open Stats Viewer once to refresh points.';
+        }
+
+        flash(
+            'success',
+            'Updated top #1 points to '
+            . number_format($topOnePoints, 2)
+            . $syncMessage
+        );
+        redirect('admin.php#admin-scoring');
     }
 
-    if ($action === 'logout' && is_admin()) {
+    if ($action === 'update_role_permissions' && has_owner_access()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php');
+            redirect('admin.php#admin-role-permissions');
         }
 
-        unset($_SESSION['admin_logged_in']);
-        flash('success', 'Logged out.');
-        redirect('admin.php');
+        $postedPermissions = $_POST['permissions'] ?? [];
+        if (!is_array($postedPermissions)) {
+            flash('error', 'Invalid permission payload.');
+            redirect('admin.php#admin-role-permissions');
+        }
+
+        try {
+            $rolesToUpdate = ['list_editor', 'list_helper'];
+            $permissionKeys = admin_permission_keys();
+            $updatedCount = 0;
+
+            foreach ($rolesToUpdate as $roleKey) {
+                foreach ($permissionKeys as $permissionKey) {
+                    $rawValue = $postedPermissions[$roleKey][$permissionKey] ?? '0';
+                    $allowed = in_array(
+                        strtolower(trim((string) $rawValue)),
+                        ['1', 'true', 'yes', 'on'],
+                        true
+                    );
+
+                    if (!admin_set_role_permission($roleKey, $permissionKey, $allowed)) {
+                        throw new RuntimeException('Could not save permission matrix. Please try again.');
+                    }
+
+                    $updatedCount++;
+                }
+            }
+
+            flash('success', 'Saved custom permissions for List Editor and List Helper (' . $updatedCount . ' values).');
+        } catch (Throwable $throwable) {
+            flash('error', $throwable->getMessage());
+        }
+
+        redirect('admin.php#admin-role-permissions');
+    }
+    if ($action === 'claim_contributor' && can_claim_contributors()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect('admin.php#admin-claims');
+        }
+
+        $demonNameInput = trim((string) ($_POST['demon_name'] ?? ''));
+        $claimRole = strtolower(trim((string) ($_POST['claim_role'] ?? '')));
+        $claimUsernameInput = trim((string) ($_POST['claim_username'] ?? ''));
+
+        if ($demonNameInput === '') {
+            flash('error', 'Please enter a level name to claim.');
+            redirect('admin.php#admin-claims');
+        }
+        if (!in_array($claimRole, ['publisher', 'verifier'], true)) {
+            flash('error', 'Invalid claim role.');
+            redirect('admin.php#admin-claims');
+        }
+
+        $column = $claimRole === 'publisher' ? 'publisher_user_id' : 'verifier_user_id';
+        $roleLabel = ucfirst($claimRole);
+        $pdo = db();
+
+        try {
+            ensure_demon_claim_columns($pdo);
+            $pdo->beginTransaction();
+
+            $targetStmt = $pdo->prepare('SELECT id, name FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1 FOR UPDATE');
+            $targetStmt->execute([':name' => $demonNameInput]);
+            $target = $targetStmt->fetch();
+
+            if ($target === false) {
+                $partial = $pdo->prepare('SELECT id, name FROM demons WHERE LOWER(name) LIKE :query ORDER BY position ASC LIMIT 2');
+                $partial->execute([':query' => '%' . strtolower($demonNameInput) . '%']);
+                $matches = $partial->fetchAll();
+
+                if (count($matches) === 0) {
+                    throw new RuntimeException('Level not found. Please type a valid level name.');
+                }
+                if (count($matches) > 1) {
+                    throw new RuntimeException('Multiple levels match this name. Please type the full level name.');
+                }
+
+                $target = $matches[0];
+            }
+
+            $demonId = (int) ($target['id'] ?? 0);
+            $demonName = trim((string) ($target['name'] ?? ''));
+            if ($demonId < 1) {
+                throw new RuntimeException('Level not found.');
+            }
+
+            $claimedUserId = null;
+            $claimedUsername = '';
+            if ($claimUsernameInput !== '') {
+                $userStmt = $pdo->prepare('SELECT id, username FROM users WHERE LOWER(username) = LOWER(:username) LIMIT 1');
+                $userStmt->execute([':username' => $claimUsernameInput]);
+                $user = $userStmt->fetch();
+
+                if ($user === false) {
+                    throw new RuntimeException('User not found. Please type an existing username exactly.');
+                }
+
+                $claimedUserId = (int) ($user['id'] ?? 0);
+                $claimedUsername = trim((string) ($user['username'] ?? ''));
+                if ($claimedUserId < 1 || $claimedUsername === '') {
+                    throw new RuntimeException('Invalid user selected for claim.');
+                }
+            }
+
+            $update = $pdo->prepare('UPDATE demons SET ' . $column . ' = :user_id WHERE id = :id');
+            $update->execute([
+                ':user_id' => $claimedUserId,
+                ':id' => $demonId,
+            ]);
+
+            $pdo->commit();
+
+            if ($claimedUserId !== null) {
+                flash('success', $roleLabel . ' claim updated: ' . $demonName . ' -> ' . $claimedUsername . '.');
+            } else {
+                flash('success', $roleLabel . ' claim cleared for ' . $demonName . '.');
+            }
+        } catch (Throwable $throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $throwable->getMessage());
+        }
+
+        redirect('admin.php#admin-claims');
     }
 
-    if ($action === 'add_level' && is_admin()) {
+    if ($action === 'add_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
             redirect('admin.php');
@@ -384,6 +624,7 @@ if (method_is_post()) {
         $pdo = db();
 
         try {
+            ensure_demon_claim_columns($pdo);
             $pdo->beginTransaction();
 
             $dupStmt = $pdo->prepare('SELECT id FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1');
@@ -424,10 +665,13 @@ if (method_is_post()) {
                 $position = $maxPosition + 1;
             }
 
+            $publisherUserId = admin_user_id_by_username($pdo, $publisher);
+            $verifierUserId = admin_user_id_by_username($pdo, $verifier);
+
             $insert = $pdo->prepare('INSERT INTO demons
-                (position, name, difficulty, requirement, publisher, verifier, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy)
+                (position, name, difficulty, requirement, publisher, publisher_user_id, verifier, verifier_user_id, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy)
                 VALUES
-                (:position, :name, :difficulty, :requirement, :publisher, :verifier, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy)');
+                (:position, :name, :difficulty, :requirement, :publisher, :publisher_user_id, :verifier, :verifier_user_id, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy)');
 
             $insert->execute([
                 ':position' => $position,
@@ -435,7 +679,9 @@ if (method_is_post()) {
                 ':difficulty' => $difficulty !== '' ? $difficulty : 'Extreme Demon',
                 ':requirement' => $requirement,
                 ':publisher' => $publisher,
+                ':publisher_user_id' => $publisherUserId,
                 ':verifier' => $verifier !== '' ? $verifier : null,
+                ':verifier_user_id' => $verifierUserId,
                 ':video_url' => $videoUrl,
                 ':thumbnail_url' => $thumbnail !== '' ? $thumbnail : null,
                 ':level_id' => $levelId !== '' ? $levelId : null,
@@ -478,7 +724,7 @@ if (method_is_post()) {
 
         redirect('admin.php');
     }
-    if ($action === 'edit_level' && is_admin()) {
+    if ($action === 'edit_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
             redirect('admin.php');
@@ -533,6 +779,7 @@ if (method_is_post()) {
         $pdo = db();
 
         try {
+            ensure_demon_claim_columns($pdo);
             $pdo->beginTransaction();
 
             $targetStmt = $pdo->prepare('SELECT * FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1 FOR UPDATE');
@@ -581,11 +828,20 @@ if (method_is_post()) {
                 'legacy' => (int) $target['legacy'],
             ];
 
+            $currentPublisherUserId = isset($target['publisher_user_id']) ? (int) $target['publisher_user_id'] : 0;
+            $currentVerifierUserId = isset($target['verifier_user_id']) ? (int) $target['verifier_user_id'] : 0;
+
             $finalName = $newNameInput !== '' ? $newNameInput : (string) $target['name'];
             $finalDifficulty = $difficultyInput !== '' ? $difficultyInput : (string) $target['difficulty'];
             $finalRequirement = $requirementInput !== '' ? (int) $requirementInput : (int) $target['requirement'];
             $finalPublisher = $publisherInput !== '' ? $publisherInput : (string) $target['publisher'];
             $finalVerifier = $verifierInput !== '' ? $verifierInput : (string) ($target['verifier'] ?? '');
+            $finalPublisherUserId = $publisherInput !== ''
+                ? admin_user_id_by_username($pdo, $finalPublisher)
+                : ($currentPublisherUserId > 0 ? $currentPublisherUserId : null);
+            $finalVerifierUserId = $verifierInput !== ''
+                ? admin_user_id_by_username($pdo, $finalVerifier)
+                : ($currentVerifierUserId > 0 ? $currentVerifierUserId : null);
             $finalVideoUrl = $videoUrlInput !== '' ? $videoUrlInput : (string) $target['video_url'];
             $finalThumbnail = $thumbnailInput !== '' ? $thumbnailInput : (string) ($target['thumbnail_url'] ?? '');
             $finalLevelId = $levelIdInput !== '' ? $levelIdInput : (string) ($target['level_id'] ?? '');
@@ -703,7 +959,9 @@ if (method_is_post()) {
                     difficulty = :difficulty,
                     requirement = :requirement,
                     publisher = :publisher,
+                    publisher_user_id = :publisher_user_id,
                     verifier = :verifier,
+                    verifier_user_id = :verifier_user_id,
                     video_url = :video_url,
                     thumbnail_url = :thumbnail_url,
                     level_id = :level_id,
@@ -719,7 +977,9 @@ if (method_is_post()) {
                 ':difficulty' => $finalDifficulty,
                 ':requirement' => $finalRequirement,
                 ':publisher' => $finalPublisher,
+                ':publisher_user_id' => $finalPublisherUserId,
                 ':verifier' => $finalVerifier !== '' ? $finalVerifier : null,
+                ':verifier_user_id' => $finalVerifierUserId,
                 ':video_url' => $finalVideoUrl,
                 ':thumbnail_url' => $finalThumbnail !== '' ? $finalThumbnail : null,
                 ':level_id' => $finalLevelId !== '' ? $finalLevelId : null,
@@ -760,7 +1020,7 @@ if (method_is_post()) {
 
         redirect('admin.php');
     }
-    if ($action === 'move_level' && is_admin()) {
+    if ($action === 'move_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
             redirect('admin.php');
@@ -907,7 +1167,7 @@ if (method_is_post()) {
         redirect('admin.php');
     }
 
-    if ($action === 'update_user' && is_admin()) {
+    if ($action === 'update_user' && can_manage_users()) {
         $usersQueryRedirect = trim((string) ($_POST['users_q'] ?? ''));
         $redirectTarget = $usersQueryRedirect !== ''
             ? ('admin.php?users_q=' . rawurlencode($usersQueryRedirect) . '#admin-user-management')
@@ -919,11 +1179,13 @@ if (method_is_post()) {
         }
 
         $userId = (int) ($_POST['user_id'] ?? 0);
-        $role = (string) ($_POST['role'] ?? '');
+        $roleInput = strtolower(trim((string) ($_POST['role'] ?? '')));
+        $allowedRoleInputs = ['player', 'list_helper', 'list_editor', 'owner'];
+        $role = normalize_user_role($roleInput);
         $isBannedInput = (string) ($_POST['is_banned'] ?? '0');
         $bonusInput = trim((string) ($_POST['bonus_delta'] ?? '0'));
 
-        if ($userId < 1 || !in_array($role, ['player', 'admin'], true)) {
+        if ($userId < 1 || !in_array($roleInput, $allowedRoleInputs, true)) {
             flash('error', 'Invalid user update request.');
             redirect($redirectTarget);
         }
@@ -949,6 +1211,9 @@ if (method_is_post()) {
             $pdo->beginTransaction();
             ensure_bonus_points_column($pdo);
             ensure_user_banned_column($pdo);
+            if (!schema_users_role_enum_ready($pdo)) {
+                schema_apply_users_role_enum($pdo);
+            }
 
             $userStmt = $pdo->prepare('SELECT id, username, role, is_banned, bonus_points, points FROM users WHERE id = :id LIMIT 1 FOR UPDATE');
             $userStmt->execute([':id' => $userId]);
@@ -958,11 +1223,12 @@ if (method_is_post()) {
             }
 
             $currentRole = (string) $target['role'];
+            $currentRoleNormalized = normalize_user_role($currentRole);
             $currentBanned = (int) ($target['is_banned'] ?? 0) === 1 ? 1 : 0;
-            if ($currentRole === 'admin' && $role === 'player') {
-                $adminCount = (int) $pdo->query('SELECT COUNT(*) FROM users WHERE role = "admin"')->fetchColumn();
-                if ($adminCount <= 1) {
-                    throw new RuntimeException('Cannot demote the last admin account.');
+            if ($currentRoleNormalized === 'owner' && $role !== 'owner') {
+                $ownerCount = (int) $pdo->query('SELECT COUNT(*) FROM users WHERE role = "owner"')->fetchColumn();
+                if ($ownerCount <= 1) {
+                    throw new RuntimeException('Cannot demote the last owner account.');
                 }
             }
 
@@ -978,7 +1244,7 @@ if (method_is_post()) {
             $beforeUserData = [
                 'id' => (int) $target['id'],
                 'username' => (string) $target['username'],
-                'role' => $currentRole,
+                'role' => $currentRoleNormalized,
                 'is_banned' => $currentBanned,
                 'bonus_points' => $currentBonus,
                 'points' => $currentPoints,
@@ -997,10 +1263,6 @@ if (method_is_post()) {
                 ':bonus_delta' => $bonusDelta,
                 ':id' => $userId,
             ]);
-
-            if ((int) ($_SESSION['user_id'] ?? 0) === $userId && $role !== 'admin') {
-                unset($_SESSION['admin_logged_in']);
-            }
 
             $afterUserData = [
                 'id' => (int) $target['id'],
@@ -1024,7 +1286,7 @@ if (method_is_post()) {
 
         redirect($redirectTarget);
     }
-    if ($action === 'review' && is_admin()) {
+    if ($action === 'review' && can_review_submissions()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
             redirect('admin.php');
@@ -1223,28 +1485,19 @@ if (method_is_post()) {
 
         redirect('admin.php');
     }
-}
+    flash('error', 'You do not have permission to access this page.');
+    redirect('admin.php');
 
+}
 if (!is_admin()) {
-    render_header('Admin Login', 'admin');
+    http_response_code(403);
+    render_header('Access Denied', 'admin');
     ?>
     <section class="panel panel-narrow fade">
         <div class="panel-head">
-            <h1>Admin Login</h1>
-            <p>Only admins can moderate submissions and add or rank levels.</p>
+            <h1>Access Denied</h1>
+            <p>You do not have permission to access this page.</p>
         </div>
-        <?php if ($adminPassword === 'changeme'): ?>
-            <div class="info-red">Default password is still active (`changeme`). Change it in config.</div>
-        <?php endif; ?>
-        <form class="stack-form" method="post" action="<?= e(base_url('admin.php')) ?>">
-            <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-            <input type="hidden" name="action" value="login">
-            <label class="field">
-                <span>Password</span>
-                <input type="password" name="password" required>
-            </label>
-            <button class="button blue hover" type="submit">Login</button>
-        </form>
     </section>
     <?php
     render_footer();
@@ -1273,11 +1526,25 @@ $stats = [
     'approved' => (int) $adminPdo->query('SELECT COUNT(*) FROM submissions WHERE status = "approved"')->fetchColumn(),
     'rejected' => (int) $adminPdo->query('SELECT COUNT(*) FROM submissions WHERE status = "rejected"')->fetchColumn(),
     'players' => (int) $adminPdo->query('SELECT COUNT(*) FROM users WHERE role = "player"')->fetchColumn(),
-    'admins' => (int) $adminPdo->query('SELECT COUNT(*) FROM users WHERE role = "admin"')->fetchColumn(),
+    'owners' => (int) $adminPdo->query('SELECT COUNT(*) FROM users WHERE role = "owner"')->fetchColumn(),
+    'list_editors' => (int) $adminPdo->query('SELECT COUNT(*) FROM users WHERE role = "list_editor"')->fetchColumn(),
+    'list_helpers' => (int) $adminPdo->query('SELECT COUNT(*) FROM users WHERE role = "list_helper"')->fetchColumn(),
 ];
 $stats['banned'] = $hasUserBanned
     ? (int) $adminPdo->query('SELECT COUNT(*) FROM users WHERE COALESCE(is_banned, 0) = 1')->fetchColumn()
     : 0;
+
+
+
+$topOnePoints = demonlist_top1_points();
+$topOnePointsInput = number_format($topOnePoints, 2, '.', '');
+$topOnePointsMinInput = number_format(demonlist_top1_points_min(), 2, '.', '');
+$topOnePointsMaxInput = number_format(demonlist_top1_points_max(), 2, '.', '');
+
+$hasPublisherClaimColumn = admin_column_exists($adminPdo, 'demons', 'publisher_user_id');
+$hasVerifierClaimColumn = admin_column_exists($adminPdo, 'demons', 'verifier_user_id');
+$claimColumnsReady = $hasPublisherClaimColumn && $hasVerifierClaimColumn;
+$claimUsers = $adminPdo->query('SELECT username FROM users ORDER BY username ASC LIMIT 500')->fetchAll();
 
 $usersSelectFields = [
     'id',
@@ -1307,10 +1574,35 @@ if ($usersQuery !== '') {
     $users = $usersStmt->fetchAll();
 }
 
-$maxPosition = (int) db()->query('SELECT COALESCE(MAX(position), 1) FROM demons')->fetchColumn();
-$editableDemons = db()->query('SELECT id, name, position, requirement
+$maxPosition = (int) $adminPdo->query('SELECT COALESCE(MAX(position), 1) FROM demons')->fetchColumn();
+$editableDemonFields = [
+    'id',
+    'name',
+    'position',
+    'requirement',
+    'publisher',
+    'verifier',
+    $claimColumnsReady ? 'publisher_user_id' : 'NULL AS publisher_user_id',
+    $claimColumnsReady ? 'verifier_user_id' : 'NULL AS verifier_user_id',
+];
+$editableDemons = $adminPdo->query('SELECT ' . implode(', ', $editableDemonFields) . '
                                FROM demons
                                ORDER BY position ASC, name ASC')->fetchAll();
+
+$adminRoleLabel = role_label(current_user_role());
+$canManageLevels = can_manage_levels();
+$canManageUsers = can_manage_users();
+$canManageScoring = can_manage_scoring();
+$canClaimContributors = can_claim_contributors();
+$canReviewSubmissions = can_review_submissions();
+$canManageRolePermissions = has_owner_access();
+$editableStaffRoles = ['list_editor', 'list_helper'];
+$permissionDefinitions = admin_permission_definitions();
+$rolePermissionMatrix = [];
+foreach ($editableStaffRoles as $staffRole) {
+    $rolePermissionMatrix[$staffRole] = admin_role_permissions($staffRole);
+}
+
 
 render_header('Admin', 'admin');
 ?>
@@ -1322,12 +1614,12 @@ render_header('Admin', 'admin');
         </div>
     </div>
 
-    <div class="detail-grid" style="grid-template-columns: repeat(6, 1fr); gap: 10px;">
+    <p class="muted" style="margin: 0 0 8px 0;">Current role: <b><?= e($adminRoleLabel) ?></b></p>
+    <div class="detail-grid" style="grid-template-columns: repeat(5, 1fr); gap: 10px;">
         <div class="panel subtle"><h3><?= $stats['pending'] ?></h3><p>Pending</p></div>
         <div class="panel subtle"><h3><?= $stats['approved'] ?></h3><p>Approved</p></div>
         <div class="panel subtle"><h3><?= $stats['rejected'] ?></h3><p>Rejected</p></div>
         <div class="panel subtle"><h3><?= $stats['players'] ?></h3><p>Players</p></div>
-        <div class="panel subtle"><h3><?= $stats['admins'] ?></h3><p>Admins</p></div>
         <div class="panel subtle"><h3><?= $stats['banned'] ?></h3><p>Banned</p></div>
     </div>
 </section>
@@ -1339,33 +1631,189 @@ render_header('Admin', 'admin');
         <p>Choose one tool and only that section will be displayed below.</p>
     </div>
     <div class="admin-quick-actions">
-        <a class="admin-action-tile" href="#admin-add-level" data-open-admin-section="admin-add-level">
-            <span class="admin-action-title">Add Level</span>
-            <small>Create a new demon entry.</small>
-        </a>
-        <a class="admin-action-tile" href="#admin-edit-level" data-open-admin-section="admin-edit-level">
-            <span class="admin-action-title">Edit Level</span>
-            <small>Update level info and ranking.</small>
-        </a>
-        <a class="admin-action-tile" href="#admin-user-management" data-open-admin-section="admin-user-management">
-            <span class="admin-action-title">User Management</span>
-            <small>Adjust role, ban status, and bonus points.</small>
-        </a>
-        <a class="admin-action-tile" href="#admin-pending-submissions" data-open-admin-section="admin-pending-submissions">
-            <span class="admin-action-title">Pending Submissions</span>
-            <small>Review new records in queue.</small>
-        </a>
-        <a class="admin-action-tile" href="#admin-reviewed-submissions" data-open-admin-section="admin-reviewed-submissions">
-            <span class="admin-action-title">Recently Reviewed</span>
-            <small>Check moderation history.</small>
-        </a>
+        <?php if ($canManageLevels): ?>
+            <a class="admin-action-tile" href="#admin-add-level" data-open-admin-section="admin-add-level">
+                <span class="admin-action-title">Add Level</span>
+                <small>Create a new demon entry.</small>
+            </a>
+            <a class="admin-action-tile" href="#admin-edit-level" data-open-admin-section="admin-edit-level">
+                <span class="admin-action-title">Edit Level</span>
+                <small>Update level info and ranking.</small>
+            </a>
+        <?php endif; ?>
+        <?php if ($canManageUsers): ?>
+            <a class="admin-action-tile" href="#admin-user-management" data-open-admin-section="admin-user-management">
+                <span class="admin-action-title">User Management</span>
+                <small>Adjust role, ban status, and bonus points.</small>
+            </a>
+        <?php endif; ?>
+        <?php if ($canManageRolePermissions): ?>
+            <a class="admin-action-tile" href="#admin-role-permissions" data-open-admin-section="admin-role-permissions">
+                <span class="admin-action-title">Role Permissions</span>
+                <small>Customize List Editor and List Helper rights in database.</small>
+            </a>
+        <?php endif; ?>
+        <?php if ($canManageScoring): ?>
+            <a class="admin-action-tile" href="#admin-scoring" data-open-admin-section="admin-scoring">
+                <span class="admin-action-title">Change Score</span>
+                <small>Adjust the highest score on the list.</small>
+            </a>
+        <?php endif; ?>
+        <?php if ($canClaimContributors): ?>
+            <a class="admin-action-tile" href="#admin-claims" data-open-admin-section="admin-claims">
+                <span class="admin-action-title">Claim Contributors</span>
+                <small>Bind publisher/verifier to real accounts via user ID.</small>
+            </a>
+        <?php endif; ?>
+        <?php if ($canReviewSubmissions): ?>
+            <a class="admin-action-tile" href="#admin-pending-submissions" data-open-admin-section="admin-pending-submissions">
+                <span class="admin-action-title">Pending Submissions</span>
+                <small>Review new records in queue.</small>
+            </a>
+            <a class="admin-action-tile" href="#admin-reviewed-submissions" data-open-admin-section="admin-reviewed-submissions">
+                <span class="admin-action-title">Recently Reviewed</span>
+                <small>Check moderation history.</small>
+            </a>
+        <?php endif; ?>
+        <?php if (!$canManageLevels && !$canManageUsers && !$canManageRolePermissions && !$canManageScoring && !$canClaimContributors && !$canReviewSubmissions): ?>
+            <div class="muted">Your role currently has no admin actions assigned.</div>
+        <?php endif; ?>
     </div>
 </section>
 
+<?php if ($canManageRolePermissions): ?>
+<section class="panel fade admin-tool-section admin-role-permissions-section" id="admin-role-permissions">
+    <div class="panel-head">
+        <h2>Role Permissions</h2>
+        <p>Owner can customize List Editor and List Helper permissions stored in database. Owner always keeps full permissions.</p>
+    </div>
+
+    <form class="stack-form" method="post" action="<?= e(base_url('admin.php#admin-role-permissions')) ?>">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="update_role_permissions">
+
+        <div class="table-wrap">
+            <table class="data-table role-permission-table">
+                <thead>
+                    <tr>
+                        <th>Permission</th>
+                        <?php foreach ($editableStaffRoles as $staffRole): ?>
+                            <th><?= e(role_label($staffRole)) ?></th>
+                        <?php endforeach; ?>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($permissionDefinitions as $permissionKey => $permissionLabel): ?>
+                        <tr>
+                            <td class="role-permission-name"><?= e($permissionLabel) ?></td>
+                            <?php foreach ($editableStaffRoles as $staffRole): ?>
+                                <?php $isAllowed = !empty($rolePermissionMatrix[$staffRole][$permissionKey]); ?>
+                                <td class="role-permission-cell">
+                                    <input type="hidden" name="permissions[<?= e($staffRole) ?>][<?= e($permissionKey) ?>]" value="0">
+                                    <input
+                                        class="role-permission-checkbox"
+                                        type="checkbox"
+                                        name="permissions[<?= e($staffRole) ?>][<?= e($permissionKey) ?>]"
+                                        value="1"
+                                        aria-label="<?= e(role_label($staffRole) . ' - ' . $permissionLabel) ?>"
+                                        <?= $isAllowed ? 'checked' : '' ?>
+                                    >
+                                </td>
+                            <?php endforeach; ?>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <button class="button blue hover" type="submit">Save Role Permissions</button>
+    </form>
+</section>
+<?php endif; ?>
+
+<?php if ($canManageScoring): ?>
+<section class="panel fade admin-tool-section" id="admin-scoring">
+    <div class="panel-head">
+        <h2>Change score list</h2>
+        <p>Set the maximum score for the list.</p>
+    </div>
+
+    <form class="stack-form panel-narrow" method="post" action="<?= e(base_url('admin.php#admin-scoring')) ?>">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="update_scoring">
+
+        <label class="field">
+            <span>Top 1 points (100% completion)</span>
+            <input
+                type="number"
+                name="top1_points"
+                min="<?= e($topOnePointsMinInput) ?>"
+                max="<?= e($topOnePointsMaxInput) ?>"
+                step="0.01"
+                value="<?= e($topOnePointsInput) ?>"
+                required
+            >
+        </label>
+        <small class="muted" style="text-align: left;">
+            Allowed range: <?= e($topOnePointsMinInput) ?> to <?= e($topOnePointsMaxInput) ?>.
+            Current #1 score: <?= e(number_format(demonlist_score(1, 100, 100), 2)) ?> points.
+        </small>
+
+        <button class="button blue hover" type="submit">Save Scoring Scale</button>
+    </form>
+</section>
+<?php endif; ?>
+
+<?php if ($canClaimContributors): ?>
+<section class="panel fade admin-tool-section" id="admin-claims">
+    <div class="panel-head">
+        <h2>Claim Contributors</h2>
+        <p>Attach publisher/verifier to a real account. Leave username blank to clear claim and keep text as unclaimed metadata.</p>
+    </div>
+
+    <?php if (!$claimColumnsReady): ?>
+        <div class="info-red">Claim columns are missing in this database. Open <code>update_db_schema.php</code> once, then reload this page.</div>
+    <?php endif; ?>
+
+    <form class="stack-form panel-narrow" method="post" action="<?= e(base_url('admin.php#admin-claims')) ?>">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="claim_contributor">
+
+        <label class="field">
+            <span>Level Name</span>
+            <input type="text" name="demon_name" data-suggest-list="admin-demon-list" placeholder="Type level name..." autocomplete="off" required>
+        </label>
+
+        <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
+            <label class="field">
+                <span>Role</span>
+                <select name="claim_role" required>
+                    <option value="publisher">Publisher</option>
+                    <option value="verifier">Verifier</option>
+                </select>
+            </label>
+            <label class="field">
+                <span>Account Username (optional)</span>
+                <input type="text" name="claim_username" data-suggest-list="admin-user-claim-list" placeholder="Leave blank to clear claim" autocomplete="off">
+            </label>
+        </div>
+
+        <button class="button blue hover" type="submit">Save Claim</button>
+    </form>
+
+    <datalist id="admin-user-claim-list">
+        <?php foreach ($claimUsers as $claimUser): ?>
+            <option value="<?= e((string) ($claimUser['username'] ?? '')) ?>"></option>
+        <?php endforeach; ?>
+    </datalist>
+</section>
+<?php endif; ?>
+
+<?php if ($canManageLevels): ?>
 <section class="panel fade admin-tool-section" id="admin-add-level">
     <div class="panel-head">
         <h2>Add Level</h2>
-        <p>Only admins can add demons to the list. Extra level metadata is optional.</p>
+        <p>Owners and List Editors can add demons to the list. Extra level metadata is optional.</p>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(base_url('admin.php')) ?>">
@@ -1547,7 +1995,9 @@ render_header('Admin', 'admin');
         <?php endforeach; ?>
     </datalist>
 </section>
+<?php endif; ?>
 
+<?php if ($canManageUsers): ?>
 <section class="panel fade admin-tool-section admin-list-section" id="admin-user-management">
     <div class="panel-head">
         <h2>User Management</h2>
@@ -1592,8 +2042,10 @@ render_header('Admin', 'admin');
 
                 <?php foreach ($users as $member): ?>
                     <?php
-                    $memberIsAdmin = (string) $member['role'] === 'admin';
-                    $isLastAdmin = $memberIsAdmin && $stats['admins'] <= 1;
+                    $memberRole = normalize_user_role((string) ($member['role'] ?? 'player'));
+                    $memberIsOwner = $memberRole === 'owner';
+                    $isLastOwner = $memberIsOwner && $stats['owners'] <= 1;
+                    $memberRoleLabel = role_label($memberRole);
                     $isCurrentUser = current_user_id() !== null && (int) $member['id'] === (int) current_user_id();
                     $isBanned = (int) ($member['is_banned'] ?? 0) === 1;
                     $countryCode = normalize_country_code((string) ($member['country_code'] ?? ''));
@@ -1610,7 +2062,7 @@ render_header('Admin', 'admin');
                             </div>
                         </td>
                         <td><?= e((string) ($member['email'] ?: '-')) ?></td>
-                        <td><span class="badge <?= $memberIsAdmin ? 'approved' : '' ?>"><?= e(strtoupper((string) $member['role'])) ?></span></td>
+                        <td><span class="badge <?= $memberIsOwner ? 'approved' : '' ?>"><?= e(strtoupper($memberRoleLabel)) ?></span></td>
                         <td><span class="badge <?= $isBanned ? 'error' : 'success' ?>"><?= $isBanned ? 'BANNED' : 'ACTIVE' ?></span></td>
                         <td><?= e(number_format((float) ($member['points'] ?? 0.0), 2)) ?></td>
                         <td><?= e(number_format((float) ($member['bonus_points'] ?? 0.0), 2)) ?></td>
@@ -1626,8 +2078,10 @@ render_header('Admin', 'admin');
                                     <label class="admin-user-edit-field">
                                         <span>Role</span>
                                         <select name="role">
-                                            <option value="admin" <?= $memberIsAdmin ? 'selected' : '' ?>>ADMIN</option>
-                                            <option value="player" <?= !$memberIsAdmin ? 'selected' : '' ?> <?= $isLastAdmin ? 'disabled' : '' ?>>PLAYER</option>
+                                            <option value="owner" <?= $memberRole === 'owner' ? 'selected' : '' ?>>OWNER</option>
+                                            <option value="list_editor" <?= $memberRole === 'list_editor' ? 'selected' : '' ?> <?= $isLastOwner ? 'disabled' : '' ?>>LIST EDITOR</option>
+                                            <option value="list_helper" <?= $memberRole === 'list_helper' ? 'selected' : '' ?> <?= $isLastOwner ? 'disabled' : '' ?>>LIST HELPER</option>
+                                            <option value="player" <?= $memberRole === 'player' ? 'selected' : '' ?> <?= $isLastOwner ? 'disabled' : '' ?>>PLAYER</option>
                                         </select>
                                     </label>
                                     <label class="admin-user-edit-field">
@@ -1648,8 +2102,8 @@ render_header('Admin', 'admin');
                             <?php if ($isCurrentUser): ?>
                                 <span class="muted admin-user-note">(you)</span>
                             <?php endif; ?>
-                            <?php if ($isLastAdmin): ?>
-                                <span class="muted admin-user-note">Last admin cannot be demoted.</span>
+                            <?php if ($isLastOwner): ?>
+                                <span class="muted admin-user-note">Last owner cannot be demoted.</span>
                             <?php endif; ?>
                         </td>
                     </tr>
@@ -1658,7 +2112,9 @@ render_header('Admin', 'admin');
         </table>
     </div>
 </section>
+<?php endif; ?>
 
+<?php if ($canReviewSubmissions): ?>
 <section class="panel fade admin-tool-section admin-list-section" id="admin-pending-submissions">
     <div class="panel-head">
         <h2>Pending Submissions</h2>
@@ -1739,6 +2195,7 @@ render_header('Admin', 'admin');
         </table>
     </div>
 </section>
+<?php endif; ?>
 <script>
 (() => {
     const links = Array.from(document.querySelectorAll('[data-open-admin-section]'));

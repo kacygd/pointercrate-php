@@ -394,7 +394,7 @@ h3 {
 }
 
 h4 {
-  font-size: 0.8em;
+  font-size: 0.76em;
   margin: 0.4em 0;
 }
 
@@ -905,7 +905,7 @@ h2 .dropdown-menu ul {
 .tooltip .tooltiptext {
   opacity: 0;
   font-weight: normal;
-  font-size: 0.9em;
+  font-size: 0.76em;
   text-align: center;
 
   visibility: hidden;
@@ -1333,7 +1333,7 @@ footer * {
 }
 
 .right p {
-  font-size: 0.8em;
+  font-size: 0.76em;
 }
 
 
@@ -1556,27 +1556,53 @@ tr:nth-child(even) {
   color: var(--color-error-text);
 }
 
-#editors li {
-  display: inline-block;
-  margin: 2px;
-  overflow: hidden;
+.staff-contact-panel .underlined.pad {
+  text-align: center;
 }
 
-#editors ul {
+.staff-contact-panel .staff-contact-note {
+  margin: 12px 8% 14px;
+  text-align: center;
+  font-size: 0.74em;
+  line-height: 1.35;
+  color: #33455f;
+}
+
+.staff-contact-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
   display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  align-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
 
-  margin: 0% 5%;
-
+.staff-contact-list li {
+  text-align: center;
   font-variant: small-caps;
+  font-size: 1.08em;
+  letter-spacing: 0.01em;
+}
+
+.staff-contact-list li b {
+  font-weight: 700;
+}
+
+.staff-contact-empty {
+  font-variant: normal;
+  font-size: 0.92em;
+  color: #5e6c7d;
+}
+
+.staff-contact-subsection + .staff-contact-subsection {
+  margin-top: 16px;
 }
 
 .right p,
 .right span,
 #rules span {
-  font-size: 0.8em;
+  font-size: 0.76em;
   font-weight: normal;
 }
 
@@ -1590,7 +1616,7 @@ tr:nth-child(even) {
     width: 100%;
   }
 
-  #editors,
+  #staff-contacts,
   #submit,
   #stats {
     min-width: 200px;
@@ -1600,7 +1626,7 @@ tr:nth-child(even) {
 }
 
 @media (max-width: 768px) {
-  #editors,
+  #staff-contacts,
   #submit,
   #stats {
     width: 100%;
@@ -1625,7 +1651,7 @@ tr:nth-child(even) {
 
 .dropdown i {
   font-variant: small-caps;
-  font-size: 0.8em;
+  font-size: 0.76em;
 }
 
 #lists .button {
@@ -1796,7 +1822,7 @@ body {
 .field > span {
   font-style: italic;
   margin-bottom: 5px;
-  font-size: 0.9em;
+  font-size: 0.76em;
 }
 
 input,
@@ -2357,7 +2383,7 @@ header nav .nav-profile-dropdown button {
 }
 
 .stats-viewer-country span {
-  font-size: 0.8em;
+  font-size: 0.76em;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: #5e6775;
@@ -2513,7 +2539,7 @@ header nav .nav-profile-dropdown button {
 
 .stats-viewer-summary-card h3 {
   margin: 0 0 3px;
-  font-size: 0.9em;
+  font-size: 0.76em;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #5e6775;
@@ -2706,7 +2732,7 @@ a.stats-demon-link:after {
   align-items: baseline;
   gap: 10px;
   color: #4e607a;
-  font-size: 0.9em;
+  font-size: 0.76em;
 }
 
 .admin-dashboard-command-line strong {
@@ -2870,7 +2896,7 @@ a.stats-demon-link:after {
   border: 1px solid #dbe3ef;
   background: #f8faff;
   color: #435572;
-  font-size: 0.8em;
+  font-size: 0.76em;
   padding: 7px 8px;
 }
 
@@ -3199,7 +3225,7 @@ a.stats-demon-link:after {
   background: #fff;
   padding: 10px 11px;
   color: #2b3d57;
-  font-size: 0.9em;
+  font-size: 0.76em;
   line-height: 1.45;
   vertical-align: middle;
 }
@@ -3216,6 +3242,49 @@ a.stats-demon-link:after {
   border-bottom: 0;
 }
 
+
+.admin-role-permissions-section .table-wrap {
+  margin-top: 10px;
+  border: 1px solid #dbe4f0;
+  background: #fff;
+  box-shadow: 0 10px 20px rgba(18, 30, 49, 0.05);
+}
+
+.role-permission-table {
+  width: 100%;
+  margin: 0;
+  min-width: 560px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.role-permission-table th,
+.role-permission-table td {
+  vertical-align: middle;
+}
+
+.role-permission-table th:not(:first-child),
+.role-permission-table td.role-permission-cell {
+  text-align: center;
+}
+
+.role-permission-name {
+  font-weight: 600;
+  color: #2b3d57;
+}
+
+.role-permission-checkbox {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--color-pc-button-bg);
+}
+
+.role-permission-checkbox:focus-visible {
+  outline: 2px solid rgba(33, 102, 169, 0.35);
+  outline-offset: 2px;
+}
 .admin-user-table td:nth-child(2) b {
   color: #1f3351;
   font-weight: 700;
@@ -3359,7 +3428,7 @@ a.stats-demon-link:after {
   border: 1px solid #dfe4ee;
   background: #f8fafe;
   padding: 6px 10px;
-  font-size: 0.9em;
+  font-size: 0.76em;
   white-space: nowrap;
 }
 
@@ -3436,7 +3505,7 @@ a.stats-demon-link:after {
   flex-wrap: wrap;
   gap: 10px;
   color: #5f6776;
-  font-size: 0.9em;
+  font-size: 0.76em;
 }
 
 .admin-record-editor-body {
@@ -3509,7 +3578,7 @@ a.stats-demon-link:after {
   }
 
   .admin-dashboard-command-line strong {
-    font-size: 0.9em;
+    font-size: 0.76em;
   }
 
   .admin-dashboard-head-actions {
@@ -3586,3 +3655,228 @@ a.stats-demon-link:after {
 
 
 
+
+/* ----- mobile responsiveness pass ----- */
+
+@media (max-width: 980px) {
+  .stats-viewer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-viewer-sidebar,
+  .stats-viewer-detail {
+    width: 100%;
+  }
+
+  .stats-viewer-detail {
+    min-height: 0;
+  }
+
+  .stats-player-list {
+    max-height: min(56vh, 420px);
+  }
+}
+
+@media (max-width: 767px) {
+  .page-shell {
+    width: 100%;
+  }
+
+  .panel {
+    margin: 16px 8px;
+    padding: 14px;
+  }
+
+  #lists {
+    width: calc(100% - 12px);
+  }
+
+  #lists > div {
+    flex: 1 1 100%;
+  }
+
+  .dropdown li {
+    min-width: 0;
+    width: 100%;
+  }
+
+  #editors,
+  #submit,
+  #stats,
+  #stats-viewer {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .detail-grid[style] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .key-value div {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .key-value dd {
+    text-align: left;
+    word-break: break-word;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table {
+    width: 100%;
+    margin: 0;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 8px 9px;
+    line-height: 1.45;
+  }
+
+  .player-inline {
+    white-space: normal;
+  }
+
+  .stats-viewer-sidebar {
+    padding: 8px;
+  }
+
+  .stats-viewer-detail {
+    padding: 10px;
+    min-height: 0;
+  }
+
+  .stats-player-button {
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    padding: 8px;
+  }
+
+  .stats-viewer-lines h3 {
+    font-size: 1em;
+  }
+
+  .stats-viewer-lines p {
+    word-break: break-word;
+  }
+
+  .discord-widget-frame {
+    height: 280px;
+  }
+
+  .admin-user-edit-form .button,
+  .admin-records-filter-actions .button,
+  .admin-user-search-actions .button,
+  .admin-head-jump,
+  .admin-logout-button {
+    width: 100%;
+  }
+
+  header nav .nav-hover-dropdown.nav-profile-dropdown {
+    min-width: 0;
+    width: min(92vw, 320px);
+  }
+
+  header nav .nav-profile-dropdown a,
+  header nav .nav-profile-dropdown button {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 520px) {
+  .stats-player-button {
+    grid-template-columns: 46px minmax(0, 1fr);
+    row-gap: 3px;
+  }
+
+  .stats-player-score {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .stats-viewer-pagination {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-records-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-records-account span {
+    white-space: normal;
+  }
+}
+
+/* ----- mobile hotfix: stats + admin dashboard ----- */
+
+.stats-viewer-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (min-width: 1101px) {
+  .stats-viewer-grid {
+    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+    gap: 18px;
+  }
+}
+
+.stats-viewer-sidebar,
+.stats-viewer-detail {
+  min-width: 0;
+}
+
+.admin-dashboard-counters {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-dashboard-counters > .admin-dashboard-counter {
+  margin: 0;
+  min-width: 0;
+  padding: 12px 8px;
+}
+
+.admin-dashboard-counter h3 {
+  margin: 0;
+  font-size: clamp(1.2rem, 3.6vw, 1.9rem);
+}
+
+.admin-dashboard-counter p {
+  margin: 6px 0 0;
+  font-size: 0.76em;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+@media (max-width: 1200px) {
+  .admin-dashboard-counters {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 980px) {
+  .admin-tool-section .detail-grid[style] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-dashboard-counters {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-dashboard-counters {
+    grid-template-columns: 1fr !important;
+  }
+}

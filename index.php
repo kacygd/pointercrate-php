@@ -5,28 +5,12 @@ require __DIR__ . '/bootstrap.php';
 
 function pointercrate_beaten_score(int $position): float
 {
-    return match (true) {
-        $position >= 56 && $position <= 150 => 1.039035131 * ((185.7 * exp(-0.02715 * $position)) + 14.84),
-        $position >= 36 && $position <= 55 => 1.0371139743 * ((212.61 * pow(1.036, 1 - $position)) + 25.071),
-        $position >= 21 && $position <= 35 => ((250 - 83.389) * pow(1.0099685, 2 - $position) - 31.152) * 1.0371139743,
-        $position >= 4 && $position <= 20 => ((326.1 * exp(-0.0871 * $position)) + 51.09) * 1.037117142,
-        $position >= 1 && $position <= 3 => (-18.2899079915 * $position) + 368.2899079915,
-        default => 0.0,
-    };
+    return demonlist_beaten_score($position);
 }
 
 function pointercrate_score(int $position, int $requirement, int $progress): float
 {
-    if ($progress < $requirement) {
-        return 0.0;
-    }
-
-    $beatenScore = pointercrate_beaten_score($position);
-    if ($progress !== 100) {
-        return ($beatenScore * pow(5, ($progress - $requirement) / (100 - $requirement))) / 10;
-    }
-
-    return $beatenScore;
+    return demonlist_score($position, $requirement, $progress);
 }
 
 function youtube_video_id(string $url): ?string
@@ -92,15 +76,20 @@ function demon_creator_name(array $demon): string
     return trim((string) ($demon['publisher'] ?? ''));
 }
 
-function render_player_role_link(string $name): string
+function render_player_role_link(string $name, ?int $userId = null): string
 {
     $trimmed = trim($name);
     if ($trimmed === '') {
         return '-';
     }
 
-    $url = base_url('players.php?user=' . rawurlencode($trimmed));
-    return '<a class="player-link" href="' . e($url) . '"><b>' . e($trimmed) . '</b></a>';
+    $label = '<b>' . e($trimmed) . '</b>';
+    if ($userId !== null && $userId > 0) {
+        $url = base_url('players.php?uid=' . $userId);
+        return '<a class="player-link" href="' . e($url) . '">' . $label . '</a>';
+    }
+
+    return $label;
 }
 
 function render_list_dropdown(string $id, string $title, string $description, array $demons): void
@@ -123,7 +112,7 @@ function render_list_dropdown(string $id, string $title, string $description, ar
 
                 <?php foreach ($demons as $demon): ?>
                     <li class="hover white" title="#<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>">
-                        <a href="<?= e(base_url('demon.php?id=' . (int) $demon['id'])) ?>">
+                        <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
                             #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
                             <br>
                             <i>published by <?= e((string) $demon['publisher']) ?></i>
@@ -182,7 +171,7 @@ foreach ($allDemons as $demon) {
 
 $listEditorsSql = 'SELECT username, country_code
                    FROM users
-                   WHERE role = "admin"';
+                   WHERE role IN ("owner", "list_editor")';
 if ($hasUserBannedColumn) {
     $listEditorsSql .= ' AND COALESCE(is_banned, 0) = 0';
 }
@@ -190,6 +179,17 @@ $listEditorsSql .= '
                    ORDER BY created_at ASC, username ASC
                    LIMIT 20';
 $listEditors = db()->query($listEditorsSql)->fetchAll();
+
+$listHelpersSql = 'SELECT username, country_code
+                   FROM users
+                   WHERE role = "list_helper"';
+if ($hasUserBannedColumn) {
+    $listHelpersSql .= ' AND COALESCE(is_banned, 0) = 0';
+}
+$listHelpersSql .= '
+                   ORDER BY created_at ASC, username ASC
+                   LIMIT 20';
+$listHelpers = db()->query($listHelpersSql)->fetchAll();
 
 $discordWidgetUrl = discord_server_widget_url();
 
@@ -223,6 +223,8 @@ render_header('Main List', 'list', [
             $creator = demon_creator_name($demon);
             $publisher = trim((string) ($demon['publisher'] ?? ''));
             $verifier = trim((string) ($demon['verifier'] ?? ''));
+            $publisherUserId = isset($demon['publisher_user_id']) ? (int) $demon['publisher_user_id'] : 0;
+            $verifierUserId = isset($demon['verifier_user_id']) ? (int) $demon['verifier_user_id'] : 0;
             $cardSearchText = strtolower((string) ($demon['name'] . ' ' . $creator . ' ' . $publisher . ' ' . $verifier . ' ' . $demon['difficulty']));
             $requirement = (int) $demon['requirement'];
             $position = (int) $demon['position'];
@@ -232,18 +234,18 @@ render_header('Main List', 'list', [
             <section class="panel fade flex mobile-col" style="overflow: hidden;" data-search-value="<?= e($cardSearchText) ?>">
                 <a
                     class="thumb ratio-16-9"
-                    href="<?= e(base_url('demon.php?id=' . (int) $demon['id'])) ?>"
+                    href="<?= e(base_url((string) ((int) $demon['position']))) ?>"
                     style="position: relative; <?= e($thumbStyle) ?>"
                 ></a>
                 <div class="flex demon-info" style="align-items: center;">
                     <div class="demon-byline">
                         <h2 style="text-align: left; margin-bottom: 0;">
-                            <a href="<?= e(base_url('demon.php?id=' . (int) $demon['id'])) ?>">
+                            <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
                                 #<?= $position ?> &#8211; <?= e((string) $demon['name']) ?>
                             </a>
                         </h2>
                         <h3 class="demon-card-byline" style="text-align: left; margin-bottom: 0;">
-                            published by <?= render_player_role_link($publisher) ?><?php if ($verifier !== ''): ?>, verified by <?= render_player_role_link($verifier) ?><?php endif; ?>
+                            published by <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, verified by <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
                         </h3>
                         <div class="demon-points" style="text-align: left; font-size: 0.8em;">
                             <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) points
@@ -255,22 +257,49 @@ render_header('Main List', 'list', [
     </main>
 
     <aside class="right">
-        <section id="editors" class="panel fade">
-            <h2 class="underlined pad">List Editors</h2>
-            <ul>
-                <?php if ($listEditors === []): ?>
-                    <li>No list editors yet.</li>
-                <?php endif; ?>
-                <?php foreach ($listEditors as $editor): ?>
-                    <?php
-                    $countryCode = normalize_country_code((string) ($editor['country_code'] ?? ''));
-                    $prefix = country_flag_html($countryCode, true);
-                    ?>
-                    <li>
-                        <b><?= $prefix ?><?= e((string) $editor['username']) ?></b>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
+        <section id="staff-contacts" class="panel fade staff-contact-panel">
+            <div class="staff-contact-subsection">
+                <h2 class="underlined pad">List Editors</h2>
+                <p class="staff-contact-note">
+                    Contact any of these people if you have problems with the list or want to see a specific thing changed.
+                </p>
+                <ul class="staff-contact-list">
+                    <?php if ($listEditors === []): ?>
+                        <li class="staff-contact-empty">No list editors yet.</li>
+                    <?php endif; ?>
+                    <?php foreach ($listEditors as $editor): ?>
+                        <?php
+                        $countryCode = normalize_country_code((string) ($editor['country_code'] ?? ''));
+                        $prefix = country_flag_html($countryCode, true);
+                        ?>
+                        <li>
+                            <b><?= $prefix ?><?= e((string) $editor['username']) ?></b>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+
+            <div class="staff-contact-subsection">
+                <h2 class="underlined pad">List Helpers</h2>
+                <p class="staff-contact-note">
+                    Contact these people if you have any questions regarding why a specific record was rejected.
+                    Do not needlessly bug them about checking submissions though!
+                </p>
+                <ul class="staff-contact-list">
+                    <?php if ($listHelpers === []): ?>
+                        <li class="staff-contact-empty">No list helpers yet.</li>
+                    <?php endif; ?>
+                    <?php foreach ($listHelpers as $helper): ?>
+                        <?php
+                        $countryCode = normalize_country_code((string) ($helper['country_code'] ?? ''));
+                        $prefix = country_flag_html($countryCode, true);
+                        ?>
+                        <li>
+                            <b><?= $prefix ?><?= e((string) $helper['username']) ?></b>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
         </section>
 
         <section id="rules" class="panel fade">
@@ -314,3 +343,7 @@ render_header('Main List', 'list', [
 </div>
 
 <?php render_footer(); ?>
+
+
+
+

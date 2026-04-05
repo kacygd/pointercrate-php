@@ -43,23 +43,38 @@ function normalize_public_path(string $path): string
         return '';
     }
 
+    $fragment = '';
+    $hashPos = strpos($trimmed, '#');
+    if ($hashPos !== false) {
+        $fragment = (string) substr($trimmed, $hashPos);
+        $trimmed = (string) substr($trimmed, 0, $hashPos);
+    }
+
+    if ($trimmed === '') {
+        return $fragment;
+    }
+
+    $normalized = $trimmed;
+
     if (preg_match('/^index\.php(?:\?.*)?$/i', $trimmed) === 1) {
-        return '';
+        $normalized = '';
+    } elseif (preg_match('/^demon\.php\?rank=([0-9]+)$/i', $trimmed, $match) === 1) {
+        $normalized = (string) ((int) $match[1]);
+    } elseif (preg_match('/^demon\.php\?id=([0-9]+)$/i', $trimmed, $match) === 1) {
+        $normalized = 'demon.php?id=' . (int) $match[1];
+    } elseif (preg_match('/^id=([0-9]+)$/i', $trimmed, $match) === 1) {
+        $normalized = 'id=' . (int) $match[1];
+    } elseif (preg_match('/^(players|guidelines|submit|admin|account|profile|login|logout|register)\.php$/i', $trimmed, $match) === 1) {
+        $normalized = strtolower($match[1]);
+    } elseif (preg_match('/^(players|guidelines|submit|admin|account|profile|login|logout|register)\.php\?(.+)$/i', $trimmed, $match) === 1) {
+        $normalized = strtolower($match[1]) . '?' . $match[2];
     }
 
-    if (preg_match('/^demon\.php\?id=([0-9]+)$/i', $trimmed, $match) === 1) {
-        return 'id=' . (int) $match[1];
+    if ($normalized === '') {
+        return $fragment;
     }
 
-    if (preg_match('/^(players|guidelines|submit|admin|account|profile|login|logout|register)\.php$/i', $trimmed, $match) === 1) {
-        return strtolower($match[1]);
-    }
-
-    if (preg_match('/^(players|guidelines|submit|admin|account|profile|login|logout|register)\.php\?(.+)$/i', $trimmed, $match) === 1) {
-        return strtolower($match[1]) . '?' . $match[2];
-    }
-
-    return $trimmed;
+    return $normalized . $fragment;
 }
 
 function base_url(string $path = ''): string
@@ -209,6 +224,326 @@ function users_has_is_banned_column(?PDO $pdo = null): bool
     return $result;
 }
 
+function app_settings_table_ready(?PDO $pdo = null): bool
+{
+    static $ready = null;
+    if (is_bool($ready)) {
+        return $ready;
+    }
+
+    try {
+        $pdo = $pdo instanceof PDO ? $pdo : db();
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS app_settings (
+                setting_key VARCHAR(80) PRIMARY KEY,
+                setting_value VARCHAR(255) NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $ready = true;
+    } catch (Throwable) {
+        $ready = false;
+    }
+
+    return $ready;
+}
+
+function app_setting_get(string $key, ?string $default = null): ?string
+{
+    static $cache = [];
+
+    $normalizedKey = strtolower(trim($key));
+    if ($normalizedKey === '') {
+        return $default;
+    }
+
+    if (array_key_exists($normalizedKey, $cache)) {
+        return $cache[$normalizedKey] ?? $default;
+    }
+
+    try {
+        $pdo = db();
+        if (!app_settings_table_ready($pdo)) {
+            return $default;
+        }
+
+        $stmt = $pdo->prepare('SELECT setting_value FROM app_settings WHERE setting_key = :setting_key LIMIT 1');
+        $stmt->execute([':setting_key' => $normalizedKey]);
+        $value = $stmt->fetchColumn();
+        if ($value === false || !is_string($value)) {
+            $cache[$normalizedKey] = null;
+            return $default;
+        }
+
+        $cache[$normalizedKey] = $value;
+        return $value;
+    } catch (Throwable) {
+        return $default;
+    }
+}
+
+function app_setting_set(string $key, string $value): bool
+{
+    static $cache = [];
+
+    $normalizedKey = strtolower(trim($key));
+    if ($normalizedKey === '') {
+        return false;
+    }
+
+    try {
+        $pdo = db();
+        if (!app_settings_table_ready($pdo)) {
+            return false;
+        }
+
+        $stmt = $pdo->prepare(
+            'INSERT INTO app_settings (setting_key, setting_value)
+             VALUES (:setting_key, :setting_value)
+             ON DUPLICATE KEY UPDATE
+                setting_value = VALUES(setting_value),
+                updated_at = CURRENT_TIMESTAMP'
+        );
+        $stmt->execute([
+            ':setting_key' => $normalizedKey,
+            ':setting_value' => trim($value),
+        ]);
+
+        $cache[$normalizedKey] = trim($value);
+        return true;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+function demonlist_top1_points_default(): float
+{
+    return 350.0;
+}
+
+function demonlist_top1_points_min(): float
+{
+    return 50.0;
+}
+
+function demonlist_top1_points_max(): float
+{
+    return 5000.0;
+}
+
+function demonlist_top1_points(): float
+{
+    $rawValue = app_setting_get('scoring.top1_points', null);
+    if ($rawValue === null || !is_numeric($rawValue)) {
+        return demonlist_top1_points_default();
+    }
+
+    $value = round((float) $rawValue, 2);
+    if ($value < demonlist_top1_points_min()) {
+        $value = demonlist_top1_points_min();
+    }
+    if ($value > demonlist_top1_points_max()) {
+        $value = demonlist_top1_points_max();
+    }
+
+    return $value;
+}
+
+function demonlist_set_top1_points(float $value): bool
+{
+    if (!is_finite($value)) {
+        return false;
+    }
+
+    $normalized = round($value, 2);
+    if ($normalized < demonlist_top1_points_min() || $normalized > demonlist_top1_points_max()) {
+        return false;
+    }
+
+    return app_setting_set('scoring.top1_points', number_format($normalized, 2, '.', ''));
+}
+
+function demonlist_base_beaten_score(int $position): float
+{
+    return match (true) {
+        $position >= 56 && $position <= 150 => 1.039035131 * ((185.7 * exp(-0.02715 * $position)) + 14.84),
+        $position >= 36 && $position <= 55 => 1.0371139743 * ((212.61 * pow(1.036, 1 - $position)) + 25.071),
+        $position >= 21 && $position <= 35 => ((250 - 83.389) * pow(1.0099685, 2 - $position) - 31.152) * 1.0371139743,
+        $position >= 4 && $position <= 20 => ((326.1 * exp(-0.0871 * $position)) + 51.09) * 1.037117142,
+        $position >= 1 && $position <= 3 => (-18.2899079915 * $position) + 368.2899079915,
+        default => 0.0,
+    };
+}
+
+function demonlist_beaten_score(int $position): float
+{
+    $baseScore = demonlist_base_beaten_score($position);
+    if ($baseScore <= 0.0) {
+        return 0.0;
+    }
+
+    $baseTopOne = demonlist_base_beaten_score(1);
+    if ($baseTopOne <= 0.0) {
+        return $baseScore;
+    }
+
+    $scale = demonlist_top1_points() / $baseTopOne;
+    return $baseScore * $scale;
+}
+
+function demonlist_score(int $position, int $requirement, int $progress): float
+{
+    if ($position < 1 || $progress < $requirement) {
+        return 0.0;
+    }
+
+    $requirement = max(1, min(100, $requirement));
+    $progress = max(0, min(100, $progress));
+
+    $beatenScore = demonlist_beaten_score($position);
+    if ($progress !== 100) {
+        return ($beatenScore * pow(5, ($progress - $requirement) / max(1, (100 - $requirement)))) / 10;
+    }
+
+    return $beatenScore;
+}
+function demonlist_sync_user_points(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    $users = $pdo->query('SELECT id, username, points, bonus_points FROM users')->fetchAll();
+    if ($users === []) {
+        return [
+            'processed_users' => 0,
+            'updated_users' => 0,
+        ];
+    }
+
+    $userIdByName = [];
+    $storedPointsByUserId = [];
+    $bonusPointsByUserId = [];
+    $completionTotalByUserId = [];
+    $completionScoresByUserId = [];
+
+    foreach ($users as $user) {
+        $userId = (int) ($user['id'] ?? 0);
+        if ($userId < 1) {
+            continue;
+        }
+
+        $username = trim((string) ($user['username'] ?? ''));
+        if ($username !== '') {
+            $userIdByName[strtolower($username)] = $userId;
+        }
+
+        $storedPointsByUserId[$userId] = round((float) ($user['points'] ?? 0.0), 2);
+        $bonusPointsByUserId[$userId] = round((float) ($user['bonus_points'] ?? 0.0), 2);
+        $completionTotalByUserId[$userId] = 0.0;
+        $completionScoresByUserId[$userId] = [];
+    }
+
+    if ($storedPointsByUserId === []) {
+        return [
+            'processed_users' => 0,
+            'updated_users' => 0,
+        ];
+    }
+
+    $demons = $pdo->query('SELECT id, position, requirement, legacy, verifier_user_id FROM demons')->fetchAll();
+    $demonById = [];
+    foreach ($demons as $demon) {
+        $demonId = (int) ($demon['id'] ?? 0);
+        if ($demonId < 1) {
+            continue;
+        }
+
+        $demonById[$demonId] = [
+            'position' => (int) ($demon['position'] ?? 0),
+            'requirement' => (int) ($demon['requirement'] ?? 100),
+            'legacy' => (int) ($demon['legacy'] ?? 0),
+            'verifier_user_id' => (int) ($demon['verifier_user_id'] ?? 0),
+        ];
+    }
+
+    $completions = $pdo->query('SELECT demon_id, player, progress FROM completions')->fetchAll();
+    foreach ($completions as $completion) {
+        $demonId = (int) ($completion['demon_id'] ?? 0);
+        if ($demonId < 1 || !isset($demonById[$demonId])) {
+            continue;
+        }
+
+        $playerName = strtolower(trim((string) ($completion['player'] ?? '')));
+        if ($playerName === '' || !isset($userIdByName[$playerName])) {
+            continue;
+        }
+
+        $userId = (int) $userIdByName[$playerName];
+        if (!isset($completionTotalByUserId[$userId])) {
+            continue;
+        }
+
+        $demon = $demonById[$demonId];
+        $progress = max(0, min(100, (int) ($completion['progress'] ?? 0)));
+        $score = demonlist_score($demon['position'], $demon['requirement'], $progress);
+
+        $completionTotalByUserId[$userId] += $score;
+        $completionScoresByUserId[$userId][$demonId] = $score;
+    }
+
+    $verifierBonusByUserId = [];
+    foreach ($storedPointsByUserId as $userId => $_storedPoints) {
+        $verifierBonusByUserId[(int) $userId] = 0.0;
+    }
+
+    foreach ($demonById as $demonId => $demon) {
+        $verifierUserId = (int) ($demon['verifier_user_id'] ?? 0);
+        if ($verifierUserId < 1 || !isset($storedPointsByUserId[$verifierUserId])) {
+            continue;
+        }
+
+        $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
+        $position = (int) ($demon['position'] ?? 0);
+        if ($isLegacy || $position < 1 || $position > 150) {
+            continue;
+        }
+
+        $fullVerifierScore = demonlist_score($position, (int) ($demon['requirement'] ?? 100), 100);
+        $existingCompletionScore = (float) ($completionScoresByUserId[$verifierUserId][$demonId] ?? 0.0);
+        if ($fullVerifierScore > $existingCompletionScore) {
+            $verifierBonusByUserId[$verifierUserId] += ($fullVerifierScore - $existingCompletionScore);
+        }
+    }
+
+    $updateStmt = $pdo->prepare('UPDATE users SET points = :points WHERE id = :id');
+    $updatedUsers = 0;
+    $processedUsers = 0;
+
+    foreach ($storedPointsByUserId as $userId => $storedPoints) {
+        $processedUsers++;
+
+        $newPoints = round(
+            (float) ($completionTotalByUserId[$userId] ?? 0.0)
+            + (float) ($verifierBonusByUserId[$userId] ?? 0.0)
+            + (float) ($bonusPointsByUserId[$userId] ?? 0.0),
+            2
+        );
+
+        if (abs((float) $storedPoints - $newPoints) < 0.01) {
+            continue;
+        }
+
+        $updateStmt->execute([
+            ':points' => $newPoints,
+            ':id' => $userId,
+        ]);
+        $updatedUsers++;
+    }
+
+    return [
+        'processed_users' => $processedUsers,
+        'updated_users' => $updatedUsers,
+    ];
+}
 function discord_normalize_embed(array $embed): array
 {
     $normalized = [];
@@ -664,19 +999,206 @@ function require_login(?string $next = null): void
     redirect('login.php?next=' . rawurlencode($destination));
 }
 
-function is_admin(): bool
+function normalize_user_role(?string $role): string
+{
+    $normalized = strtolower(trim((string) $role));
+
+    return match ($normalized) {
+        'owner' => 'owner',
+        'list_editor' => 'list_editor',
+        'list_helper' => 'list_helper',
+        default => 'player',
+    };
+}
+
+function role_label(string $role): string
+{
+    return match (normalize_user_role($role)) {
+        'owner' => 'Owner',
+        'list_editor' => 'List Editor',
+        'list_helper' => 'List Helper',
+        default => 'Player',
+    };
+}
+
+function current_user_role(): string
 {
     $user = current_user();
-    return $user !== null && (($user['role'] ?? '') === 'admin');
+    if ($user === null) {
+        return 'player';
+    }
+
+    return normalize_user_role((string) ($user['role'] ?? 'player'));
+}
+
+function has_owner_access(): bool
+{
+    return current_user_role() === 'owner';
+}
+
+function admin_permission_definitions(): array
+{
+    return [
+        'admin_panel_access' => 'Admin Panel Access',
+        'manage_levels' => 'Manage Levels',
+        'claim_contributors' => 'Claim Contributors',
+        'manage_users' => 'Manage Users',
+        'manage_scoring' => 'Change Score',
+        'review_submissions' => 'Review Submissions',
+    ];
+}
+
+function admin_permission_keys(): array
+{
+    return array_keys(admin_permission_definitions());
+}
+
+function admin_role_permission_default(string $role, string $permission): bool
+{
+    $role = normalize_user_role($role);
+    $permission = strtolower(trim($permission));
+
+    if ($role === 'owner') {
+        return true;
+    }
+
+    $defaults = [
+        'list_editor' => [
+            'admin_panel_access' => true,
+            'manage_levels' => true,
+            'claim_contributors' => true,
+            'manage_users' => false,
+            'manage_scoring' => false,
+            'review_submissions' => true,
+        ],
+        'list_helper' => [
+            'admin_panel_access' => true,
+            'manage_levels' => false,
+            'claim_contributors' => false,
+            'manage_users' => false,
+            'manage_scoring' => false,
+            'review_submissions' => true,
+        ],
+    ];
+
+    return (bool) ($defaults[$role][$permission] ?? false);
+}
+
+function admin_role_permission_setting_key(string $role, string $permission): string
+{
+    return 'admin.role_permission.' . normalize_user_role($role) . '.' . strtolower(trim($permission));
+}
+
+function admin_role_permission(string $role, string $permission): bool
+{
+    $role = normalize_user_role($role);
+    $permission = strtolower(trim($permission));
+
+    if (!in_array($permission, admin_permission_keys(), true)) {
+        return false;
+    }
+
+    if ($role === 'owner') {
+        return true;
+    }
+
+    if (!in_array($role, ['list_editor', 'list_helper'], true)) {
+        return false;
+    }
+
+    $stored = app_setting_get(admin_role_permission_setting_key($role, $permission), null);
+    if ($stored === null) {
+        return admin_role_permission_default($role, $permission);
+    }
+
+    $normalizedStored = strtolower(trim($stored));
+    if (in_array($normalizedStored, ['1', 'true', 'yes', 'on'], true)) {
+        return true;
+    }
+    if (in_array($normalizedStored, ['0', 'false', 'no', 'off'], true)) {
+        return false;
+    }
+
+    return admin_role_permission_default($role, $permission);
+}
+
+function admin_set_role_permission(string $role, string $permission, bool $allowed): bool
+{
+    $role = normalize_user_role($role);
+    $permission = strtolower(trim($permission));
+
+    if (!in_array($role, ['list_editor', 'list_helper'], true)) {
+        return false;
+    }
+    if (!in_array($permission, admin_permission_keys(), true)) {
+        return false;
+    }
+
+    return app_setting_set(
+        admin_role_permission_setting_key($role, $permission),
+        $allowed ? '1' : '0'
+    );
+}
+
+function admin_role_permissions(string $role): array
+{
+    $permissions = [];
+
+    foreach (admin_permission_keys() as $permission) {
+        $permissions[$permission] = admin_role_permission($role, $permission);
+    }
+
+    return $permissions;
+}
+
+function current_user_has_permission(string $permission): bool
+{
+    return admin_role_permission(current_user_role(), $permission);
+}
+
+function has_admin_panel_access(): bool
+{
+    return current_user_has_permission('admin_panel_access');
+}
+
+function can_manage_levels(): bool
+{
+    return current_user_has_permission('manage_levels');
+}
+
+function can_claim_contributors(): bool
+{
+    return current_user_has_permission('claim_contributors');
+}
+
+function can_manage_users(): bool
+{
+    return current_user_has_permission('manage_users');
+}
+
+function can_manage_scoring(): bool
+{
+    return current_user_has_permission('manage_scoring');
+}
+
+function can_review_submissions(): bool
+{
+    return current_user_has_permission('review_submissions');
+}
+
+function is_admin(): bool
+{
+    return has_admin_panel_access();
 }
 
 function require_admin(): void
 {
-    if (is_admin()) {
+    if (has_admin_panel_access()) {
         return;
     }
 
     flash('error', 'Admin permission required.');
     redirect('admin.php');
 }
+
 

@@ -35,6 +35,70 @@ function schema_idx_exists(PDO $pdo, string $table, string $index): bool
     return (int) $stmt->fetchColumn() > 0;
 }
 
+function schema_table_exists(PDO $pdo, string $table): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*)
+         FROM information_schema.tables
+         WHERE table_schema = DATABASE()
+           AND table_name = :table"
+    );
+    $stmt->execute([
+        ':table' => $table,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function schema_fk_exists(PDO $pdo, string $table, string $constraint): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT COUNT(*)
+         FROM information_schema.referential_constraints
+         WHERE constraint_schema = DATABASE()
+           AND table_name = :table
+           AND constraint_name = :constraint_name"
+    );
+    $stmt->execute([
+        ':table' => $table,
+        ':constraint_name' => $constraint,
+    ]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function schema_users_role_enum_ready(PDO $pdo): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT column_type
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = 'users'
+           AND column_name = 'role'
+         LIMIT 1"
+    );
+    $stmt->execute();
+
+    $columnType = strtolower((string) ($stmt->fetchColumn() ?: ''));
+    if ($columnType === '') {
+        return false;
+    }
+
+    foreach (["'player'", "'list_helper'", "'list_editor'", "'owner'"] as $expectedValue) {
+        if (!str_contains($columnType, $expectedValue)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function schema_apply_users_role_enum(PDO $pdo): void
+{
+    $pdo->exec("UPDATE users SET role = 'owner' WHERE role = 'admin'");
+    $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('player', 'list_helper', 'list_editor', 'owner') NOT NULL DEFAULT 'player'");
+}
+
 function schema_needs_update(PDO $pdo): bool
 {
     if (!schema_col_exists($pdo, 'users', 'points')) {
@@ -55,10 +119,34 @@ function schema_needs_update(PDO $pdo): bool
     if (!schema_idx_exists($pdo, 'users', 'idx_users_bonus_points')) {
         return true;
     }
+    if (!schema_users_role_enum_ready($pdo)) {
+        return true;
+    }
     if (schema_col_exists($pdo, 'users', 'display_name')) {
         return true;
     }
     if (!schema_col_exists($pdo, 'demons', 'creator')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'demons', 'publisher_user_id')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'demons', 'verifier_user_id')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'demons', 'idx_demons_publisher_user_id')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'demons', 'idx_demons_verifier_user_id')) {
+        return true;
+    }
+    if (!schema_fk_exists($pdo, 'demons', 'fk_demons_publisher_user')) {
+        return true;
+    }
+    if (!schema_fk_exists($pdo, 'demons', 'fk_demons_verifier_user')) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'app_settings')) {
         return true;
     }
 
@@ -100,6 +188,11 @@ function run_schema_update(PDO $pdo): array
         $logs[] = '[OK] Added idx_users_bonus_points';
     }
 
+    if (!schema_users_role_enum_ready($pdo)) {
+        schema_apply_users_role_enum($pdo);
+        $logs[] = '[OK] Updated users.role enum values';
+    }
+
     if (schema_col_exists($pdo, 'users', 'display_name')) {
         $pdo->exec('ALTER TABLE users DROP COLUMN display_name');
         $logs[] = '[OK] Removed users.display_name';
@@ -111,14 +204,102 @@ function run_schema_update(PDO $pdo): array
     }
     $pdo->exec('ALTER TABLE demons MODIFY COLUMN creator VARCHAR(160) NULL');
 
-    $backfilled = $pdo->exec(
+    if (!schema_col_exists($pdo, 'demons', 'publisher_user_id')) {
+        $pdo->exec('ALTER TABLE demons ADD COLUMN publisher_user_id INT UNSIGNED NULL AFTER publisher');
+        $logs[] = '[OK] Added demons.publisher_user_id';
+    }
+    $pdo->exec('ALTER TABLE demons MODIFY COLUMN publisher_user_id INT UNSIGNED NULL');
+
+    if (!schema_col_exists($pdo, 'demons', 'verifier_user_id')) {
+        $pdo->exec('ALTER TABLE demons ADD COLUMN verifier_user_id INT UNSIGNED NULL AFTER verifier');
+        $logs[] = '[OK] Added demons.verifier_user_id';
+    }
+    $pdo->exec('ALTER TABLE demons MODIFY COLUMN verifier_user_id INT UNSIGNED NULL');
+
+    if (!schema_idx_exists($pdo, 'demons', 'idx_demons_publisher_user_id')) {
+        $pdo->exec('ALTER TABLE demons ADD INDEX idx_demons_publisher_user_id (publisher_user_id)');
+        $logs[] = '[OK] Added idx_demons_publisher_user_id';
+    }
+    if (!schema_idx_exists($pdo, 'demons', 'idx_demons_verifier_user_id')) {
+        $pdo->exec('ALTER TABLE demons ADD INDEX idx_demons_verifier_user_id (verifier_user_id)');
+        $logs[] = '[OK] Added idx_demons_verifier_user_id';
+    }
+
+    if (!schema_table_exists($pdo, 'app_settings')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS app_settings (
+                setting_key VARCHAR(80) PRIMARY KEY,
+                setting_value VARCHAR(255) NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $logs[] = '[OK] Added app_settings table';
+    }
+
+    $publisherBackfilled = $pdo->exec(
+        "UPDATE demons d
+         INNER JOIN users u ON LOWER(u.username) = LOWER(TRIM(d.publisher))
+         SET d.publisher_user_id = u.id
+         WHERE d.publisher_user_id IS NULL
+           AND d.publisher IS NOT NULL
+           AND TRIM(d.publisher) <> ''"
+    );
+    $logs[] = '[OK] Backfilled demons.publisher_user_id: ' . (int) $publisherBackfilled . ' row(s)';
+
+    $verifierBackfilled = $pdo->exec(
+        "UPDATE demons d
+         INNER JOIN users u ON LOWER(u.username) = LOWER(TRIM(d.verifier))
+         SET d.verifier_user_id = u.id
+         WHERE d.verifier_user_id IS NULL
+           AND d.verifier IS NOT NULL
+           AND TRIM(d.verifier) <> ''"
+    );
+    $logs[] = '[OK] Backfilled demons.verifier_user_id: ' . (int) $verifierBackfilled . ' row(s)';
+
+    $sanitizedPublisher = $pdo->exec(
+        "UPDATE demons d
+         LEFT JOIN users u ON u.id = d.publisher_user_id
+         SET d.publisher_user_id = NULL
+         WHERE d.publisher_user_id IS NOT NULL
+           AND u.id IS NULL"
+    );
+    $logs[] = '[OK] Sanitized invalid publisher_user_id: ' . (int) $sanitizedPublisher . ' row(s)';
+
+    $sanitizedVerifier = $pdo->exec(
+        "UPDATE demons d
+         LEFT JOIN users u ON u.id = d.verifier_user_id
+         SET d.verifier_user_id = NULL
+         WHERE d.verifier_user_id IS NOT NULL
+           AND u.id IS NULL"
+    );
+    $logs[] = '[OK] Sanitized invalid verifier_user_id: ' . (int) $sanitizedVerifier . ' row(s)';
+
+    if (!schema_fk_exists($pdo, 'demons', 'fk_demons_publisher_user')) {
+        $pdo->exec('ALTER TABLE demons
+                    ADD CONSTRAINT fk_demons_publisher_user
+                    FOREIGN KEY (publisher_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL');
+        $logs[] = '[OK] Added fk_demons_publisher_user';
+    }
+
+    if (!schema_fk_exists($pdo, 'demons', 'fk_demons_verifier_user')) {
+        $pdo->exec('ALTER TABLE demons
+                    ADD CONSTRAINT fk_demons_verifier_user
+                    FOREIGN KEY (verifier_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL');
+        $logs[] = '[OK] Added fk_demons_verifier_user';
+    }
+
+    $backfilledCreator = $pdo->exec(
         "UPDATE demons
          SET creator = publisher
          WHERE (creator IS NULL OR TRIM(creator) = '')
            AND publisher IS NOT NULL
            AND TRIM(publisher) <> ''"
     );
-    $logs[] = '[OK] Backfilled demons.creator: ' . (int) $backfilled . ' row(s)';
+    $logs[] = '[OK] Backfilled demons.creator: ' . (int) $backfilledCreator . ' row(s)';
 
     $logs[] = '[DONE] Schema update completed.';
 

@@ -75,7 +75,7 @@ render_header('Account', 'account');
         <div><dt>Username</dt><dd><?= e((string) $user['username']) ?></dd></div>
         <div><dt>Email</dt><dd><?= e((string) ($user['email'] ?? '-')) ?></dd></div>
         <div><dt>Country</dt><dd><?= $countryFlag !== '' ? $countryFlag : '-' ?></dd></div>
-        <div><dt>Role</dt><dd><?= e((string) $user['role']) ?></dd></div>
+        <div><dt>Role</dt><dd><?= e(role_label((string) ($user['role'] ?? 'player'))) ?></dd></div>
         <div><dt>Points</dt><dd><?= e(number_format((float) ($user['points'] ?? 0.0), 2)) ?></dd></div>
         <div><dt>Joined</dt><dd><?= e(date('Y-m-d', strtotime((string) $user['created_at']))) ?></dd></div>
     </dl>
@@ -163,5 +163,6 @@ render_header('Account', 'account');
     </div>
 </section>
 <?php render_footer(); ?>
+
 
 

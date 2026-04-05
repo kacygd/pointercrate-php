@@ -5,28 +5,12 @@ require __DIR__ . '/bootstrap.php';
 
 function pointercrate_beaten_score(int $position): float
 {
-    return match (true) {
-        $position >= 56 && $position <= 150 => 1.039035131 * ((185.7 * exp(-0.02715 * $position)) + 14.84),
-        $position >= 36 && $position <= 55 => 1.0371139743 * ((212.61 * pow(1.036, 1 - $position)) + 25.071),
-        $position >= 21 && $position <= 35 => ((250 - 83.389) * pow(1.0099685, 2 - $position) - 31.152) * 1.0371139743,
-        $position >= 4 && $position <= 20 => ((326.1 * exp(-0.0871 * $position)) + 51.09) * 1.037117142,
-        $position >= 1 && $position <= 3 => (-18.2899079915 * $position) + 368.2899079915,
-        default => 0.0,
-    };
+    return demonlist_beaten_score($position);
 }
 
 function pointercrate_score(int $position, int $requirement, int $progress): float
 {
-    if ($progress < $requirement || $position < 1) {
-        return 0.0;
-    }
-
-    $beatenScore = pointercrate_beaten_score($position);
-    if ($progress !== 100) {
-        return ($beatenScore * pow(5, ($progress - $requirement) / max(1, (100 - $requirement)))) / 10;
-    }
-
-    return $beatenScore;
+    return demonlist_score($position, $requirement, $progress);
 }
 
 function format_stats_items(array $items): string
@@ -120,7 +104,43 @@ $userSelect = 'SELECT ' . implode(', ', $userSelectFields) . ' FROM users ORDER 
 
 $users = $pdo->query($userSelect)->fetchAll();
 
-$demons = db()->query('SELECT id, name, position, requirement, legacy, creator, publisher, verifier
+$hasPublisherUserIdColumn = false;
+$hasVerifierUserIdColumn = false;
+try {
+    $claimColStmt = $pdo->query(
+        "SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = 'demons'
+           AND column_name IN ('publisher_user_id', 'verifier_user_id')"
+    );
+    foreach ($claimColStmt->fetchAll(PDO::FETCH_COLUMN) as $columnName) {
+        $columnName = strtolower((string) $columnName);
+        if ($columnName === 'publisher_user_id') {
+            $hasPublisherUserIdColumn = true;
+        }
+        if ($columnName === 'verifier_user_id') {
+            $hasVerifierUserIdColumn = true;
+        }
+    }
+} catch (Throwable) {
+    $hasPublisherUserIdColumn = false;
+    $hasVerifierUserIdColumn = false;
+}
+
+$demonSelectFields = [
+    'id',
+    'name',
+    'position',
+    'requirement',
+    'legacy',
+    'creator',
+    'publisher',
+    'verifier',
+    $hasPublisherUserIdColumn ? 'publisher_user_id' : 'NULL AS publisher_user_id',
+    $hasVerifierUserIdColumn ? 'verifier_user_id' : 'NULL AS verifier_user_id',
+];
+$demons = $pdo->query('SELECT ' . implode(', ', $demonSelectFields) . '
                        FROM demons
                        ORDER BY position ASC')->fetchAll();
 
@@ -135,6 +155,7 @@ foreach ($demons as $demon) {
 }
 
 $playersByKey = [];
+$usersById = [];
 
 $ensurePlayer = static function (string $rawName) use (&$playersByKey): ?string {
     $name = trim($rawName);
@@ -187,7 +208,11 @@ foreach ($users as $user) {
         continue;
     }
 
-    $playersByKey[$key]['user_id'] = (int) ($user['id'] ?? 0) > 0 ? (int) $user['id'] : null;
+    $userId = (int) ($user['id'] ?? 0) > 0 ? (int) $user['id'] : null;
+    $playersByKey[$key]['user_id'] = $userId;
+    if ($userId !== null) {
+        $usersById[$userId] = $username;
+    }
     $playersByKey[$key]['has_account'] = true;
     $playersByKey[$key]['username'] = $username;
     $playersByKey[$key]['country_code'] = normalize_country_code((string) ($user['country_code'] ?? ''));
@@ -207,7 +232,7 @@ foreach ($demons as $demon) {
         'id' => $demonId,
         'name' => $demonName,
         'position' => $demonPosition,
-        'url' => base_url('demon.php?id=' . $demonId),
+        'url' => base_url((string) $demonPosition),
     ];
 
     $creator = trim((string) ($demon['creator'] ?? ''));
@@ -221,17 +246,17 @@ foreach ($demons as $demon) {
         }
     }
 
-    $publisher = trim((string) ($demon['publisher'] ?? ''));
-    if ($publisher !== '') {
-        $publisherKey = $ensurePlayer($publisher);
-        if ($publisherKey !== null && !$legacy) {
+    $publisherUserId = (int) ($demon['publisher_user_id'] ?? 0);
+    if ($publisherUserId > 0 && isset($usersById[$publisherUserId]) && !$legacy) {
+        $publisherKey = $ensurePlayer((string) $usersById[$publisherUserId]);
+        if ($publisherKey !== null) {
             $playersByKey[$publisherKey]['demons_published'][$demonId] = $demonItem;
         }
     }
 
-    $verifier = trim((string) ($demon['verifier'] ?? ''));
-    if ($verifier !== '') {
-        $verifierKey = $ensurePlayer($verifier);
+    $verifierUserId = (int) ($demon['verifier_user_id'] ?? 0);
+    if ($verifierUserId > 0 && isset($usersById[$verifierUserId])) {
+        $verifierKey = $ensurePlayer((string) $usersById[$verifierUserId]);
         if ($verifierKey !== null) {
             $playersByKey[$verifierKey]['demons_verified'][$demonId] = $demonItem;
         }
@@ -287,7 +312,7 @@ foreach ($records as $record) {
             'id' => $demonId,
             'name' => $demonName,
             'position' => $position,
-            'url' => base_url('demon.php?id=' . $demonId),
+            'url' => base_url((string) $position),
         ];
         $playersByKey[$key]['completed'][$demonId] = $completionItem;
         if ($listBucket === 'main') {
@@ -303,7 +328,7 @@ foreach ($records as $record) {
             'name' => $demonName,
             'position' => $position,
             'label' => $demonName . ' (' . $progress . '%)',
-            'url' => base_url('demon.php?id=' . $demonId),
+            'url' => base_url((string) $position),
         ];
     }
 
@@ -455,6 +480,7 @@ foreach ($players as $player) {
 }
 asort($countriesWithPlayers, SORT_NATURAL | SORT_FLAG_CASE);
 
+$requestedUserId = (int) ($_GET['uid'] ?? 0);
 $requestedKey = strtolower(trim((string) ($_GET['user'] ?? '')));
 $requestedCountry = strtoupper(trim((string) ($_GET['country'] ?? '')));
 if ($requestedCountry === 'WORLD') {
@@ -466,7 +492,14 @@ if ($requestedCountry !== '' && !isset($countriesWithPlayers[$requestedCountry])
 $selectedIndex = 0;
 
 if ($players !== []) {
-    if ($requestedKey !== '') {
+    if ($requestedUserId > 0) {
+        foreach ($players as $index => $player) {
+            if ((int) ($player['user_id'] ?? 0) === $requestedUserId) {
+                $selectedIndex = $index;
+                break;
+            }
+        }
+    } elseif ($requestedKey !== '') {
         foreach ($players as $index => $player) {
             if ((string) $player['key'] === $requestedKey) {
                 $selectedIndex = $index;
@@ -529,6 +562,7 @@ foreach ($players as $player) {
     $points = round((float) $player['points'], 2);
     $playersPayload[] = [
         'key' => (string) $player['key'],
+        'user_id' => $player['user_id'] !== null ? (int) $player['user_id'] : null,
         'username' => (string) $player['username'],
         'country_code' => $countryCode ?? '',
         'rank' => $player['rank'] !== null ? (int) $player['rank'] : null,
@@ -804,10 +838,17 @@ render_header('Stats Viewer', 'players');
                 flagEl.appendChild(flag);
             };
 
-            const updateQueryString = (username) => {
+            const updateQueryString = (username, userId = null) => {
                 try {
                     const url = new URL(window.location.href);
-                    url.searchParams.set('user', username);
+                    const normalizedId = Number(userId);
+                    if (Number.isFinite(normalizedId) && normalizedId > 0) {
+                        url.searchParams.set('uid', String(Math.trunc(normalizedId)));
+                        url.searchParams.delete('user');
+                    } else {
+                        url.searchParams.set('user', username);
+                        url.searchParams.delete('uid');
+                    }
                     window.history.replaceState({}, '', url.toString());
                 } catch (error) {
                     // no-op
@@ -866,7 +907,7 @@ render_header('Stats Viewer', 'players');
                 renderDemonList(verifiedEl, player.demons_verified);
                 renderDemonList(progressEl, player.progress_on, true);
 
-                updateQueryString(player.username);
+                updateQueryString(player.username, player.user_id ?? null);
 
                 if (detailEl instanceof HTMLElement) {
                     detailEl.classList.remove('is-updating');
@@ -978,6 +1019,9 @@ render_header('Stats Viewer', 'players');
     <?php endif; ?>
 </section>
 <?php render_footer(); ?>
+
+
+
 
 
 

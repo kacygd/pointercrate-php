@@ -62,6 +62,10 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
     $user = current_user();
     $showAdminLink = is_admin();
     $profileActive = in_array($activeNav, ['account', 'submit', 'guidelines'], true);
+
+    $styleFilePath = dirname(__DIR__) . '/assets/css/style.css';
+    $styleVersion = is_file($styleFilePath) ? (string) filemtime($styleFilePath) : '1';
+    $styleHref = base_url('assets/css/style.css?v=' . rawurlencode($styleVersion));
 ?>
 <!doctype html>
 <html lang="en">
@@ -89,7 +93,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="<?= e(base_url('assets/css/style.css')) ?>">
+    <link rel="stylesheet" href="<?= e($styleHref) ?>">
 </head>
 <body>
 <header>
@@ -182,6 +186,9 @@ function render_footer(): void
 {
     $appName = app_name();
     $year = date('Y');
+    $scriptFilePath = dirname(__DIR__) . '/assets/js/app.js';
+    $scriptVersion = is_file($scriptFilePath) ? (string) filemtime($scriptFilePath) : '1';
+    $scriptSrc = base_url('assets/js/app.js?v=' . rawurlencode($scriptVersion));
     ?>
     </main>
 </div>
@@ -209,9 +216,10 @@ function render_footer(): void
     <span class="muted" style="margin-top: 8px;">Created by kacygd</span>
 </footer>
 
-<script src="<?= e(base_url('assets/js/app.js')) ?>" defer></script>
+<script src="<?= e($scriptSrc) ?>" defer></script>
 </body>
 </html>
 <?php
 }
+
 

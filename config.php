@@ -6,8 +6,8 @@ return [
         'name' => 'GDemonlist',
         'brand_mode' => 2, // 1 = text, 2 = logo
         'logo_path' => 'logo.png',
-        'logo_height' => 29,
-        'logo_max_width' => 190,
+        'logo_height' => 22,
+        'logo_max_width' => 130,
         'tagline' => 'A competitive Geometry Dash ranking platform for precise list management and verified records.',
         'base_url' => '/demonlist',
         'public_url' => '', // Optional absolute URL for embeds, e.g. https://your-domain.com/demonlist
