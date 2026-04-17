@@ -22,11 +22,25 @@ $form = [
 ];
 $errors = [];
 
-$demons = db()->query('SELECT id, name, requirement, position
-                      FROM demons
-                      WHERE legacy = 0
-                        AND position <= 150
-                      ORDER BY position ASC')->fetchAll();
+$allDemons = db()->query('SELECT id, name, requirement, position, legacy
+                          FROM demons
+                          ORDER BY position ASC')->fetchAll();
+$demons = [];
+foreach ($allDemons as $demon) {
+    $position = (int) ($demon['position'] ?? 0);
+    $legacy = (int) ($demon['legacy'] ?? 0) === 1;
+    if (!demonlist_is_ranked_entry($position, $legacy)) {
+        continue;
+    }
+
+    $demons[] = $demon;
+}
+
+$showExtendedList = demonlist_show_extended_list();
+$showLegacyList = demonlist_show_legacy_list();
+$submitHint = (!$showExtendedList && !$showLegacyList)
+    ? 'All ranked demons are available. Type any part of the name to get suggestions.'
+    : 'Current ranked demons only. Type any part of the name to get suggestions.';
 
 function resolve_demon_input(array $demons, string $rawInput): array
 {
@@ -77,7 +91,7 @@ if (method_is_post()) {
     if ($demon === null) {
         $errors[] = $resolution['ambiguous']
             ? 'Your search matches multiple demons. Please type the full level name.'
-            : 'Please type a valid demon name from the top 150 list.';
+            : 'Please type a valid demon name from the current ranked list.';
     }
 
     if ($form['video_url'] === '' || filter_var($form['video_url'], FILTER_VALIDATE_URL) === false) {
@@ -165,7 +179,7 @@ render_header('Submit', 'submit');
         <label class="field">
             <span>Level Name (type to search)</span>
             <input type="text" name="demon_name" value="<?= e($form['demon_name']) ?>" data-suggest-list="submit-demon-list" placeholder="Type demon name..." autocomplete="off" required>
-            <small class="muted">Top 150 only. Type any part of the name to get suggestions.</small>
+            <small class="muted"><?= e($submitHint) ?></small>
             <datalist id="submit-demon-list">
                 <?php foreach ($demons as $demon): ?>
                     <option value="<?= e((string) $demon['name']) ?>" label="#<?= (int) $demon['position'] ?> (Req <?= (int) $demon['requirement'] ?>%)"></option>

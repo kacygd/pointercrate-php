@@ -127,12 +127,11 @@ function render_demon_dropdown(string $id, string $title, string $description, a
                 <?php endif; ?>
 
                 <?php foreach ($demons as $demon): ?>
-                    <?php $isActive = (int) $demon['id'] === $currentId; ?>
-                    <li class="hover white <?= $isActive ? 'active' : '' ?>" title="#<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>">
+                    <li class="hover white" title="#<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>">
                         <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
                             #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
                             <br>
-                            <i>by <?= e(demon_creator_name($demon)) ?></i>
+                            <i>published by <?= e((string) $demon['publisher']) ?></i>
                         </a>
                     </li>
                 <?php endforeach; ?>
@@ -172,8 +171,10 @@ if ($requestedRank < 1 && $requestedId > 0) {
 $rank = $requestedRank;
 
 $hasUserBannedColumn = users_has_is_banned_column();
+$showExtendedList = demonlist_show_extended_list();
+$showLegacyList = demonlist_show_legacy_list();
 
-$allDemons = db()->query('SELECT id, position, name, creator, publisher, legacy
+$allDemons = db()->query('SELECT id, position, name, publisher, legacy
                            FROM demons
                            ORDER BY position ASC')->fetchAll();
 
@@ -223,13 +224,14 @@ $legacy = [];
 foreach ($allDemons as $entry) {
     $position = (int) $entry['position'];
     $isLegacy = (int) ($entry['legacy'] ?? 0) === 1;
+    $listBucket = demonlist_list_bucket($position, $isLegacy);
 
-    if (!$isLegacy && $position <= 75) {
+    if ($listBucket === 'main') {
         $main[] = $entry;
         continue;
     }
 
-    if (!$isLegacy && $position <= 150) {
+    if ($listBucket === 'extended') {
         $extended[] = $entry;
         continue;
     }
@@ -307,8 +309,12 @@ $position = (int) $demon['position'];
 $requirement = (int) $demon['requirement'];
 $minimumScore = number_format(pointercrate_score($position, $requirement, $requirement), 2);
 $fullScore = number_format(pointercrate_score($position, $requirement, 100), 2);
-$isLegacyEntry = (int) ($demon['legacy'] ?? 0) === 1 || $position > 150;
-$category = $isLegacyEntry ? 'Legacy List' : ($position <= 75 ? 'Main List' : 'Extended List');
+$currentBucket = demonlist_list_bucket($position, (int) ($demon['legacy'] ?? 0) === 1);
+$category = match ($currentBucket) {
+    'extended' => 'Extended List',
+    'legacy' => 'Legacy List',
+    default => 'Main List',
+};
 $creator = demon_creator_name($demon);
 $publisher = trim((string) ($demon['publisher'] ?? ''));
 $verifier = trim((string) ($demon['verifier'] ?? ''));
@@ -336,9 +342,18 @@ render_header((string) $demon['name'], 'list', [
 ?>
 
 <nav class="flex wrap m-center fade" id="lists" style="text-align: center;">
-    <?php render_demon_dropdown('mainlist', 'Main List', 'Top 1-75 demons in the current list.', $main, $id); ?>
-    <?php render_demon_dropdown('extended', 'Extended List', 'Demons ranked 76-150.', $extended, $id); ?>
-    <?php render_demon_dropdown('legacy', 'Legacy List', 'Demons outside the current top 150.', $legacy, $id); ?>
+    <?php
+    $mainListDescription = demonlist_main_list_dropdown_description($showExtendedList, $showLegacyList);
+    $extendedListDescription = demonlist_extended_list_dropdown_description(true);
+    $legacyListDescription = demonlist_legacy_list_dropdown_description();
+    ?>
+    <?php render_demon_dropdown('mainlist', 'Main List', $mainListDescription, $main, $id); ?>
+    <?php if ($showExtendedList): ?>
+        <?php render_demon_dropdown('extended', 'Extended List', $extendedListDescription, $extended, $id); ?>
+    <?php endif; ?>
+    <?php if ($showLegacyList): ?>
+        <?php render_demon_dropdown('legacy', 'Legacy List', $legacyListDescription, $legacy, $id); ?>
+    <?php endif; ?>
 </nav>
 
 <div class="flex m-center container">

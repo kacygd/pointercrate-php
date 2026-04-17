@@ -15,6 +15,10 @@ Pointercrate-inspired demonlist built with PHP + MySQL.
 - PHP >= 8.1
 - MySQL or MariaDB
 
+## Update database
+
+When updating, remember to change the value `'updated' => 0` to update the database.
+
 ## Quick Setup
 
 1. Upload the project to your hosting path, for example `public_html/demonlist`.
@@ -29,10 +33,6 @@ Pointercrate-inspired demonlist built with PHP + MySQL.
   - example: `https://your-gdps.com/demonlist`
 - `timezone`: app timezone
 - `debug`: debug mode
-
-### Update database
-
-When updating, remember to change the value `'updated' => 0` to update the database.
 
 ### Discord
 

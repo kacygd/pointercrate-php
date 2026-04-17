@@ -149,18 +149,21 @@ $main = [];
 $extended = [];
 $legacy = [];
 $showcase = [];
+$showExtendedList = demonlist_show_extended_list();
+$showLegacyList = demonlist_show_legacy_list();
 
 foreach ($allDemons as $demon) {
     $position = (int) $demon['position'];
     $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
+    $listBucket = demonlist_list_bucket($position, $isLegacy);
 
-    if (!$isLegacy && $position <= 75) {
+    if ($listBucket === 'main') {
         $main[] = $demon;
         $showcase[] = $demon;
         continue;
     }
 
-    if (!$isLegacy && $position <= 150) {
+    if ($listBucket === 'extended') {
         $extended[] = $demon;
         $showcase[] = $demon;
         continue;
@@ -192,25 +195,38 @@ $listHelpersSql .= '
 $listHelpers = db()->query($listHelpersSql)->fetchAll();
 
 $discordWidgetUrl = discord_server_widget_url();
+$pageDescription = (!$showExtendedList && !$showLegacyList)
+    ? 'All ranked demons are currently merged into one Main List.'
+    : 'Ranked demons with Main, Extended, and Legacy sections.';
+$mainListDescription = demonlist_main_list_dropdown_description($showExtendedList, $showLegacyList);
+$extendedListDescription = demonlist_extended_list_dropdown_description(true);
+$legacyListDescription = demonlist_legacy_list_dropdown_description();
+$mainIntro = (!$showExtendedList && !$showLegacyList)
+    ? 'The main list currently shows every ranked demon with no section limits.'
+    : 'The main list of the Demonlist with ranked hardest levels in the game.';
 
 render_header('Main List', 'list', [
     'title' => 'Main List',
-    'description' => 'Top 150 ranked demons with Main, Extended, and Legacy sections.',
+    'description' => $pageDescription,
     'url' => base_url('index.php'),
 ]);
 ?>
 
 <nav class="flex wrap m-center fade" id="lists" style="text-align: center;">
-    <?php render_list_dropdown('mainlist', 'Main List', 'Top 1-75 demons in the current list.', $main); ?>
-    <?php render_list_dropdown('extended', 'Extended List', 'These are demons that dont qualify for the main section of the list, but are still of high relevance. (Top 76-150)', $extended); ?>
-    <?php render_list_dropdown('legacy', 'Legacy List', 'These are demons that used to be on the list, but got pushed off as new demons were added. (>Top 150)', $legacy); ?>
+    <?php render_list_dropdown('mainlist', 'Main List', $mainListDescription, $main); ?>
+    <?php if ($showExtendedList): ?>
+        <?php render_list_dropdown('extended', 'Extended List', $extendedListDescription, $extended); ?>
+    <?php endif; ?>
+    <?php if ($showLegacyList): ?>
+        <?php render_list_dropdown('legacy', 'Legacy List', $legacyListDescription, $legacy); ?>
+    <?php endif; ?>
 </nav>
 
 <div class="flex m-center container">
     <main class="left">
         <section class="panel fade">
             <h1>Geometry Dash Demonlist</h1>
-            <p style="margin-top: 0;">The main list of the Demonlist with 150 hardest rated levels in the game.</p>
+            <p style="margin-top: 0;"><?= e($mainIntro) ?></p>
             <div class="search seperated" style="margin: 10px 0;">
                 <input placeholder="Filter shown demons..." type="text" data-live-search>
             </div>

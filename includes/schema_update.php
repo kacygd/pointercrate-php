@@ -236,6 +236,18 @@ function run_schema_update(PDO $pdo): array
         $logs[] = '[OK] Added app_settings table';
     }
 
+    $seededListSettings = (int) $pdo->exec(
+        "INSERT IGNORE INTO app_settings (setting_key, setting_value)
+         VALUES
+            ('list.show_extended', '1'),
+            ('list.show_legacy', '1'),
+            ('list.main_max_rank', '75'),
+            ('list.extended_max_rank', '150')"
+    );
+    $logs[] = '[OK] Ensured default list settings (Main 1-75, Extended 76-150, Legacy remaining): '
+        . $seededListSettings
+        . ' inserted key(s)';
+
     $publisherBackfilled = $pdo->exec(
         "UPDATE demons d
          INNER JOIN users u ON LOWER(u.username) = LOWER(TRIM(d.publisher))

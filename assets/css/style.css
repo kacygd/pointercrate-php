@@ -2958,8 +2958,44 @@ a.stats-demon-link:after {
   color: #bc7e31;
 }
 
-.admin-quick-actions {
+.admin-quick-action-groups {
   margin-top: 8px;
+  display: grid;
+  gap: 12px;
+}
+
+.admin-action-group {
+  border: 1px solid #d8dfeb;
+  background: #fbfcfe;
+  padding: 10px;
+}
+
+.admin-action-group-title {
+  margin: 0 0 8px;
+  font-size: 0.93em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #445978;
+}
+
+.admin-action-group-note {
+  margin: -2px 0 9px;
+  color: #5b6d86;
+  font-size: 0.79em;
+  line-height: 1.4;
+}
+
+.admin-action-group-owner {
+  border-color: #d6cde8;
+  background: linear-gradient(180deg, #fcfafe 0%, #f7f3fd 100%);
+}
+
+.admin-action-group-owner .admin-action-group-title {
+  color: #5b4a7d;
+}
+
+.admin-quick-actions {
+  margin-top: 0;
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
@@ -3015,6 +3051,15 @@ a.stats-demon-link:after {
 .admin-action-tile.is-primary {
   border-left-color: #2a6398;
   background: #f4f8ff;
+}
+
+.admin-action-tile.is-owner {
+  border-left-color: #8b6db8;
+  background: #fff;
+}
+
+.admin-action-tile.is-owner .admin-action-meta {
+  color: #6c5695;
 }
 
 .admin-action-tile.is-active {

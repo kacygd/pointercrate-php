@@ -316,6 +316,227 @@ function app_setting_set(string $key, string $value): bool
     }
 }
 
+function app_setting_truthy(?string $value, bool $default): bool
+{
+    if (!is_string($value)) {
+        return $default;
+    }
+
+    $normalized = strtolower(trim($value));
+    if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
+        return true;
+    }
+    if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
+        return false;
+    }
+
+    return $default;
+}
+
+function demonlist_show_extended_default(): bool
+{
+    return true;
+}
+
+function demonlist_show_legacy_default(): bool
+{
+    return true;
+}
+
+function demonlist_show_extended_list(): bool
+{
+    return app_setting_truthy(
+        app_setting_get('list.show_extended', null),
+        demonlist_show_extended_default()
+    );
+}
+
+function demonlist_show_legacy_list(): bool
+{
+    return app_setting_truthy(
+        app_setting_get('list.show_legacy', null),
+        demonlist_show_legacy_default()
+    );
+}
+
+function demonlist_set_show_extended_list(bool $enabled): bool
+{
+    return app_setting_set('list.show_extended', $enabled ? '1' : '0');
+}
+
+function demonlist_set_show_legacy_list(bool $enabled): bool
+{
+    return app_setting_set('list.show_legacy', $enabled ? '1' : '0');
+}
+
+function demonlist_list_limit_min(): int
+{
+    return 1;
+}
+
+function demonlist_list_limit_max(): int
+{
+    return 10000;
+}
+
+function demonlist_main_list_limit_default(): int
+{
+    return 75;
+}
+
+function demonlist_extended_list_limit_default(): int
+{
+    return 150;
+}
+
+function demonlist_setting_int(?string $value, int $default): int
+{
+    if (!is_string($value)) {
+        return $default;
+    }
+
+    $normalized = trim($value);
+    if ($normalized === '' || preg_match('/^-?\d+$/', $normalized) !== 1) {
+        return $default;
+    }
+
+    return (int) $normalized;
+}
+
+function demonlist_clamp_list_limit(int $value): int
+{
+    $min = demonlist_list_limit_min();
+    $max = demonlist_list_limit_max();
+
+    if ($value < $min) {
+        return $min;
+    }
+    if ($value > $max) {
+        return $max;
+    }
+
+    return $value;
+}
+
+function demonlist_list_limits_are_valid(int $mainLimit, int $extendedLimit): bool
+{
+    $min = demonlist_list_limit_min();
+    $max = demonlist_list_limit_max();
+
+    if ($mainLimit < $min || $mainLimit > $max) {
+        return false;
+    }
+
+    if ($extendedLimit < $mainLimit || $extendedLimit > $max) {
+        return false;
+    }
+
+    return true;
+}
+
+function demonlist_main_list_limit(): int
+{
+    $value = demonlist_setting_int(
+        app_setting_get('list.main_max_rank', null),
+        demonlist_main_list_limit_default()
+    );
+
+    return demonlist_clamp_list_limit($value);
+}
+
+function demonlist_extended_list_limit(): int
+{
+    $mainLimit = demonlist_main_list_limit();
+    $value = demonlist_setting_int(
+        app_setting_get('list.extended_max_rank', null),
+        demonlist_extended_list_limit_default()
+    );
+
+    $value = demonlist_clamp_list_limit($value);
+    if ($value < $mainLimit) {
+        $value = $mainLimit;
+    }
+
+    return $value;
+}
+
+function demonlist_set_list_limits(int $mainLimit, int $extendedLimit): bool
+{
+    if (!demonlist_list_limits_are_valid($mainLimit, $extendedLimit)) {
+        return false;
+    }
+
+    return app_setting_set('list.main_max_rank', (string) $mainLimit)
+        && app_setting_set('list.extended_max_rank', (string) $extendedLimit);
+}
+
+function demonlist_list_bucket(int $position, bool $legacy): string
+{
+    if ($position < 1) {
+        return 'legacy';
+    }
+
+    if ($legacy) {
+        return demonlist_show_legacy_list() ? 'legacy' : 'main';
+    }
+
+    $mainLimit = demonlist_main_list_limit();
+    $extendedLimit = demonlist_extended_list_limit();
+
+    if ($position <= $mainLimit) {
+        return 'main';
+    }
+
+    if ($position <= $extendedLimit) {
+        return demonlist_show_extended_list() ? 'extended' : 'main';
+    }
+
+    return demonlist_show_legacy_list() ? 'legacy' : 'main';
+}
+
+function demonlist_main_list_dropdown_description(bool $showExtendedList, bool $showLegacyList): string
+{
+    return match (true) {
+        !$showExtendedList && !$showLegacyList => 'All ranked demons are currently merged into this single list.',
+        !$showExtendedList && $showLegacyList => 'Main and Extended entries are merged into this list.',
+        $showExtendedList && !$showLegacyList => 'Main and Legacy entries are merged into this list.',
+        default => 'Top 1-' . demonlist_main_list_limit() . ' demons in the current list.',
+    };
+}
+
+function demonlist_extended_list_dropdown_description(bool $includeScoreHint = false): string
+{
+    $mainLimit = demonlist_main_list_limit();
+    $extendedLimit = demonlist_extended_list_limit();
+    $firstExtendedRank = $mainLimit + 1;
+
+    if ($extendedLimit < $firstExtendedRank) {
+        return 'No ranks are currently assigned to Extended List.';
+    }
+
+    $description = 'Demons ranked ' . $firstExtendedRank . '-' . $extendedLimit;
+    if ($includeScoreHint) {
+        $description .= ' that still count toward score';
+    }
+
+    return $description . '.';
+}
+
+function demonlist_legacy_list_dropdown_description(): string
+{
+    $firstLegacyRank = demonlist_extended_list_limit() + 1;
+    return 'Demons ranked #' . $firstLegacyRank . '+ or manually marked as legacy.';
+}
+
+function demonlist_is_ranked_entry(int $position, bool $legacy): bool
+{
+    if ($position < 1) {
+        return false;
+    }
+
+    return demonlist_list_bucket($position, $legacy) !== 'legacy';
+}
+
 function demonlist_top1_points_default(): float
 {
     return 350.0;
@@ -366,7 +587,7 @@ function demonlist_set_top1_points(float $value): bool
 function demonlist_base_beaten_score(int $position): float
 {
     return match (true) {
-        $position >= 56 && $position <= 150 => 1.039035131 * ((185.7 * exp(-0.02715 * $position)) + 14.84),
+        $position >= 56 => 1.039035131 * ((185.7 * exp(-0.02715 * $position)) + 14.84),
         $position >= 36 && $position <= 55 => 1.0371139743 * ((212.61 * pow(1.036, 1 - $position)) + 25.071),
         $position >= 21 && $position <= 35 => ((250 - 83.389) * pow(1.0099685, 2 - $position) - 31.152) * 1.0371139743,
         $position >= 4 && $position <= 20 => ((326.1 * exp(-0.0871 * $position)) + 51.09) * 1.037117142,
@@ -449,7 +670,7 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
         ];
     }
 
-    $demons = $pdo->query('SELECT id, position, requirement, legacy, verifier_user_id FROM demons')->fetchAll();
+    $demons = $pdo->query('SELECT id, position, requirement, legacy, verifier, verifier_user_id FROM demons')->fetchAll();
     $demonById = [];
     foreach ($demons as $demon) {
         $demonId = (int) ($demon['id'] ?? 0);
@@ -461,6 +682,7 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
             'position' => (int) ($demon['position'] ?? 0),
             'requirement' => (int) ($demon['requirement'] ?? 100),
             'legacy' => (int) ($demon['legacy'] ?? 0),
+            'verifier' => trim((string) ($demon['verifier'] ?? '')),
             'verifier_user_id' => (int) ($demon['verifier_user_id'] ?? 0),
         ];
     }
@@ -483,6 +705,14 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
         }
 
         $demon = $demonById[$demonId];
+        $isRankedEntry = demonlist_is_ranked_entry(
+            (int) ($demon['position'] ?? 0),
+            (int) ($demon['legacy'] ?? 0) === 1
+        );
+        if (!$isRankedEntry) {
+            continue;
+        }
+
         $progress = max(0, min(100, (int) ($completion['progress'] ?? 0)));
         $score = demonlist_score($demon['position'], $demon['requirement'], $progress);
 
@@ -498,12 +728,19 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
     foreach ($demonById as $demonId => $demon) {
         $verifierUserId = (int) ($demon['verifier_user_id'] ?? 0);
         if ($verifierUserId < 1 || !isset($storedPointsByUserId[$verifierUserId])) {
+            $verifierNameKey = strtolower(trim((string) ($demon['verifier'] ?? '')));
+            if ($verifierNameKey !== '' && isset($userIdByName[$verifierNameKey])) {
+                $verifierUserId = (int) $userIdByName[$verifierNameKey];
+            }
+        }
+
+        if ($verifierUserId < 1 || !isset($storedPointsByUserId[$verifierUserId])) {
             continue;
         }
 
-        $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
         $position = (int) ($demon['position'] ?? 0);
-        if ($isLegacy || $position < 1 || $position > 150) {
+        $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
+        if (!demonlist_is_ranked_entry($position, $isLegacy)) {
             continue;
         }
 
@@ -1068,7 +1305,7 @@ function admin_role_permission_default(string $role, string $permission): bool
             'manage_levels' => true,
             'claim_contributors' => true,
             'manage_users' => false,
-            'manage_scoring' => false,
+            'manage_scoring' => true,
             'review_submissions' => true,
         ],
         'list_helper' => [

@@ -63,18 +63,6 @@ function render_stats_demon_links(array $demons, bool $useLabel = false): string
     return implode(' - ', $parts);
 }
 
-function demon_list_bucket(int $position, bool $legacy): string
-{
-    if ($legacy || $position > 150 || $position < 1) {
-        return 'legacy';
-    }
-    if ($position <= 75) {
-        return 'main';
-    }
-
-    return 'extended';
-}
-
 $pdo = db();
 
 $hasBonusPointsColumn = false;
@@ -201,6 +189,24 @@ $ensurePlayer = static function (string $rawName) use (&$playersByKey): ?string 
     return $key;
 };
 
+$updateHardest = static function (array &$player, string $demonName, int $position, float $score): void {
+    $hardestScore = (float) ($player['hardest_score'] ?? 0.0);
+    $hardestPosition = $player['hardest_position'] !== null
+        ? (int) $player['hardest_position']
+        : null;
+
+    $isBetter = $score > $hardestScore;
+    if (!$isBetter && abs($score - $hardestScore) < 0.00001) {
+        $isBetter = $hardestPosition === null || $position < $hardestPosition;
+    }
+
+    if ($isBetter) {
+        $player['hardest_score'] = $score;
+        $player['hardest_position'] = $position;
+        $player['hardest_demon'] = $demonName;
+    }
+};
+
 foreach ($users as $user) {
     $username = trim((string) ($user['username'] ?? ''));
     $key = $ensurePlayer($username);
@@ -228,6 +234,7 @@ foreach ($demons as $demon) {
     $demonName = (string) $demon['name'];
     $demonPosition = (int) $demon['position'];
     $legacy = (int) $demon['legacy'] === 1;
+    $isRankedEntry = demonlist_is_ranked_entry($demonPosition, $legacy);
     $demonItem = [
         'id' => $demonId,
         'name' => $demonName,
@@ -247,7 +254,7 @@ foreach ($demons as $demon) {
     }
 
     $publisherUserId = (int) ($demon['publisher_user_id'] ?? 0);
-    if ($publisherUserId > 0 && isset($usersById[$publisherUserId]) && !$legacy) {
+    if ($publisherUserId > 0 && isset($usersById[$publisherUserId]) && $isRankedEntry) {
         $publisherKey = $ensurePlayer((string) $usersById[$publisherUserId]);
         if ($publisherKey !== null) {
             $playersByKey[$publisherKey]['demons_published'][$demonId] = $demonItem;
@@ -255,11 +262,18 @@ foreach ($demons as $demon) {
     }
 
     $verifierUserId = (int) ($demon['verifier_user_id'] ?? 0);
+    $verifierKey = null;
     if ($verifierUserId > 0 && isset($usersById[$verifierUserId])) {
         $verifierKey = $ensurePlayer((string) $usersById[$verifierUserId]);
-        if ($verifierKey !== null) {
-            $playersByKey[$verifierKey]['demons_verified'][$demonId] = $demonItem;
+    } else {
+        $verifierName = trim((string) ($demon['verifier'] ?? ''));
+        if ($verifierName !== '') {
+            $verifierKey = $ensurePlayer($verifierName);
         }
+    }
+
+    if ($verifierKey !== null) {
+        $playersByKey[$verifierKey]['demons_verified'][$demonId] = $demonItem;
     }
 }
 
@@ -280,16 +294,17 @@ foreach ($records as $record) {
     $position = (int) $demon['position'];
     $requirement = (int) $demon['requirement'];
     $legacy = (int) $demon['legacy'] === 1;
+    $isRankedEntry = demonlist_is_ranked_entry($position, $legacy);
 
     $progress = (int) ($record['progress'] ?? 0);
     if ($progress < $requirement) {
         continue;
     }
 
-    $score = pointercrate_score($position, $requirement, $progress);
+    $score = $isRankedEntry ? pointercrate_score($position, $requirement, $progress) : 0.0;
 
     $playersByKey[$key]['total_records']++;
-    if (!$legacy) {
+    if ($isRankedEntry) {
         $playersByKey[$key]['score'] += $score;
         $existingScore = (float) ($playersByKey[$key]['completion_scores'][$demonId] ?? 0.0);
         if ($score > $existingScore) {
@@ -297,7 +312,7 @@ foreach ($records as $record) {
         }
     }
 
-    $listBucket = demon_list_bucket($position, $legacy);
+    $listBucket = demonlist_list_bucket($position, $legacy);
     if ($listBucket === 'main') {
         $playersByKey[$key]['main_records']++;
     } elseif ($listBucket === 'extended') {
@@ -322,6 +337,11 @@ foreach ($records as $record) {
         } else {
             $playersByKey[$key]['legacy_completed'][$demonId] = $completionItem;
         }
+
+        if ($position > 0) {
+            $completionHardestScore = pointercrate_score($position, $requirement, 100);
+            $updateHardest($playersByKey[$key], $demonName, $position, $completionHardestScore);
+        }
     } else {
         $playersByKey[$key]['progress_on'][$demonId] = [
             'id' => $demonId,
@@ -331,23 +351,32 @@ foreach ($records as $record) {
             'url' => base_url((string) $position),
         ];
     }
+}
 
-    $hardestScore = (float) $playersByKey[$key]['hardest_score'];
-    $hardestPosition = $playersByKey[$key]['hardest_position'] !== null
-        ? (int) $playersByKey[$key]['hardest_position']
-        : null;
+foreach ($playersByKey as &$playerData) {
+    foreach ((array) $playerData['demons_verified'] as $verifiedDemon) {
+        $verifiedDemonId = isset($verifiedDemon['id']) ? (int) $verifiedDemon['id'] : 0;
+        if ($verifiedDemonId < 1 || !isset($demonById[$verifiedDemonId])) {
+            continue;
+        }
 
-    $isBetter = $score > $hardestScore;
-    if (!$isBetter && abs($score - $hardestScore) < 0.00001) {
-        $isBetter = $hardestPosition === null || $position < $hardestPosition;
-    }
+        $verifiedInfo = $demonById[$verifiedDemonId];
+        $verifiedPosition = (int) ($verifiedInfo['position'] ?? 0);
+        if ($verifiedPosition < 1) {
+            continue;
+        }
 
-    if ($isBetter) {
-        $playersByKey[$key]['hardest_score'] = $score;
-        $playersByKey[$key]['hardest_position'] = $position;
-        $playersByKey[$key]['hardest_demon'] = $demonName;
+        $verifiedName = trim((string) ($verifiedInfo['name'] ?? ($verifiedDemon['name'] ?? '')));
+        if ($verifiedName === '') {
+            continue;
+        }
+
+        $verifiedRequirement = (int) ($verifiedInfo['requirement'] ?? 100);
+        $verifiedScore = pointercrate_score($verifiedPosition, $verifiedRequirement, 100);
+        $updateHardest($playerData, $verifiedName, $verifiedPosition, $verifiedScore);
     }
 }
+unset($playerData);
 
 $sortByDemonPosition = static function (array $items): array {
     $sorted = array_values($items);
@@ -390,7 +419,7 @@ foreach ($players as &$player) {
         $verifiedPosition = (int) ($verifiedInfo['position'] ?? 0);
         $verifiedRequirement = (int) ($verifiedInfo['requirement'] ?? 100);
 
-        if ($verifiedLegacy || $verifiedPosition < 1 || $verifiedPosition > 150) {
+        if (!demonlist_is_ranked_entry($verifiedPosition, $verifiedLegacy)) {
             continue;
         }
 

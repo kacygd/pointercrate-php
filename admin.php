@@ -436,6 +436,82 @@ if (method_is_post()) {
         redirect('admin.php#admin-scoring');
     }
 
+    if ($action === 'update_list_visibility' && has_owner_access()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect('admin.php#admin-list-visibility');
+        }
+
+        $showExtendedList = isset($_POST['show_extended_list']);
+        $showLegacyList = isset($_POST['show_legacy_list']);
+        $mainListLimitInput = trim((string) ($_POST['main_list_limit'] ?? ''));
+        $extendedListLimitInput = trim((string) ($_POST['extended_list_limit'] ?? ''));
+
+        if (
+            $mainListLimitInput === ''
+            || preg_match('/^\d+$/', $mainListLimitInput) !== 1
+            || $extendedListLimitInput === ''
+            || preg_match('/^\d+$/', $extendedListLimitInput) !== 1
+        ) {
+            flash('error', 'Main/Extended max rank must be whole numbers.');
+            redirect('admin.php#admin-list-visibility');
+        }
+
+        $mainListLimit = (int) $mainListLimitInput;
+        $extendedListLimit = (int) $extendedListLimitInput;
+        if (!demonlist_list_limits_are_valid($mainListLimit, $extendedListLimit)) {
+            flash(
+                'error',
+                'Main max rank must be between '
+                . demonlist_list_limit_min()
+                . ' and '
+                . demonlist_list_limit_max()
+                . '. Extended max rank must be >= Main max rank and <= '
+                . demonlist_list_limit_max()
+                . '.'
+            );
+            redirect('admin.php#admin-list-visibility');
+        }
+
+        if (
+            !demonlist_set_show_extended_list($showExtendedList)
+            || !demonlist_set_show_legacy_list($showLegacyList)
+            || !demonlist_set_list_limits($mainListLimit, $extendedListLimit)
+        ) {
+            flash('error', 'Could not save list settings. Please try again.');
+            redirect('admin.php#admin-list-visibility');
+        }
+
+        $syncMessage = '';
+        try {
+            $syncSummary = demonlist_sync_user_points();
+            $syncMessage = ' Synced '
+                . (int) ($syncSummary['updated_users'] ?? 0)
+                . ' / '
+                . (int) ($syncSummary['processed_users'] ?? 0)
+                . ' user point totals.';
+        } catch (Throwable) {
+            $syncMessage = ' Point sync failed in this request. Open Stats Viewer once to refresh points.';
+        }
+
+        flash(
+            'success',
+            'Saved list settings. Main: #1-#'
+            . $mainListLimit
+            . ', Extended: '
+            . ($extendedListLimit > $mainListLimit
+                ? ('#' . ($mainListLimit + 1) . '-#' . $extendedListLimit)
+                : 'none')
+            . '. Visibility -> Extended: '
+            . ($showExtendedList ? 'ON' : 'OFF')
+            . ', Legacy: '
+            . ($showLegacyList ? 'ON' : 'OFF')
+            . '.'
+            . $syncMessage
+        );
+        redirect('admin.php#admin-list-visibility');
+    }
+
     if ($action === 'update_role_permissions' && has_owner_access()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
@@ -1042,12 +1118,12 @@ if (method_is_post()) {
             $pdo->beginTransaction();
 
             if ($demonId < 1) {
-                $exactByName = $pdo->prepare('SELECT id FROM demons WHERE legacy = 0 AND LOWER(name) = LOWER(:name) LIMIT 1');
+                $exactByName = $pdo->prepare('SELECT id FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1');
                 $exactByName->execute([':name' => $demonNameInput]);
                 $matchId = $exactByName->fetchColumn();
 
                 if ($matchId === false) {
-                    $partialByName = $pdo->prepare('SELECT id, name FROM demons WHERE legacy = 0 AND LOWER(name) LIKE :query ORDER BY position ASC LIMIT 2');
+                    $partialByName = $pdo->prepare('SELECT id, name FROM demons WHERE LOWER(name) LIKE :query ORDER BY position ASC LIMIT 2');
                     $partialByName->execute([':query' => '%' . strtolower($demonNameInput) . '%']);
                     $matches = $partialByName->fetchAll();
 
@@ -1225,6 +1301,14 @@ if (method_is_post()) {
             $currentRole = (string) $target['role'];
             $currentRoleNormalized = normalize_user_role($currentRole);
             $currentBanned = (int) ($target['is_banned'] ?? 0) === 1 ? 1 : 0;
+
+            if (!has_owner_access() && $role !== $currentRoleNormalized) {
+                throw new RuntimeException('Only owner can change user roles.');
+            }
+            if (!has_owner_access()) {
+                $role = $currentRoleNormalized;
+            }
+
             if ($currentRoleNormalized === 'owner' && $role !== 'owner') {
                 $ownerCount = (int) $pdo->query('SELECT COUNT(*) FROM users WHERE role = "owner"')->fetchColumn();
                 if ($ownerCount <= 1) {
@@ -1540,6 +1624,12 @@ $topOnePoints = demonlist_top1_points();
 $topOnePointsInput = number_format($topOnePoints, 2, '.', '');
 $topOnePointsMinInput = number_format(demonlist_top1_points_min(), 2, '.', '');
 $topOnePointsMaxInput = number_format(demonlist_top1_points_max(), 2, '.', '');
+$showExtendedList = demonlist_show_extended_list();
+$showLegacyList = demonlist_show_legacy_list();
+$mainListLimit = demonlist_main_list_limit();
+$extendedListLimit = demonlist_extended_list_limit();
+$listLimitMinInput = (string) demonlist_list_limit_min();
+$listLimitMaxInput = (string) demonlist_list_limit_max();
 
 $hasPublisherClaimColumn = admin_column_exists($adminPdo, 'demons', 'publisher_user_id');
 $hasVerifierClaimColumn = admin_column_exists($adminPdo, 'demons', 'verifier_user_id');
@@ -1595,7 +1685,15 @@ $canManageUsers = can_manage_users();
 $canManageScoring = can_manage_scoring();
 $canClaimContributors = can_claim_contributors();
 $canReviewSubmissions = can_review_submissions();
+$canManageListVisibility = has_owner_access();
 $canManageRolePermissions = has_owner_access();
+$canManageUserRoles = has_owner_access();
+$hasGeneralQuickActions = $canManageLevels
+    || $canManageUsers
+    || $canManageScoring
+    || $canClaimContributors
+    || $canReviewSubmissions;
+$hasOwnerOnlyQuickActions = $canManageRolePermissions || $canManageListVisibility;
 $editableStaffRoles = ['list_editor', 'list_helper'];
 $permissionDefinitions = admin_permission_definitions();
 $rolePermissionMatrix = [];
@@ -1630,52 +1728,78 @@ render_header('Admin', 'admin');
         <h2>Quick Actions</h2>
         <p>Choose one tool and only that section will be displayed below.</p>
     </div>
-    <div class="admin-quick-actions">
-        <?php if ($canManageLevels): ?>
-            <a class="admin-action-tile" href="#admin-add-level" data-open-admin-section="admin-add-level">
-                <span class="admin-action-title">Add Level</span>
-                <small>Create a new demon entry.</small>
-            </a>
-            <a class="admin-action-tile" href="#admin-edit-level" data-open-admin-section="admin-edit-level">
-                <span class="admin-action-title">Edit Level</span>
-                <small>Update level info and ranking.</small>
-            </a>
+    <div class="admin-quick-action-groups">
+        <div class="admin-action-group">
+            <h3 class="admin-action-group-title">Admin Tools</h3>
+            <div class="admin-quick-actions">
+                <?php if ($canManageLevels): ?>
+                    <a class="admin-action-tile" href="#admin-add-level" data-open-admin-section="admin-add-level">
+                        <span class="admin-action-title">Add Level</span>
+                        <small>Create a new demon entry.</small>
+                    </a>
+                    <a class="admin-action-tile" href="#admin-edit-level" data-open-admin-section="admin-edit-level">
+                        <span class="admin-action-title">Edit Level</span>
+                        <small>Update level info and ranking.</small>
+                    </a>
+                <?php endif; ?>
+                <?php if ($canManageUsers): ?>
+                    <a class="admin-action-tile" href="#admin-user-management" data-open-admin-section="admin-user-management">
+                        <span class="admin-action-title">User Management</span>
+                        <small>Adjust role, ban status, and bonus points.</small>
+                    </a>
+                <?php endif; ?>
+                <?php if ($canManageScoring): ?>
+                    <a class="admin-action-tile" href="#admin-scoring" data-open-admin-section="admin-scoring">
+                        <span class="admin-action-title">Change Score</span>
+                        <small>Adjust the highest score on the list.</small>
+                    </a>
+                <?php endif; ?>
+                <?php if ($canClaimContributors): ?>
+                    <a class="admin-action-tile" href="#admin-claims" data-open-admin-section="admin-claims">
+                        <span class="admin-action-title">Claim Contributors</span>
+                        <small>Bind publisher/verifier to real accounts via user ID.</small>
+                    </a>
+                <?php endif; ?>
+                <?php if ($canReviewSubmissions): ?>
+                    <a class="admin-action-tile" href="#admin-pending-submissions" data-open-admin-section="admin-pending-submissions">
+                        <span class="admin-action-title">Pending Submissions</span>
+                        <small>Review new records in queue.</small>
+                    </a>
+                    <a class="admin-action-tile" href="#admin-reviewed-submissions" data-open-admin-section="admin-reviewed-submissions">
+                        <span class="admin-action-title">Recently Reviewed</span>
+                        <small>Check moderation history.</small>
+                    </a>
+                <?php endif; ?>
+                <?php if (!$hasGeneralQuickActions): ?>
+                    <div class="muted">No admin tools assigned for your current role.</div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php if ($hasOwnerOnlyQuickActions): ?>
+            <div class="admin-action-group admin-action-group-owner">
+                <h3 class="admin-action-group-title">Owner Only</h3>
+                <p class="admin-action-group-note">These settings are only available to the owner role.</p>
+                <div class="admin-quick-actions admin-quick-actions-owner">
+                    <?php if ($canManageRolePermissions): ?>
+                        <a class="admin-action-tile is-owner" href="#admin-role-permissions" data-open-admin-section="admin-role-permissions">
+                            <span class="admin-action-title">Role Permissions</span>
+                            <small>Customize List Editor and List Helper rights in database.</small>
+                            <span class="admin-action-meta">Owner Only</span>
+                        </a>
+                    <?php endif; ?>
+                    <?php if ($canManageListVisibility): ?>
+                        <a class="admin-action-tile is-owner" href="#admin-list-visibility" data-open-admin-section="admin-list-visibility">
+                            <span class="admin-action-title">List Visibility</span>
+                            <small>Choose section visibility and rank ranges for Main/Extended.</small>
+                            <span class="admin-action-meta">Owner Only</span>
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
         <?php endif; ?>
-        <?php if ($canManageUsers): ?>
-            <a class="admin-action-tile" href="#admin-user-management" data-open-admin-section="admin-user-management">
-                <span class="admin-action-title">User Management</span>
-                <small>Adjust role, ban status, and bonus points.</small>
-            </a>
-        <?php endif; ?>
-        <?php if ($canManageRolePermissions): ?>
-            <a class="admin-action-tile" href="#admin-role-permissions" data-open-admin-section="admin-role-permissions">
-                <span class="admin-action-title">Role Permissions</span>
-                <small>Customize List Editor and List Helper rights in database.</small>
-            </a>
-        <?php endif; ?>
-        <?php if ($canManageScoring): ?>
-            <a class="admin-action-tile" href="#admin-scoring" data-open-admin-section="admin-scoring">
-                <span class="admin-action-title">Change Score</span>
-                <small>Adjust the highest score on the list.</small>
-            </a>
-        <?php endif; ?>
-        <?php if ($canClaimContributors): ?>
-            <a class="admin-action-tile" href="#admin-claims" data-open-admin-section="admin-claims">
-                <span class="admin-action-title">Claim Contributors</span>
-                <small>Bind publisher/verifier to real accounts via user ID.</small>
-            </a>
-        <?php endif; ?>
-        <?php if ($canReviewSubmissions): ?>
-            <a class="admin-action-tile" href="#admin-pending-submissions" data-open-admin-section="admin-pending-submissions">
-                <span class="admin-action-title">Pending Submissions</span>
-                <small>Review new records in queue.</small>
-            </a>
-            <a class="admin-action-tile" href="#admin-reviewed-submissions" data-open-admin-section="admin-reviewed-submissions">
-                <span class="admin-action-title">Recently Reviewed</span>
-                <small>Check moderation history.</small>
-            </a>
-        <?php endif; ?>
-        <?php if (!$canManageLevels && !$canManageUsers && !$canManageRolePermissions && !$canManageScoring && !$canClaimContributors && !$canReviewSubmissions): ?>
+
+        <?php if (!$hasGeneralQuickActions && !$hasOwnerOnlyQuickActions): ?>
             <div class="muted">Your role currently has no admin actions assigned.</div>
         <?php endif; ?>
     </div>
@@ -1727,6 +1851,68 @@ render_header('Admin', 'admin');
         </div>
 
         <button class="button blue hover" type="submit">Save Role Permissions</button>
+    </form>
+</section>
+<?php endif; ?>
+
+<?php if ($canManageListVisibility): ?>
+<section class="panel fade admin-tool-section" id="admin-list-visibility">
+    <div class="panel-head">
+        <h2>List Visibility</h2>
+        <p>Owner-only setting for section visibility and rank ranges on the site.</p>
+    </div>
+
+    <form class="stack-form panel-narrow" method="post" action="<?= e(base_url('admin.php#admin-list-visibility')) ?>">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="update_list_visibility">
+
+        <label class="cb-container" style="text-align: left;">
+            <input type="checkbox" name="show_extended_list" value="1" <?= $showExtendedList ? 'checked' : '' ?>>
+            <span class="checkmark"></span>
+            Show Extended List as a separate section
+        </label>
+
+        <label class="cb-container" style="text-align: left;">
+            <input type="checkbox" name="show_legacy_list" value="1" <?= $showLegacyList ? 'checked' : '' ?>>
+            <span class="checkmark"></span>
+            Show Legacy List as a separate section
+        </label>
+
+        <label class="field">
+            <span>Main List max rank</span>
+            <input
+                type="number"
+                name="main_list_limit"
+                min="<?= e($listLimitMinInput) ?>"
+                max="<?= e($listLimitMaxInput) ?>"
+                step="1"
+                value="<?= e((string) $mainListLimit) ?>"
+                required
+            >
+        </label>
+
+        <label class="field">
+            <span>Extended List max rank</span>
+            <input
+                type="number"
+                name="extended_list_limit"
+                min="<?= e($listLimitMinInput) ?>"
+                max="<?= e($listLimitMaxInput) ?>"
+                step="1"
+                value="<?= e((string) $extendedListLimit) ?>"
+                required
+            >
+        </label>
+
+        <small class="muted" style="text-align: left;">
+            Allowed range: <?= e($listLimitMinInput) ?> to <?= e($listLimitMaxInput) ?>.
+            Extended max rank must be greater than or equal to Main max rank.
+            Current split: Main #1-#<?= (int) $mainListLimit ?><?php if ($extendedListLimit > $mainListLimit): ?>, Extended #<?= (int) ($mainListLimit + 1) ?>-#<?= (int) $extendedListLimit ?><?php else: ?>, Extended none<?php endif; ?>.
+            Entries above Extended max rank (or marked legacy) go to Legacy when Legacy is ON.
+            When a section is hidden, its demons are merged into Main and still count for score.
+        </small>
+
+        <button class="button blue hover" type="submit">Save List Settings</button>
     </form>
 </section>
 <?php endif; ?>
@@ -2001,7 +2187,12 @@ render_header('Admin', 'admin');
 <section class="panel fade admin-tool-section admin-list-section" id="admin-user-management">
     <div class="panel-head">
         <h2>User Management</h2>
-        <p>Adjust role, banned status, and bonus points for each account in one place.</p>
+        <p>
+            Adjust role, banned status, and bonus points for each account in one place.
+            <?php if (!$canManageUserRoles): ?>
+                Only owner can change roles; your access is limited to ban/bonus updates.
+            <?php endif; ?>
+        </p>
     </div>
 
     <form class="admin-user-toolbar" method="get" action="<?= e(base_url('admin.php#admin-user-management')) ?>">
@@ -2077,12 +2268,17 @@ render_header('Admin', 'admin');
                                 <div class="admin-user-edit-controls">
                                     <label class="admin-user-edit-field">
                                         <span>Role</span>
-                                        <select name="role">
-                                            <option value="owner" <?= $memberRole === 'owner' ? 'selected' : '' ?>>OWNER</option>
-                                            <option value="list_editor" <?= $memberRole === 'list_editor' ? 'selected' : '' ?> <?= $isLastOwner ? 'disabled' : '' ?>>LIST EDITOR</option>
-                                            <option value="list_helper" <?= $memberRole === 'list_helper' ? 'selected' : '' ?> <?= $isLastOwner ? 'disabled' : '' ?>>LIST HELPER</option>
-                                            <option value="player" <?= $memberRole === 'player' ? 'selected' : '' ?> <?= $isLastOwner ? 'disabled' : '' ?>>PLAYER</option>
-                                        </select>
+                                        <?php if ($canManageUserRoles): ?>
+                                            <select name="role">
+                                                <option value="owner" <?= $memberRole === 'owner' ? 'selected' : '' ?>>OWNER</option>
+                                                <option value="list_editor" <?= $memberRole === 'list_editor' ? 'selected' : '' ?> <?= $isLastOwner ? 'disabled' : '' ?>>LIST EDITOR</option>
+                                                <option value="list_helper" <?= $memberRole === 'list_helper' ? 'selected' : '' ?> <?= $isLastOwner ? 'disabled' : '' ?>>LIST HELPER</option>
+                                                <option value="player" <?= $memberRole === 'player' ? 'selected' : '' ?> <?= $isLastOwner ? 'disabled' : '' ?>>PLAYER</option>
+                                            </select>
+                                        <?php else: ?>
+                                            <input type="hidden" name="role" value="<?= e($memberRole) ?>">
+                                            <input type="text" value="<?= e(strtoupper($memberRoleLabel)) ?>" readonly>
+                                        <?php endif; ?>
                                     </label>
                                     <label class="admin-user-edit-field">
                                         <span>Banned</span>
