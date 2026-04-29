@@ -2195,6 +2195,10 @@ header nav .nav-profile-dropdown button:hover {
   font-size: 1.15em;
   font-weight: 700;
   list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .history-toggle > summary::-webkit-details-marker {
@@ -2205,15 +2209,37 @@ header nav .nav-profile-dropdown button:hover {
   content: '\f078';
   font-family: 'Font Awesome 5 Free';
   font-weight: 900;
-  float: right;
+  flex: 0 0 auto;
+  transition: transform 220ms ease;
 }
 
 .history-toggle[open] > summary::after {
-  content: '\f077';
+  transform: rotate(180deg);
+}
+
+.history-toggle > .history-toggle-content {
+  max-height: 0;
+  margin-top: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.history-toggle > .history-toggle-content > .history-toggle-inner {
+  min-height: 0;
+}
+
+.history-toggle[open] > .history-toggle-content {
+  max-height: none;
+  margin-top: 12px;
+  opacity: 1;
+}
+
+.history-toggle:not([open]) > .history-toggle-content {
+  pointer-events: none;
 }
 
 .history-toggle .table-wrap {
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 /* Extra UX improvements */
@@ -2316,6 +2342,100 @@ header nav .nav-profile-dropdown button {
   margin-right: 0 !important;
 }
 
+.records .records-table {
+  width: 100%;
+  margin: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.records .records-table thead th {
+  padding: 13px 10px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95em;
+  letter-spacing: 0.01em;
+  border: 0;
+}
+
+.records .records-table thead th.blue {
+  background: #1a84c6;
+  color: #fff;
+}
+
+.records .records-table tbody td {
+  padding: 8px 10px;
+  text-align: center;
+  font-size: 0.92em;
+  font-weight: 600;
+  border: 0;
+}
+
+.records .records-table tbody tr:nth-child(odd) {
+  background: #cfd8e8;
+}
+
+.records .records-table tbody tr:nth-child(even) {
+  background: #f2f5fb;
+}
+
+.records .records-table th:nth-child(1),
+.records .records-table td:nth-child(1) {
+  width: 50%;
+  position: relative;
+}
+
+.records .records-table th:nth-child(2),
+.records .records-table td:nth-child(2) {
+  width: 20%;
+}
+
+.records .records-table th:nth-child(3),
+.records .records-table td:nth-child(3) {
+  width: 30%;
+}
+
+.records .player-inline {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 1.1em;
+  white-space: normal;
+}
+
+.records .player-inline .flag-icon {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: 0 !important;
+}
+
+.records .player-inline .player-link {
+  display: block;
+  min-width: 0;
+  width: min(calc(100% - 34px), 420px);
+  margin: 0 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  vertical-align: bottom;
+}
+
+.records .records-table td:nth-child(2) {
+  color: #2e3441;
+  font-weight: 700;
+}
+
+.records .records-table td:nth-child(3) .link {
+  color: #001fff;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .discord-widget-wrap {
   margin-top: 12px;
   border: 1px solid var(--color-border);
@@ -2367,12 +2487,20 @@ header nav .nav-profile-dropdown button {
   grid-template-columns: minmax(260px, 340px) 1fr;
   gap: 18px;
   align-items: start;
+  width: 100%;
+  min-width: 0;
+}
+
+.stats-viewer-panel {
+  overflow: visible;
 }
 
 .stats-viewer-sidebar {
   border: 1px solid var(--color-border);
   background: #fff;
   padding: 10px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .stats-viewer-country {
@@ -2501,6 +2629,8 @@ header nav .nav-profile-dropdown button {
   background: #fff;
   padding: 12px 14px;
   min-height: 560px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .stats-viewer-player-head {
@@ -2527,6 +2657,7 @@ header nav .nav-profile-dropdown button {
   background: #f8f9fb;
   text-align: center;
   padding: 9px 10px;
+  box-sizing: border-box;
 }
 
 .stats-viewer-summary-card-contrib {
@@ -2561,6 +2692,10 @@ header nav .nav-profile-dropdown button {
   .stats-viewer-summary-card-contrib,
   .stats-viewer-summary-card-breakdown {
     grid-column: auto;
+  }
+
+  .stats-viewer-summary-card-breakdown {
+    grid-column: 1 / -1;
   }
 }
 
@@ -3788,6 +3923,14 @@ a.stats-demon-link:after {
     white-space: normal;
   }
 
+  .records .player-inline {
+    white-space: nowrap;
+  }
+
+  .records .player-inline .player-link {
+    max-width: min(100%, 240px);
+  }
+
   .stats-viewer-sidebar {
     padding: 8px;
   }
@@ -3808,6 +3951,12 @@ a.stats-demon-link:after {
 
   .stats-viewer-lines p {
     word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  a.stats-demon-link {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .discord-widget-frame {
@@ -3854,6 +4003,13 @@ a.stats-demon-link:after {
 
   .admin-records-account span {
     white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .history-toggle > summary::after,
+  .history-toggle > .history-toggle-content {
+    transition: none;
   }
 }
 

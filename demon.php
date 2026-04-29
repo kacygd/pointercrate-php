@@ -435,15 +435,15 @@ render_header((string) $demon['name'], 'list', [
                 <h3>No records yet</h3>
             <?php else: ?>
                 <div class="table-wrap">
-                    <table class="data-table">
-                        <tbody>
+                    <table class="data-table records-table">
+                        <thead>
                             <tr>
-                                <th class="blue">#</th>
                                 <th class="blue">Record Holder</th>
                                 <th class="blue">Progress</th>
                                 <th class="blue">Video Proof</th>
-                                <th class="blue">Date</th>
                             </tr>
+                        </thead>
+                        <tbody>
                             <?php foreach ($completions as $completion): ?>
                                 <?php
                                 $progress = (int) ($completion['progress'] ?? 100);
@@ -452,11 +452,10 @@ render_header((string) $demon['name'], 'list', [
                                 $playerName = (string) $completion['player'];
                                 $playerProfileUrl = base_url('players.php?user=' . rawurlencode($playerName));
                                 ?>
-                                <tr style="<?= $progress === 100 ? 'font-weight: bold;' : '' ?>">
-                                    <td><?= $completion['placement'] !== null ? '#' . (int) $completion['placement'] : '-' ?></td>
+                                <tr>
                                     <td>
                                         <span class="player-inline">
-                                            <?= $playerFlag ?><a class="player-link" href="<?= e($playerProfileUrl) ?>"><?= e($playerName) ?></a>
+                                            <?= $playerFlag ?><a class="player-link" href="<?= e($playerProfileUrl) ?>" title="<?= e($playerName) ?>"><?= e($playerName) ?></a>
                                         </span>
                                     </td>
                                     <td><?= $progress ?>%</td>
@@ -465,7 +464,6 @@ render_header((string) $demon['name'], 'list', [
                                             <?= e(video_host_label((string) $completion['video_url'])) ?>
                                         </a>
                                     </td>
-                                    <td><?= e(date('Y-m-d', strtotime((string) $completion['created_at']))) ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -477,35 +475,38 @@ render_header((string) $demon['name'], 'list', [
         <section class="panel fade">
             <details class="history-toggle">
                 <summary>Position History</summary>
-
-                <div class="table-wrap">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Date Change</th>
-                                <th>New Position</th>
-                                <th>Reason</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if ($positionHistory === []): ?>
-                                <tr><td colspan="3" class="muted">No position changes recorded yet.</td></tr>
-                            <?php endif; ?>
-                            <?php foreach ($positionHistory as $event): ?>
-                                <?php
-                                $reason = trim((string) ($event['note'] ?? ''));
-                                if ($reason === '') {
-                                    $reason = $event['old_position'] === null ? 'Initial placement' : 'Position updated';
-                                }
-                                ?>
-                                <tr>
-                                    <td><?= e(date('Y-m-d H:i', strtotime((string) $event['created_at']))) ?></td>
-                                    <td>#<?= (int) $event['new_position'] ?></td>
-                                    <td><?= e($reason) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                <div class="history-toggle-content">
+                    <div class="history-toggle-inner">
+                        <div class="table-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date Change</th>
+                                        <th>New Position</th>
+                                        <th>Reason</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if ($positionHistory === []): ?>
+                                        <tr><td colspan="3" class="muted">No position changes recorded yet.</td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($positionHistory as $event): ?>
+                                        <?php
+                                        $reason = trim((string) ($event['note'] ?? ''));
+                                        if ($reason === '') {
+                                            $reason = $event['old_position'] === null ? 'Initial placement' : 'Position updated';
+                                        }
+                                        ?>
+                                        <tr>
+                                            <td><?= e(date('Y-m-d H:i', strtotime((string) $event['created_at']))) ?></td>
+                                            <td>#<?= (int) $event['new_position'] ?></td>
+                                            <td><?= e($reason) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </details>
         </section>

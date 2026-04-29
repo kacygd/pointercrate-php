@@ -1,12 +1,11 @@
 RewriteEngine On
-RewriteBase /demonlist/
 
 # Redirect explicit script URLs to pretty URLs.
-RewriteCond %{THE_REQUEST} \s/+demonlist/index\.php(?:[?\s]|$) [NC]
-RewriteRule ^index\.php$ /demonlist/ [R=301,L]
+RewriteCond %{THE_REQUEST} \s/+[^\s]*index\.php(?:[?\s]|$) [NC]
+RewriteRule ^index\.php$ ./ [R=301,L]
 
-RewriteCond %{THE_REQUEST} \s/+demonlist/(players|guidelines|submit|admin|account|profile|login|logout|register)\.php(?:[?\s]|$) [NC]
-RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register)\.php$ /demonlist/$1 [R=301,L]
+RewriteCond %{THE_REQUEST} \s/+[^\s]*?(players|guidelines|submit|admin|account|profile|login|logout|register)\.php(?:[?\s]|$) [NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register)\.php$ ./$1 [R=301,L]
 
 # Keep existing files and folders untouched.
 RewriteCond %{REQUEST_FILENAME} -f [OR]

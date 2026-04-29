@@ -145,6 +145,130 @@
     syncFields();
   }
 
+  const setupHistoryToggleAnimation = () => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const openDurationMs = 260;
+
+    document.querySelectorAll('.history-toggle').forEach((details) => {
+      if (!(details instanceof HTMLDetailsElement)) {
+        return;
+      }
+
+      const summary = details.querySelector('summary');
+      const content = details.querySelector('.history-toggle-content');
+      if (!(summary instanceof HTMLElement) || !(content instanceof HTMLElement)) {
+        return;
+      }
+
+      const setClosedState = () => {
+        content.style.maxHeight = '0px';
+        content.style.opacity = '0';
+        content.style.marginTop = '0px';
+        content.style.overflow = 'hidden';
+      };
+
+      const setOpenState = () => {
+        content.style.maxHeight = 'none';
+        content.style.opacity = '1';
+        content.style.marginTop = '12px';
+        content.style.overflow = 'hidden';
+      };
+
+      if (details.open) {
+        setOpenState();
+      } else {
+        setClosedState();
+      }
+
+      summary.addEventListener('click', (event) => {
+        if (details.dataset.animating === '1') {
+          event.preventDefault();
+          return;
+        }
+
+        if (prefersReducedMotion.matches) {
+          details.open = !details.open;
+          if (details.open) {
+            setOpenState();
+          } else {
+            setClosedState();
+          }
+          event.preventDefault();
+          return;
+        }
+
+        event.preventDefault();
+        details.dataset.animating = '1';
+
+        const finishAnimation = (onDone) => {
+          let finished = false;
+          const complete = () => {
+            if (finished) {
+              return;
+            }
+
+            finished = true;
+            details.dataset.animating = '0';
+            onDone();
+          };
+
+          const timeoutId = window.setTimeout(complete, openDurationMs + 90);
+          const onTransitionEnd = (transitionEvent) => {
+            if (transitionEvent.target !== content || transitionEvent.propertyName !== 'max-height') {
+              return;
+            }
+
+            window.clearTimeout(timeoutId);
+            content.removeEventListener('transitionend', onTransitionEnd);
+            complete();
+          };
+
+          content.addEventListener('transitionend', onTransitionEnd);
+        };
+
+        if (!details.open) {
+          details.open = true;
+          content.style.transition = 'none';
+          setClosedState();
+
+          const targetHeight = content.scrollHeight;
+          void content.offsetHeight;
+
+          content.style.transition = 'max-height 260ms ease, opacity 180ms ease, margin-top 260ms ease';
+          content.style.maxHeight = `${targetHeight}px`;
+          content.style.opacity = '1';
+          content.style.marginTop = '12px';
+
+          finishAnimation(() => {
+            content.style.transition = '';
+            setOpenState();
+          });
+          return;
+        }
+
+        const currentHeight = content.scrollHeight;
+        content.style.transition = 'none';
+        content.style.maxHeight = `${currentHeight}px`;
+        content.style.opacity = '1';
+        content.style.marginTop = '12px';
+        void content.offsetHeight;
+
+        content.style.transition = 'max-height 260ms ease, opacity 180ms ease, margin-top 260ms ease';
+        content.style.maxHeight = '0px';
+        content.style.opacity = '0';
+        content.style.marginTop = '0px';
+
+        finishAnimation(() => {
+          details.open = false;
+          content.style.transition = '';
+          setClosedState();
+        });
+      });
+    });
+  };
+
+  setupHistoryToggleAnimation();
+
   const setupTextSuggestions = () => {
     const controls = [];
 
