@@ -3,38 +3,6 @@ declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
 
-function pointercrate_beaten_score(int $position): float
-{
-    return demonlist_beaten_score($position);
-}
-
-function pointercrate_score(int $position, int $requirement, int $progress): float
-{
-    return demonlist_score($position, $requirement, $progress);
-}
-
-function youtube_video_id(string $url): ?string
-{
-    $parts = parse_url($url);
-    if (!is_array($parts) || empty($parts['host'])) {
-        return null;
-    }
-
-    $host = strtolower((string) $parts['host']);
-    if (str_contains($host, 'youtube.com') && !empty($parts['query'])) {
-        parse_str((string) $parts['query'], $query);
-        if (!empty($query['v']) && is_string($query['v'])) {
-            return trim($query['v']);
-        }
-    }
-
-    if (str_contains($host, 'youtu.be') && !empty($parts['path'])) {
-        return trim((string) $parts['path'], '/');
-    }
-
-    return null;
-}
-
 function card_thumbnail_url(array $demon): string
 {
     $configured = trim((string) ($demon['thumbnail_url'] ?? ''));
@@ -128,20 +96,26 @@ function render_list_dropdown(string $id, string $title, string $description, ar
 $hasUserBannedColumn = users_has_is_banned_column();
 
 if ($hasUserBannedColumn) {
-    $allDemons = db()->query('SELECT d.*,
-                                     COUNT(CASE WHEN banned_users.id IS NULL THEN c.id END) AS completion_count
+    $allDemons = db()->query('SELECT d.*, COALESCE(cc.completion_count, 0) AS completion_count
                               FROM demons d
-                              LEFT JOIN completions c ON c.demon_id = d.id
-                              LEFT JOIN users banned_users
-                                ON LOWER(banned_users.username) = LOWER(c.player)
-                               AND COALESCE(banned_users.is_banned, 0) = 1
-                              GROUP BY d.id
+                              LEFT JOIN (
+                                  SELECT c.demon_id, COUNT(*) AS completion_count
+                                  FROM completions c
+                                  LEFT JOIN users banned_users
+                                    ON LOWER(banned_users.username) = LOWER(c.player)
+                                   AND COALESCE(banned_users.is_banned, 0) = 1
+                                  WHERE banned_users.id IS NULL
+                                  GROUP BY c.demon_id
+                              ) cc ON cc.demon_id = d.id
                               ORDER BY d.position ASC')->fetchAll();
 } else {
-    $allDemons = db()->query('SELECT d.*, COUNT(c.id) AS completion_count
+    $allDemons = db()->query('SELECT d.*, COALESCE(cc.completion_count, 0) AS completion_count
                               FROM demons d
-                              LEFT JOIN completions c ON c.demon_id = d.id
-                              GROUP BY d.id
+                              LEFT JOIN (
+                                  SELECT c.demon_id, COUNT(*) AS completion_count
+                                  FROM completions c
+                                  GROUP BY c.demon_id
+                              ) cc ON cc.demon_id = d.id
                               ORDER BY d.position ASC')->fetchAll();
 }
 
@@ -359,7 +333,3 @@ render_header('Main List', 'list', [
 </div>
 
 <?php render_footer(); ?>
-
-
-
-

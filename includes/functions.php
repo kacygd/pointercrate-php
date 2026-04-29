@@ -1258,6 +1258,44 @@ function role_label(string $role): string
     };
 }
 
+if (!function_exists('pointercrate_beaten_score')) {
+    function pointercrate_beaten_score(int $position): float
+    {
+        return demonlist_beaten_score($position);
+    }
+}
+
+if (!function_exists('pointercrate_score')) {
+    function pointercrate_score(int $position, int $requirement, int $progress): float
+    {
+        return demonlist_score($position, $requirement, $progress);
+    }
+}
+
+if (!function_exists('youtube_video_id')) {
+    function youtube_video_id(string $url): ?string
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts) || empty($parts['host'])) {
+            return null;
+        }
+
+        $host = strtolower((string) $parts['host']);
+        if (str_contains($host, 'youtube.com') && !empty($parts['query'])) {
+            parse_str((string) $parts['query'], $query);
+            if (!empty($query['v']) && is_string($query['v'])) {
+                return trim($query['v']);
+            }
+        }
+
+        if (str_contains($host, 'youtu.be') && !empty($parts['path'])) {
+            return trim((string) $parts['path'], '/');
+        }
+
+        return null;
+    }
+}
+
 function current_user_role(): string
 {
     $user = current_user();
