@@ -101,6 +101,9 @@ function schema_apply_users_role_enum(PDO $pdo): void
 
 function schema_needs_update(PDO $pdo): bool
 {
+    if (!schema_col_exists($pdo, 'users', 'youtube_channel')) {
+        return true;
+    }
     if (!schema_col_exists($pdo, 'users', 'points')) {
         return true;
     }
@@ -126,6 +129,9 @@ function schema_needs_update(PDO $pdo): bool
         return true;
     }
     if (!schema_col_exists($pdo, 'demons', 'creator')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'demons', 'creator_more')) {
         return true;
     }
     if (!schema_col_exists($pdo, 'demons', 'publisher_user_id')) {
@@ -156,6 +162,12 @@ function schema_needs_update(PDO $pdo): bool
 function run_schema_update(PDO $pdo): array
 {
     $logs = [];
+
+    if (!schema_col_exists($pdo, 'users', 'youtube_channel')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN youtube_channel VARCHAR(255) NULL AFTER country_code');
+        $logs[] = '[OK] Added users.youtube_channel';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN youtube_channel VARCHAR(255) NULL');
 
     if (!schema_col_exists($pdo, 'users', 'points')) {
         $pdo->exec('ALTER TABLE users ADD COLUMN points DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER role');
@@ -203,6 +215,12 @@ function run_schema_update(PDO $pdo): array
         $logs[] = '[OK] Added demons.creator';
     }
     $pdo->exec('ALTER TABLE demons MODIFY COLUMN creator VARCHAR(160) NULL');
+
+    if (!schema_col_exists($pdo, 'demons', 'creator_more')) {
+        $pdo->exec('ALTER TABLE demons ADD COLUMN creator_more VARCHAR(512) NULL AFTER creator');
+        $logs[] = '[OK] Added demons.creator_more';
+    }
+    $pdo->exec('ALTER TABLE demons MODIFY COLUMN creator_more VARCHAR(512) NULL');
 
     if (!schema_col_exists($pdo, 'demons', 'publisher_user_id')) {
         $pdo->exec('ALTER TABLE demons ADD COLUMN publisher_user_id INT UNSIGNED NULL AFTER publisher');

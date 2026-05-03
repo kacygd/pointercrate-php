@@ -36,6 +36,85 @@ function e(string|null|int|float $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+/**
+ * @return array<int, string>
+ */
+function split_creator_names(mixed $raw): array
+{
+    $value = trim((string) ($raw ?? ''));
+    if ($value === '') {
+        return [];
+    }
+
+    $parts = preg_split('/\s*,\s*/u', $value) ?: [];
+    $names = [];
+    $seen = [];
+
+    foreach ($parts as $part) {
+        $name = trim((string) $part);
+        if ($name === '' || $name === '-') {
+            continue;
+        }
+
+        $key = function_exists('mb_strtolower')
+            ? mb_strtolower($name, 'UTF-8')
+            : strtolower($name);
+        if (isset($seen[$key])) {
+            continue;
+        }
+
+        $seen[$key] = true;
+        $names[] = $name;
+    }
+
+    return $names;
+}
+
+/**
+ * @return array<int, string>
+ */
+function demon_creator_names(array $demon): array
+{
+    $names = [];
+    foreach (['creator', 'creator_more'] as $field) {
+        foreach (split_creator_names($demon[$field] ?? '') as $name) {
+            $key = function_exists('mb_strtolower')
+                ? mb_strtolower($name, 'UTF-8')
+                : strtolower($name);
+            if (isset($names[$key])) {
+                continue;
+            }
+
+            $names[$key] = $name;
+        }
+    }
+
+    return array_values($names);
+}
+
+function demon_primary_creator_name(array $demon): string
+{
+    $names = demon_creator_names($demon);
+    if ($names !== []) {
+        return $names[0];
+    }
+
+    return trim((string) ($demon['publisher'] ?? ''));
+}
+
+/**
+ * @return array<int, string>
+ */
+function demon_extra_creator_names(array $demon): array
+{
+    $names = demon_creator_names($demon);
+    if (count($names) <= 1) {
+        return [];
+    }
+
+    return array_slice($names, 1);
+}
+
 function normalize_public_path(string $path): string
 {
     $trimmed = ltrim(trim($path), '/');
@@ -1174,7 +1253,7 @@ function current_user(): ?array
     }
 
     try {
-        $stmt = db()->prepare('SELECT id, username, email, country_code, password_hash, role, points, created_at
+        $stmt = db()->prepare('SELECT id, username, email, country_code, youtube_channel, password_hash, role, points, created_at
                                FROM users
                                WHERE id = :id
                                LIMIT 1');

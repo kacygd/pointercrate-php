@@ -94,16 +94,20 @@ $users = $pdo->query($userSelect)->fetchAll();
 
 $hasPublisherUserIdColumn = false;
 $hasVerifierUserIdColumn = false;
+$hasCreatorMoreColumn = false;
 try {
     $claimColStmt = $pdo->query(
         "SELECT column_name
          FROM information_schema.columns
          WHERE table_schema = DATABASE()
            AND table_name = 'demons'
-           AND column_name IN ('publisher_user_id', 'verifier_user_id')"
+           AND column_name IN ('creator_more', 'publisher_user_id', 'verifier_user_id')"
     );
     foreach ($claimColStmt->fetchAll(PDO::FETCH_COLUMN) as $columnName) {
         $columnName = strtolower((string) $columnName);
+        if ($columnName === 'creator_more') {
+            $hasCreatorMoreColumn = true;
+        }
         if ($columnName === 'publisher_user_id') {
             $hasPublisherUserIdColumn = true;
         }
@@ -112,6 +116,7 @@ try {
         }
     }
 } catch (Throwable) {
+    $hasCreatorMoreColumn = false;
     $hasPublisherUserIdColumn = false;
     $hasVerifierUserIdColumn = false;
 }
@@ -123,6 +128,7 @@ $demonSelectFields = [
     'requirement',
     'legacy',
     'creator',
+    $hasCreatorMoreColumn ? 'creator_more' : 'NULL AS creator_more',
     'publisher',
     'verifier',
     $hasPublisherUserIdColumn ? 'publisher_user_id' : 'NULL AS publisher_user_id',
@@ -242,11 +248,15 @@ foreach ($demons as $demon) {
         'url' => base_url((string) $demonPosition),
     ];
 
-    $creator = trim((string) ($demon['creator'] ?? ''));
-    if ($creator === '') {
-        $creator = trim((string) ($demon['publisher'] ?? ''));
+    $creatorNames = demon_creator_names($demon);
+    if ($creatorNames === []) {
+        $fallbackCreator = trim((string) ($demon['publisher'] ?? ''));
+        if ($fallbackCreator !== '') {
+            $creatorNames[] = $fallbackCreator;
+        }
     }
-    if ($creator !== '') {
+
+    foreach ($creatorNames as $creator) {
         $creatorKey = $ensurePlayer($creator);
         if ($creatorKey !== null) {
             $playersByKey[$creatorKey]['demons_created'][$demonId] = $demonItem;

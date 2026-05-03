@@ -69,12 +69,7 @@ function css_background_image(string $url): string
 
 function demon_creator_name(array $demon): string
 {
-    $creator = trim((string) ($demon['creator'] ?? ''));
-    if ($creator !== '') {
-        return $creator;
-    }
-
-    return trim((string) ($demon['publisher'] ?? ''));
+    return demon_primary_creator_name($demon);
 }
 
 function render_player_role_link(string $name, ?int $userId = null): string
@@ -91,6 +86,35 @@ function render_player_role_link(string $name, ?int $userId = null): string
     }
 
     return $label;
+}
+
+function render_creator_credit(array $demon): string
+{
+    $creators = demon_creator_names($demon);
+    if ($creators === []) {
+        return '-';
+    }
+
+    $primary = array_shift($creators);
+    
+    $primaryTrimmed = trim($primary);
+    $userStmt = db()->prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(:username) LIMIT 1');
+    $userStmt->execute([':username' => $primaryTrimmed]);
+    $primaryUserId = (int) ($userStmt->fetchColumn() ?: 0);
+    
+    $html = render_player_role_link($primary, $primaryUserId > 0 ? $primaryUserId : null);
+
+    if ($creators === []) {
+        return $html;
+    }
+    $tooltipText = implode(', ', array_map(fn($c) => e($c), $creators));
+    
+    $html .= ' and <span class="tooltip underdotted">';
+    $html .= 'more';
+    $html .= '<span class="tooltiptext fade">' . $tooltipText . '</span>';
+    $html .= '</span>';
+
+    return $html;
 }
 
 function video_host_label(string $url): string
@@ -277,7 +301,7 @@ $historyStmt = db()->prepare('SELECT created_at, old_position, new_position, not
 $historyStmt->execute([':demon_id' => $id]);
 $positionHistory = $historyStmt->fetchAll();
 
-$listEditorsSql = 'SELECT username, country_code
+$listEditorsSql = 'SELECT username, country_code, youtube_channel
                    FROM users
                    WHERE role IN ("owner", "list_editor")';
 if ($hasUserBannedColumn) {
@@ -288,7 +312,7 @@ $listEditorsSql .= '
                    LIMIT 20';
 $listEditors = db()->query($listEditorsSql)->fetchAll();
 
-$listHelpersSql = 'SELECT username, country_code
+$listHelpersSql = 'SELECT username, country_code, youtube_channel
                    FROM users
                    WHERE role = "list_helper"';
 if ($hasUserBannedColumn) {
@@ -370,7 +394,7 @@ render_header((string) $demon['name'], 'list', [
                         #<?= $position ?> &#8211; <?= e((string) $demon['name']) ?>
                     </h1>
                     <p class="demon-hero-byline">
-                        by <?= render_player_role_link($creator) ?>, published by <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, verified by <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
+                        by <?= render_creator_credit($demon) ?>, published by <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, verified by <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
                     </p>
                     <p class="demon-hero-score">
                         <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) points
@@ -395,7 +419,7 @@ render_header((string) $demon['name'], 'list', [
                         <div><dt>Category</dt><dd><?= e($category) ?></dd></div>
                         <div><dt>Difficulty</dt><dd><?= e((string) $demon['difficulty']) ?></dd></div>
                         <div><dt>Requirement</dt><dd><?= $requirement ?>%</dd></div>
-                        <div><dt>Created by</dt><dd><?= render_player_role_link($creator) ?></dd></div>
+                        <div><dt>Created by</dt><dd><?= render_creator_credit($demon) ?></dd></div>
                         <div><dt>Published by</dt><dd><?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?></dd></div>
                         <div><dt>Verified by</dt><dd><?= $verifier !== '' ? render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) : '-' ?></dd></div>
                         <div><dt>Level ID</dt><dd><?= e((string) ($demon['level_id'] ?: '-')) ?></dd></div>
@@ -527,8 +551,12 @@ render_header((string) $demon['name'], 'list', [
                         <?php
                         $countryCode = normalize_country_code((string) ($editor['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
+                        $youtubeChannel = trim((string) ($editor['youtube_channel'] ?? ''));
+                        $username = e((string) $editor['username']);
                         ?>
-                        <li><b><?= $prefix ?><?= e((string) $editor['username']) ?></b></li>
+                        <li>
+                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
+                        </li>
                     <?php endforeach; ?>
                 </ul>
             </div>
@@ -547,8 +575,12 @@ render_header((string) $demon['name'], 'list', [
                         <?php
                         $countryCode = normalize_country_code((string) ($helper['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
+                        $youtubeChannel = trim((string) ($helper['youtube_channel'] ?? ''));
+                        $username = e((string) $helper['username']);
                         ?>
-                        <li><b><?= $prefix ?><?= e((string) $helper['username']) ?></b></li>
+                        <li>
+                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
+                        </li>
                     <?php endforeach; ?>
                 </ul>
             </div>

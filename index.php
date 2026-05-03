@@ -36,12 +36,7 @@ function css_background_image(string $url): string
 
 function demon_creator_name(array $demon): string
 {
-    $creator = trim((string) ($demon['creator'] ?? ''));
-    if ($creator !== '') {
-        return $creator;
-    }
-
-    return trim((string) ($demon['publisher'] ?? ''));
+    return demon_primary_creator_name($demon);
 }
 
 function render_player_role_link(string $name, ?int $userId = null): string
@@ -58,6 +53,38 @@ function render_player_role_link(string $name, ?int $userId = null): string
     }
 
     return $label;
+}
+
+function render_creator_credit(array $demon): string
+{
+    $creators = demon_creator_names($demon);
+    if ($creators === []) {
+        return '-';
+    }
+
+    $primary = array_shift($creators);
+    
+    // Get user ID for primary creator
+    $primaryTrimmed = trim($primary);
+    $userStmt = db()->prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(:username) LIMIT 1');
+    $userStmt->execute([':username' => $primaryTrimmed]);
+    $primaryUserId = (int) ($userStmt->fetchColumn() ?: 0);
+    
+    $html = render_player_role_link($primary, $primaryUserId > 0 ? $primaryUserId : null);
+
+    if ($creators === []) {
+        return $html;
+    }
+
+    // Additional creators in tooltip - plain text only
+    $tooltipText = implode(', ', array_map(fn($c) => e($c), $creators));
+    
+    $html .= ' and <span class="tooltip underdotted">';
+    $html .= 'more';
+    $html .= '<span class="tooltiptext fade">' . $tooltipText . '</span>';
+    $html .= '</span>';
+
+    return $html;
 }
 
 function render_list_dropdown(string $id, string $title, string $description, array $demons): void
@@ -79,11 +106,12 @@ function render_list_dropdown(string $id, string $title, string $description, ar
                 <?php endif; ?>
 
                 <?php foreach ($demons as $demon): ?>
+                    <?php $dropdownVerifier = trim((string) ($demon['verifier'] ?? '')); ?>
                     <li class="hover white" title="#<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>">
                         <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
                             #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
                             <br>
-                            <i>published by <?= e((string) $demon['publisher']) ?></i>
+                            <i>published by <?= e((string) $demon['publisher']) ?><?php if ($dropdownVerifier !== ''): ?>, verified by <?= e($dropdownVerifier) ?><?php endif; ?></i>
                         </a>
                     </li>
                 <?php endforeach; ?>
@@ -146,7 +174,7 @@ foreach ($allDemons as $demon) {
     $legacy[] = $demon;
 }
 
-$listEditorsSql = 'SELECT username, country_code
+$listEditorsSql = 'SELECT username, country_code, youtube_channel
                    FROM users
                    WHERE role IN ("owner", "list_editor")';
 if ($hasUserBannedColumn) {
@@ -157,7 +185,7 @@ $listEditorsSql .= '
                    LIMIT 20';
 $listEditors = db()->query($listEditorsSql)->fetchAll();
 
-$listHelpersSql = 'SELECT username, country_code
+$listHelpersSql = 'SELECT username, country_code, youtube_channel
                    FROM users
                    WHERE role = "list_helper"';
 if ($hasUserBannedColumn) {
@@ -211,11 +239,12 @@ render_header('Main List', 'list', [
             $thumb = card_thumbnail_url($demon);
             $thumbStyle = css_background_image($thumb);
             $creator = demon_creator_name($demon);
+            $creatorSearchText = implode(' ', demon_creator_names($demon));
             $publisher = trim((string) ($demon['publisher'] ?? ''));
             $verifier = trim((string) ($demon['verifier'] ?? ''));
             $publisherUserId = isset($demon['publisher_user_id']) ? (int) $demon['publisher_user_id'] : 0;
             $verifierUserId = isset($demon['verifier_user_id']) ? (int) $demon['verifier_user_id'] : 0;
-            $cardSearchText = strtolower((string) ($demon['name'] . ' ' . $creator . ' ' . $publisher . ' ' . $verifier . ' ' . $demon['difficulty']));
+            $cardSearchText = strtolower((string) ($demon['name'] . ' ' . $creatorSearchText . ' ' . $publisher . ' ' . $verifier . ' ' . $demon['difficulty']));
             $requirement = (int) $demon['requirement'];
             $position = (int) $demon['position'];
             $minimumScore = number_format(pointercrate_score($position, $requirement, $requirement), 2);
@@ -261,9 +290,11 @@ render_header('Main List', 'list', [
                         <?php
                         $countryCode = normalize_country_code((string) ($editor['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
+                        $youtubeChannel = trim((string) ($editor['youtube_channel'] ?? ''));
+                        $username = e((string) $editor['username']);
                         ?>
                         <li>
-                            <b><?= $prefix ?><?= e((string) $editor['username']) ?></b>
+                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
                         </li>
                     <?php endforeach; ?>
                 </ul>
@@ -283,9 +314,11 @@ render_header('Main List', 'list', [
                         <?php
                         $countryCode = normalize_country_code((string) ($helper['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
+                        $youtubeChannel = trim((string) ($helper['youtube_channel'] ?? ''));
+                        $username = e((string) $helper['username']);
                         ?>
                         <li>
-                            <b><?= $prefix ?><?= e((string) $helper['username']) ?></b>
+                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
                         </li>
                     <?php endforeach; ?>
                 </ul>

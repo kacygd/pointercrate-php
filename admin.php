@@ -196,6 +196,7 @@ function admin_notify_level_added(array $level): void
             ['name' => 'List', 'value' => admin_webhook_list_label((int) $level['legacy']), 'inline' => true],
             ['name' => 'Difficulty', 'value' => admin_webhook_text($level['difficulty']), 'inline' => true],
             ['name' => 'Requirement', 'value' => (int) $level['requirement'] . '%', 'inline' => true],
+            ['name' => 'Creator(s)', 'value' => admin_webhook_text($level['creator_display'] ?? null), 'inline' => false],
             ['name' => 'Publisher', 'value' => admin_webhook_text($level['publisher']), 'inline' => true],
             ['name' => 'Verifier', 'value' => admin_webhook_text($level['verifier']), 'inline' => true],
             ['name' => 'By', 'value' => admin_webhook_actor_label(), 'inline' => true],
@@ -210,6 +211,26 @@ function admin_notify_level_added(array $level): void
     send_discord_webhook('', [$embed]);
 }
 
+function admin_creator_parts_from_input(string $input): array
+{
+    $names = split_creator_names($input);
+    if ($names === []) {
+        return [
+            'creator' => '',
+            'creator_more' => '',
+            'creator_display' => '',
+        ];
+    }
+
+    $primary = array_shift($names);
+
+    return [
+        'creator' => $primary,
+        'creator_more' => implode(', ', $names),
+        'creator_display' => implode(', ', array_filter([$primary, ...$names], static fn(string $name): bool => $name !== '')),
+    ];
+}
+
 function admin_notify_level_updated(array $before, array $after, string $moveNote = ''): void
 {
     $changes = [];
@@ -218,6 +239,7 @@ function admin_notify_level_updated(array $before, array $after, string $moveNot
     admin_webhook_add_change($changes, 'Position', '#' . (int) ($before['position'] ?? 0), '#' . (int) ($after['position'] ?? 0), true);
     admin_webhook_add_change($changes, 'Difficulty', admin_webhook_text($before['difficulty'] ?? null), admin_webhook_text($after['difficulty'] ?? null), true);
     admin_webhook_add_change($changes, 'Requirement', (int) ($before['requirement'] ?? 0) . '%', (int) ($after['requirement'] ?? 0) . '%', true);
+    admin_webhook_add_change($changes, 'Creator(s)', admin_webhook_text($before['creator_display'] ?? null), admin_webhook_text($after['creator_display'] ?? null));
     admin_webhook_add_change($changes, 'Publisher', admin_webhook_text($before['publisher'] ?? null), admin_webhook_text($after['publisher'] ?? null), true);
     admin_webhook_add_change($changes, 'Verifier', admin_webhook_text($before['verifier'] ?? null), admin_webhook_text($after['verifier'] ?? null), true);
     admin_webhook_add_change($changes, 'Video URL', admin_webhook_text($before['video_url'] ?? null), admin_webhook_text($after['video_url'] ?? null));
@@ -656,6 +678,8 @@ if (method_is_post()) {
         $difficulty = trim((string) ($_POST['difficulty'] ?? 'Extreme Demon'));
         $positionInput = trim((string) ($_POST['position'] ?? ''));
         $requirement = (int) ($_POST['requirement'] ?? 100);
+        $creatorsInput = trim((string) ($_POST['creators'] ?? ''));
+        $creatorParts = admin_creator_parts_from_input($creatorsInput);
         $publisher = trim((string) ($_POST['publisher'] ?? ''));
         $verifier = trim((string) ($_POST['verifier'] ?? ''));
         $videoUrl = trim((string) ($_POST['video_url'] ?? ''));
@@ -669,6 +693,9 @@ if (method_is_post()) {
         $errors = [];
         if ($name === '') {
             $errors[] = 'Level name is required.';
+        }
+        if ($creatorParts['creator'] === '') {
+            $errors[] = 'Creator is required.';
         }
         if ($publisher === '') {
             $errors[] = 'Publisher is required.';
@@ -745,15 +772,17 @@ if (method_is_post()) {
             $verifierUserId = admin_user_id_by_username($pdo, $verifier);
 
             $insert = $pdo->prepare('INSERT INTO demons
-                (position, name, difficulty, requirement, publisher, publisher_user_id, verifier, verifier_user_id, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy)
+                (position, name, difficulty, requirement, creator, creator_more, publisher, publisher_user_id, verifier, verifier_user_id, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy)
                 VALUES
-                (:position, :name, :difficulty, :requirement, :publisher, :publisher_user_id, :verifier, :verifier_user_id, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy)');
+                (:position, :name, :difficulty, :requirement, :creator, :creator_more, :publisher, :publisher_user_id, :verifier, :verifier_user_id, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy)');
 
             $insert->execute([
                 ':position' => $position,
                 ':name' => $name,
                 ':difficulty' => $difficulty !== '' ? $difficulty : 'Extreme Demon',
                 ':requirement' => $requirement,
+                ':creator' => $creatorParts['creator'],
+                ':creator_more' => $creatorParts['creator_more'] !== '' ? $creatorParts['creator_more'] : null,
                 ':publisher' => $publisher,
                 ':publisher_user_id' => $publisherUserId,
                 ':verifier' => $verifier !== '' ? $verifier : null,
@@ -776,6 +805,9 @@ if (method_is_post()) {
                 'name' => $name,
                 'difficulty' => $difficulty !== '' ? $difficulty : 'Extreme Demon',
                 'requirement' => $requirement,
+                'creator' => $creatorParts['creator'],
+                'creator_more' => $creatorParts['creator_more'],
+                'creator_display' => $creatorParts['creator_display'],
                 'publisher' => $publisher,
                 'verifier' => $verifier,
                 'video_url' => $videoUrl,
@@ -810,6 +842,8 @@ if (method_is_post()) {
         $newNameInput = trim((string) ($_POST['name'] ?? ''));
         $difficultyInput = trim((string) ($_POST['difficulty'] ?? ''));
         $requirementInput = trim((string) ($_POST['requirement'] ?? ''));
+        $creatorsInput = trim((string) ($_POST['creators'] ?? ''));
+        $creatorPartsInput = admin_creator_parts_from_input($creatorsInput);
         $publisherInput = trim((string) ($_POST['publisher'] ?? ''));
         $verifierInput = trim((string) ($_POST['verifier'] ?? ''));
         $videoUrlInput = trim((string) ($_POST['video_url'] ?? ''));
@@ -893,6 +927,9 @@ if (method_is_post()) {
                 'name' => (string) $target['name'],
                 'difficulty' => (string) $target['difficulty'],
                 'requirement' => (int) $target['requirement'],
+                'creator' => (string) ($target['creator'] ?? ''),
+                'creator_more' => (string) ($target['creator_more'] ?? ''),
+                'creator_display' => implode(', ', demon_creator_names($target)),
                 'publisher' => (string) $target['publisher'],
                 'verifier' => (string) ($target['verifier'] ?? ''),
                 'video_url' => (string) $target['video_url'],
@@ -910,7 +947,16 @@ if (method_is_post()) {
             $finalName = $newNameInput !== '' ? $newNameInput : (string) $target['name'];
             $finalDifficulty = $difficultyInput !== '' ? $difficultyInput : (string) $target['difficulty'];
             $finalRequirement = $requirementInput !== '' ? (int) $requirementInput : (int) $target['requirement'];
+            $finalCreator = $creatorsInput !== '' ? $creatorPartsInput['creator'] : (string) ($target['creator'] ?? '');
+            $finalCreatorMore = $creatorsInput !== '' ? $creatorPartsInput['creator_more'] : (string) ($target['creator_more'] ?? '');
+            $finalCreatorDisplay = $creatorsInput !== ''
+                ? $creatorPartsInput['creator_display']
+                : implode(', ', demon_creator_names($target));
             $finalPublisher = $publisherInput !== '' ? $publisherInput : (string) $target['publisher'];
+            if ($finalCreator === '' && $creatorsInput === '') {
+                $finalCreator = $finalPublisher;
+                $finalCreatorDisplay = $finalPublisher;
+            }
             $finalVerifier = $verifierInput !== '' ? $verifierInput : (string) ($target['verifier'] ?? '');
             $finalPublisherUserId = $publisherInput !== ''
                 ? admin_user_id_by_username($pdo, $finalPublisher)
@@ -937,6 +983,9 @@ if (method_is_post()) {
 
             if ($finalName === '') {
                 throw new RuntimeException('Level name cannot be empty.');
+            }
+            if ($finalCreator === '') {
+                throw new RuntimeException('Creator cannot be empty.');
             }
             if ($finalPublisher === '') {
                 throw new RuntimeException('Publisher cannot be empty.');
@@ -1034,6 +1083,8 @@ if (method_is_post()) {
                     name = :name,
                     difficulty = :difficulty,
                     requirement = :requirement,
+                    creator = :creator,
+                    creator_more = :creator_more,
                     publisher = :publisher,
                     publisher_user_id = :publisher_user_id,
                     verifier = :verifier,
@@ -1052,6 +1103,8 @@ if (method_is_post()) {
                 ':name' => $finalName,
                 ':difficulty' => $finalDifficulty,
                 ':requirement' => $finalRequirement,
+                ':creator' => $finalCreator,
+                ':creator_more' => $finalCreatorMore !== '' ? $finalCreatorMore : null,
                 ':publisher' => $finalPublisher,
                 ':publisher_user_id' => $finalPublisherUserId,
                 ':verifier' => $finalVerifier !== '' ? $finalVerifier : null,
@@ -1072,6 +1125,9 @@ if (method_is_post()) {
                 'name' => $finalName,
                 'difficulty' => $finalDifficulty,
                 'requirement' => $finalRequirement,
+                'creator' => $finalCreator,
+                'creator_more' => $finalCreatorMore,
+                'creator_display' => $finalCreatorDisplay,
                 'publisher' => $finalPublisher,
                 'verifier' => $finalVerifier,
                 'video_url' => $finalVideoUrl,
@@ -1366,6 +1422,50 @@ if (method_is_post()) {
                 $pdo->rollBack();
             }
             flash('error', $throwable->getMessage());
+        }
+
+        redirect($redirectTarget);
+    }
+    if ($action === 'reset_password' && has_owner_access()) {
+        $usersQueryRedirect = trim((string) ($_POST['users_q'] ?? ''));
+        $redirectTarget = $usersQueryRedirect !== ''
+            ? ('admin.php?users_q=' . rawurlencode($usersQueryRedirect) . '#admin-user-management')
+            : 'admin.php#admin-user-management';
+
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect($redirectTarget);
+        }
+
+        $userId = (int) ($_POST['user_id'] ?? 0);
+        if ($userId < 1) {
+            flash('error', 'Invalid user ID for password reset.');
+            redirect($redirectTarget);
+        }
+
+        try {
+            $pdo = db();
+            $userStmt = $pdo->prepare('SELECT id, username FROM users WHERE id = :id LIMIT 1');
+            $userStmt->execute([':id' => $userId]);
+            $user = $userStmt->fetch();
+
+            if ($user === false) {
+                flash('error', 'User not found.');
+                redirect($redirectTarget);
+            }
+
+            $tempPassword = '123456';
+            $passwordHash = password_hash($tempPassword, PASSWORD_DEFAULT);
+
+            $updateStmt = $pdo->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
+            $updateStmt->execute([
+                ':password_hash' => $passwordHash,
+                ':id' => $userId,
+            ]);
+
+            flash('success', 'Password reset for ' . (string) $user['username'] . '. New password: ' . $tempPassword);
+        } catch (Throwable $throwable) {
+            flash('error', 'Failed to reset password: ' . $throwable->getMessage());
         }
 
         redirect($redirectTarget);
@@ -2023,19 +2123,25 @@ render_header('Admin', 'admin');
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
+                <span>Creator(s)</span>
+                <input type="text" name="creators" placeholder="e.g. ABC, XYZ" required>
+            </label>
+            <label class="field">
                 <span>Publisher</span>
                 <input type="text" name="publisher" required>
             </label>
+        </div>
+
+        <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
                 <span>Verifier</span>
                 <input type="text" name="verifier">
             </label>
+            <label class="field">
+                <span>Difficulty</span>
+                <input type="text" name="difficulty" value="Extreme Demon" required>
+            </label>
         </div>
-
-        <label class="field">
-            <span>Difficulty</span>
-            <input type="text" name="difficulty" value="Extreme Demon" required>
-        </label>
 
         <label class="field">
             <span>Verification Video URL</span>
@@ -2111,20 +2217,27 @@ render_header('Admin', 'admin');
                 <input type="number" min="1" max="100" name="requirement" placeholder="Keep current">
             </label>
             <label class="field">
-                <span>Publisher (optional)</span>
-                <input type="text" name="publisher" placeholder="Keep current">
+                <span>Creator(s) (optional)</span>
+                <input type="text" name="creators" placeholder="Keep current">
             </label>
             <label class="field">
-                <span>Verifier (optional)</span>
-                <input type="text" name="verifier" placeholder="Keep current">
+                <span>Publisher (optional)</span>
+                <input type="text" name="publisher" placeholder="Keep current">
             </label>
         </div>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
+                <span>Verifier (optional)</span>
+                <input type="text" name="verifier" placeholder="Keep current">
+            </label>
+            <label class="field">
                 <span>Verification Video URL (optional)</span>
                 <input type="url" name="video_url" placeholder="Keep current">
             </label>
+        </div>
+
+        <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
                 <span>Thumbnail URL (optional)</span>
                 <input type="url" name="thumbnail_url" placeholder="Keep current">
@@ -2294,6 +2407,13 @@ render_header('Admin', 'admin');
                                 </div>
 
                                 <button class="button blue hover small" type="submit">Save</button>
+                            </form>
+                            <form class="admin-user-reset-form" method="post" action="<?= e(base_url('admin.php')) ?>" style="display: inline;">
+                                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="action" value="reset_password">
+                                <input type="hidden" name="user_id" value="<?= (int) $member['id'] ?>">
+                                <input type="hidden" name="users_q" value="<?= e($usersQuery) ?>">
+                                <button class="button orange hover small" type="submit" title="Reset password to 123456">Reset Password</button>
                             </form>
                             <?php if ($isCurrentUser): ?>
                                 <span class="muted admin-user-note">(you)</span>

@@ -905,28 +905,32 @@ h2 .dropdown-menu ul {
 .tooltip .tooltiptext {
   opacity: 0;
   font-weight: normal;
-  font-size: 0.76em;
+  font-size: 0.7em;
   text-align: center;
+  white-space: normal;
 
   visibility: hidden;
-  z-index: 9;
+  z-index: 1000;
 
-  border: 3px solid #ddd;
+  border: 1px lightgray dashed;
   background: var(--color-bg);
+  box-shadow: 0px 0px 20px 0px rgba(0, 0, 0, 0.1);
 
+  top: 125%;
   left: 50%;
   transform: translateX(-50%);
 
-  padding: 5px;
-  margin: 5px;
+  padding: 10px 12px;
+  max-width: 350px;
+  word-wrap: break-word;
 
   position: absolute;
 }
 
 .tooltip:hover .tooltiptext {
   visibility: visible;
-  opacity: 0.9;
-  transition: 1s opacity;
+  opacity: 1;
+  transition: opacity 0.3s ease;
 }
 
 /* (Under)lines */
@@ -1907,9 +1911,57 @@ textarea {
   padding-bottom: 3px;
 }
 
+.key-value dt {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .key-value dd {
   margin: 0;
+  min-width: 0;
   text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.key-value dd .creator-more-wrap {
+  display: inline;
+  white-space: normal;
+}
+
+.key-value dd .creator-more {
+  display: inline;
+  pointer-events: none;
+}
+
+.key-value dd .creator-more-trigger {
+  display: none;
+}
+
+.key-value dd .creator-more-popover {
+  position: static;
+  display: inline;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+  font: inherit;
+  text-align: inherit;
+  white-space: normal;
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: none;
+  transition: none;
+}
+
+.key-value dd .creator-more-popover::before {
+  display: none;
 }
 
 .detail-grid {
@@ -1989,6 +2041,111 @@ main.left .demon-byline h3 {
 
 main.left .demon-card-byline {
   line-height: 1.45;
+}
+
+.creator-more-wrap {
+  white-space: nowrap;
+}
+
+.creator-more {
+  display: inline-block;
+  position: relative;
+  vertical-align: baseline;
+  line-height: inherit;
+  outline: none;
+}
+
+.creator-more-trigger {
+  color: var(--color-text-accent);
+  cursor: help;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.creator-more-popover {
+  position: absolute;
+  z-index: 40;
+  left: 50%;
+  top: calc(100% + 7px);
+  display: block;
+  min-width: 180px;
+  width: max-content;
+  max-width: min(320px, 76vw);
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 7px 9px;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-text);
+  box-shadow: 0 10px 22px rgba(21, 31, 48, 0.18);
+  font-size: 0.9em;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translate(-50%, -4px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    visibility 0s linear 160ms;
+}
+
+.creator-more-popover::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  width: 10px;
+  height: 10px;
+  border-left: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border);
+  background: #fff;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.creator-more:hover .creator-more-popover,
+.creator-more:focus .creator-more-popover,
+.creator-more:focus-within .creator-more-popover {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition-delay: 0s;
+}
+
+main.left .demon-card-byline .creator-more-popover,
+.demon-hero-byline .creator-more-popover {
+  text-align: center;
+}
+
+.demon-hero-panel,
+.demon-detail-grid .panel.subtle {
+  overflow: visible;
+}
+
+@media (max-width: 767px) {
+  .creator-more-popover {
+    left: auto;
+    right: 0;
+    max-width: min(280px, 86vw);
+    transform: translateY(-4px);
+  }
+
+  .creator-more-popover::before {
+    left: auto;
+    right: 18px;
+    transform: rotate(45deg);
+  }
+
+  .creator-more:hover .creator-more-popover,
+  .creator-more:focus .creator-more-popover,
+  .creator-more:focus-within .creator-more-popover {
+    transform: translateY(0);
+  }
 }
 
 main.left .demon-points {
@@ -2641,6 +2798,16 @@ header nav .nav-profile-dropdown button {
 .stats-viewer-player-title {
   margin: 0;
   font-size: clamp(1.25rem, 2.6vw, 1.55rem);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.stats-viewer-player-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
 }
 
 .stats-viewer-summary {
@@ -2681,6 +2848,7 @@ header nav .nav-profile-dropdown button {
   font-size: 1em;
   font-weight: 600;
   color: #2d3440;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 980px) {
@@ -2728,10 +2896,11 @@ header nav .nav-profile-dropdown button {
   color: #5e6675;
   font-size: 0.94em;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 a.stats-demon-link {
-  white-space: nowrap;
+  white-space: normal;
   color: #2f3744;
   text-decoration: underline;
 }
