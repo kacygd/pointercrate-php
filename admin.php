@@ -534,6 +534,49 @@ if (method_is_post()) {
         redirect('admin.php#admin-list-visibility');
     }
 
+    if ($action === 'update_level_info_rows' && can_manage_levels()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect('admin.php#admin-level-info-rows');
+        }
+
+        $mode = strtolower(trim((string) ($_POST['mode'] ?? 'save')));
+        if ($mode === 'restore') {
+            if (demon_level_info_restore_default_rows()) {
+                flash('success', 'Restored Level Info rows to the default layout.');
+            } else {
+                flash('error', 'Could not restore Level Info rows.');
+            }
+            redirect('admin.php#admin-level-info-rows');
+        }
+
+        $fields = $_POST['level_info_field'] ?? [];
+        $labels = $_POST['level_info_label'] ?? [];
+        if (!is_array($fields) || !is_array($labels)) {
+            flash('error', 'Invalid Level Info rows payload.');
+            redirect('admin.php#admin-level-info-rows');
+        }
+
+        $fields = array_values($fields);
+        $labels = array_values($labels);
+
+        $rows = [];
+        foreach ($fields as $index => $field) {
+            $rows[] = [
+                'field' => (string) $field,
+                'label' => (string) ($labels[$index] ?? ''),
+            ];
+        }
+
+        if (!demon_level_info_set_rows($rows)) {
+            flash('error', 'Could not save Level Info rows.');
+            redirect('admin.php#admin-level-info-rows');
+        }
+
+        flash('success', 'Saved Level Info rows.');
+        redirect('admin.php#admin-level-info-rows');
+    }
+
     if ($action === 'update_role_permissions' && has_owner_access()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
@@ -1788,6 +1831,8 @@ $canReviewSubmissions = can_review_submissions();
 $canManageListVisibility = has_owner_access();
 $canManageRolePermissions = has_owner_access();
 $canManageUserRoles = has_owner_access();
+$levelInfoFieldDefinitions = demon_level_info_field_definitions();
+$levelInfoRows = demon_level_info_rows();
 $hasGeneralQuickActions = $canManageLevels
     || $canManageUsers
     || $canManageScoring
@@ -1840,6 +1885,10 @@ render_header('Admin', 'admin');
                     <a class="admin-action-tile" href="#admin-edit-level" data-open-admin-section="admin-edit-level">
                         <span class="admin-action-title">Edit Level</span>
                         <small>Update level info and ranking.</small>
+                    </a>
+                    <a class="admin-action-tile" href="#admin-level-info-rows" data-open-admin-section="admin-level-info-rows">
+                        <span class="admin-action-title">Level Info Rows</span>
+                        <small>Control rows shown on level pages.</small>
                     </a>
                 <?php endif; ?>
                 <?php if ($canManageUsers): ?>
@@ -2046,6 +2095,64 @@ render_header('Admin', 'admin');
         </small>
 
         <button class="button blue hover" type="submit">Save Scoring Scale</button>
+    </form>
+</section>
+<?php endif; ?>
+
+<?php if ($canManageLevels): ?>
+<section class="panel fade admin-tool-section" id="admin-level-info-rows">
+    <div class="panel-head">
+        <h2>Level Info Rows</h2>
+        <p>Choose which rows appear in the Level Info box on each level page.</p>
+    </div>
+
+    <form class="stack-form" method="post" action="<?= e(base_url('admin.php#admin-level-info-rows')) ?>" data-level-info-builder>
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="update_level_info_rows">
+
+        <div class="admin-level-info-builder" data-level-info-rows>
+            <?php foreach ($levelInfoRows as $row): ?>
+                <div class="admin-level-info-row" data-level-info-row>
+                    <label class="field">
+                        <span>Source</span>
+                        <select name="level_info_field[]">
+                            <?php foreach ($levelInfoFieldDefinitions as $field => $defaultLabel): ?>
+                                <option value="<?= e($field) ?>" <?= (string) ($row['field'] ?? '') === $field ? 'selected' : '' ?>><?= e($defaultLabel) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span>Label</span>
+                        <input type="text" name="level_info_label[]" value="<?= e((string) ($row['label'] ?? '')) ?>" placeholder="Use default label">
+                    </label>
+                    <button class="button white hover admin-level-info-remove" type="button" data-level-info-remove>Remove</button>
+                </div>
+            <?php endforeach; ?>
+        </div>
+
+        <template data-level-info-template>
+            <div class="admin-level-info-row" data-level-info-row>
+                <label class="field">
+                    <span>Source</span>
+                    <select name="level_info_field[]">
+                        <?php foreach ($levelInfoFieldDefinitions as $field => $defaultLabel): ?>
+                            <option value="<?= e($field) ?>"><?= e($defaultLabel) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>Label</span>
+                    <input type="text" name="level_info_label[]" placeholder="Use default label">
+                </label>
+                <button class="button white hover admin-level-info-remove" type="button" data-level-info-remove>Remove</button>
+            </div>
+        </template>
+
+        <div class="homepage-tool-actions admin-level-info-actions">
+            <button class="button white hover" type="button" data-level-info-add>Add Row</button>
+            <button class="button blue hover" type="submit" name="mode" value="save">Save Rows</button>
+            <button class="button white hover" type="submit" name="mode" value="restore">Restore Defaults</button>
+        </div>
     </form>
 </section>
 <?php endif; ?>

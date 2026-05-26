@@ -3,6 +3,14 @@ declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
 
+if (array_key_exists('at', $_GET) || array_key_exists('timemachine', $_GET)) {
+    $target = 'time-machine.php';
+    if (array_key_exists('at', $_GET)) {
+        $target .= '?at=' . rawurlencode((string) $_GET['at']);
+    }
+    redirect($target);
+}
+
 function card_thumbnail_url(array $demon): string
 {
     $configured = trim((string) ($demon['thumbnail_url'] ?? ''));
@@ -46,7 +54,10 @@ function render_player_role_link(string $name, ?int $userId = null): string
         return '-';
     }
 
-    $label = '<b>' . e($trimmed) . '</b>';
+    $labelText = $userId !== null && $userId > 0
+        ? (user_public_name_by_id($userId, $trimmed) ?? $trimmed)
+        : $trimmed;
+    $label = '<b>' . e($labelText) . '</b>';
     if ($userId !== null && $userId > 0) {
         $url = base_url('players.php?uid=' . $userId);
         return '<a class="player-link" href="' . e($url) . '">' . $label . '</a>';
@@ -106,12 +117,17 @@ function render_list_dropdown(string $id, string $title, string $description, ar
                 <?php endif; ?>
 
                 <?php foreach ($demons as $demon): ?>
-                    <?php $dropdownVerifier = trim((string) ($demon['verifier'] ?? '')); ?>
+                    <?php
+                    $dropdownVerifier = trim((string) ($demon['verifier'] ?? ''));
+                    $dropdownPublisher = trim((string) ($demon['publisher'] ?? ''));
+                    $dropdownPublisherLabel = user_public_name_by_id((int) ($demon['publisher_user_id'] ?? 0), $dropdownPublisher) ?? $dropdownPublisher;
+                    $dropdownVerifierLabel = user_public_name_by_id((int) ($demon['verifier_user_id'] ?? 0), $dropdownVerifier) ?? $dropdownVerifier;
+                    ?>
                     <li class="hover white" title="#<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>">
                         <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
                             #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
                             <br>
-                            <i>published by <?= e((string) $demon['publisher']) ?><?php if ($dropdownVerifier !== ''): ?>, verified by <?= e($dropdownVerifier) ?><?php endif; ?></i>
+                            <i>published by <?= e($dropdownPublisherLabel) ?><?php if ($dropdownVerifier !== ''): ?>, verified by <?= e($dropdownVerifierLabel) ?><?php endif; ?></i>
                         </a>
                     </li>
                 <?php endforeach; ?>
@@ -121,10 +137,211 @@ function render_list_dropdown(string $id, string $title, string $description, ar
     <?php
 }
 
-$hasUserBannedColumn = users_has_is_banned_column();
+function time_machine_timezone(): DateTimeZone
+{
+    static $timezone = null;
+    if ($timezone instanceof DateTimeZone) {
+        return $timezone;
+    }
+
+    $timezone = new DateTimeZone((string) config('app.timezone', 'UTC'));
+    return $timezone;
+}
+
+function time_machine_format_input(DateTimeInterface $date): string
+{
+    return DateTimeImmutable::createFromInterface($date)
+        ->setTimezone(time_machine_timezone())
+        ->format('Y-m-d\TH:i');
+}
+
+function time_machine_parse_input(string $value): ?DateTimeImmutable
+{
+    $normalized = trim($value);
+    if ($normalized === '') {
+        return null;
+    }
+
+    $timezone = time_machine_timezone();
+    $formats = [
+        'Y-m-d\TH:i',
+        'Y-m-d\TH:i:s',
+        'Y-m-d H:i',
+        'Y-m-d H:i:s',
+        DateTimeInterface::RFC3339,
+        DateTimeInterface::RFC3339_EXTENDED,
+    ];
+
+    foreach ($formats as $format) {
+        $parsed = DateTimeImmutable::createFromFormat($format, $normalized, $timezone);
+        if ($parsed instanceof DateTimeImmutable) {
+            return $parsed;
+        }
+    }
+
+    try {
+        return new DateTimeImmutable($normalized, $timezone);
+    } catch (Throwable) {
+        return null;
+    }
+}
+
+function time_machine_format_banner(DateTimeInterface $date): string
+{
+    return DateTimeImmutable::createFromInterface($date)
+        ->setTimezone(time_machine_timezone())
+        ->format('l, F jS Y \a\t g:i:sa \G\M\TP');
+}
+
+function time_machine_available_since(PDO $pdo): ?DateTimeImmutable
+{
+    try {
+        $value = $pdo->query('SELECT MIN(created_at) FROM demons')->fetchColumn();
+        if (!is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        return new DateTimeImmutable($value, time_machine_timezone());
+    } catch (Throwable) {
+        return null;
+    }
+}
+
+function time_machine_reconstruct_demons(array $currentDemons, array $futureEvents): array
+{
+    $demonsById = [];
+    foreach ($currentDemons as $demon) {
+        $demonId = (int) ($demon['id'] ?? 0);
+        if ($demonId < 1) {
+            continue;
+        }
+
+        $demon['position'] = (int) ($demon['position'] ?? 0);
+        $demonsById[$demonId] = $demon;
+    }
+
+    foreach ($futureEvents as $event) {
+        $demonId = (int) ($event['demon_id'] ?? 0);
+        $newPosition = (int) ($event['new_position'] ?? 0);
+        $oldPosition = $event['old_position'] !== null ? (int) $event['old_position'] : null;
+
+        if ($demonId < 1 || $newPosition < 1) {
+            continue;
+        }
+
+        if ($oldPosition === null) {
+            if (!isset($demonsById[$demonId])) {
+                continue;
+            }
+
+            unset($demonsById[$demonId]);
+            foreach ($demonsById as &$otherDemon) {
+                $position = (int) ($otherDemon['position'] ?? 0);
+                if ($position > $newPosition) {
+                    $otherDemon['position'] = $position - 1;
+                }
+            }
+            unset($otherDemon);
+            continue;
+        }
+
+        if (!isset($demonsById[$demonId]) || $oldPosition < 1) {
+            continue;
+        }
+
+        if ($newPosition < $oldPosition) {
+            foreach ($demonsById as $otherId => &$otherDemon) {
+                if ($otherId === $demonId) {
+                    continue;
+                }
+
+                $position = (int) ($otherDemon['position'] ?? 0);
+                if ($position > $newPosition && $position <= $oldPosition) {
+                    $otherDemon['position'] = $position - 1;
+                }
+            }
+            unset($otherDemon);
+        } elseif ($newPosition > $oldPosition) {
+            foreach ($demonsById as $otherId => &$otherDemon) {
+                if ($otherId === $demonId) {
+                    continue;
+                }
+
+                $position = (int) ($otherDemon['position'] ?? 0);
+                if ($position >= $oldPosition && $position < $newPosition) {
+                    $otherDemon['position'] = $position + 1;
+                }
+            }
+            unset($otherDemon);
+        }
+
+        $demonsById[$demonId]['position'] = $oldPosition;
+    }
+
+    $reconstructed = array_values($demonsById);
+    usort($reconstructed, static function (array $a, array $b): int {
+        $positionCompare = (int) ($a['position'] ?? 0) <=> (int) ($b['position'] ?? 0);
+        if ($positionCompare !== 0) {
+            return $positionCompare;
+        }
+
+        return strcasecmp((string) ($a['name'] ?? ''), (string) ($b['name'] ?? ''));
+    });
+
+    return $reconstructed;
+}
+
+function historical_list_bucket(int $position): string
+{
+    if ($position < 1) {
+        return 'legacy';
+    }
+
+    if ($position <= demonlist_main_list_limit()) {
+        return 'main';
+    }
+
+    if ($position <= demonlist_extended_list_limit()) {
+        return demonlist_show_extended_list() ? 'extended' : 'main';
+    }
+
+    return demonlist_show_legacy_list() ? 'legacy' : 'main';
+}
+
+function roulette_item_from_demon(array $demon, string $bucket, bool $shown): array
+{
+    $position = (int) ($demon['position'] ?? 0);
+    $requirement = (int) ($demon['requirement'] ?? 100);
+    $publisher = trim((string) ($demon['publisher'] ?? ''));
+    $verifier = trim((string) ($demon['verifier'] ?? ''));
+    $publisherLabel = user_public_name_by_id((int) ($demon['publisher_user_id'] ?? 0), $publisher) ?? $publisher;
+    $verifierLabel = user_public_name_by_id((int) ($demon['verifier_user_id'] ?? 0), $verifier) ?? $verifier;
+    $creator = demon_creator_name($demon);
+    $levelId = trim((string) ($demon['level_id'] ?? ''));
+
+    return [
+        'id' => (int) ($demon['id'] ?? 0),
+        'bucket' => $bucket,
+        'shown' => $shown,
+        'position' => $position,
+        'currentPosition' => (int) ($demon['current_position'] ?? $position),
+        'name' => (string) ($demon['name'] ?? ''),
+        'creator' => $creator !== '' ? $creator : $publisherLabel,
+        'url' => base_url((string) $position),
+        'videoUrl' => (string) ($demon['video_url'] ?? ''),
+        'thumb' => card_thumbnail_url($demon),
+        'levelId' => $levelId,
+        'byline' => 'published by ' . $publisherLabel . ($verifierLabel !== '' ? ', verified by ' . $verifierLabel : ''),
+        'score' => number_format(pointercrate_score($position, $requirement, $requirement), 2) . ' (' . $requirement . '%) - '
+            . number_format(pointercrate_score($position, $requirement, 100), 2) . ' (100%) points',
+    ];
+}
+
+$pdo = db();
+$hasUserBannedColumn = users_has_is_banned_column($pdo);
 
 if ($hasUserBannedColumn) {
-    $allDemons = db()->query('SELECT d.*, COALESCE(cc.completion_count, 0) AS completion_count
+    $allDemons = $pdo->query('SELECT d.*, COALESCE(cc.completion_count, 0) AS completion_count
                               FROM demons d
                               LEFT JOIN (
                                   SELECT c.demon_id, COUNT(*) AS completion_count
@@ -137,7 +354,7 @@ if ($hasUserBannedColumn) {
                               ) cc ON cc.demon_id = d.id
                               ORDER BY d.position ASC')->fetchAll();
 } else {
-    $allDemons = db()->query('SELECT d.*, COALESCE(cc.completion_count, 0) AS completion_count
+    $allDemons = $pdo->query('SELECT d.*, COALESCE(cc.completion_count, 0) AS completion_count
                               FROM demons d
                               LEFT JOIN (
                                   SELECT c.demon_id, COUNT(*) AS completion_count
@@ -146,6 +363,14 @@ if ($hasUserBannedColumn) {
                               ) cc ON cc.demon_id = d.id
                               ORDER BY d.position ASC')->fetchAll();
 }
+
+foreach ($allDemons as &$demon) {
+    $demon['position'] = (int) ($demon['position'] ?? 0);
+    $demon['current_position'] = (int) ($demon['position'] ?? 0);
+}
+unset($demon);
+
+$isTimeMachineView = false;
 
 $main = [];
 $extended = [];
@@ -157,7 +382,9 @@ $showLegacyList = demonlist_show_legacy_list();
 foreach ($allDemons as $demon) {
     $position = (int) $demon['position'];
     $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
-    $listBucket = demonlist_list_bucket($position, $isLegacy);
+    $listBucket = $isTimeMachineView
+        ? historical_list_bucket($position)
+        : demonlist_list_bucket($position, $isLegacy);
 
     if ($listBucket === 'main') {
         $main[] = $demon;
@@ -174,7 +401,7 @@ foreach ($allDemons as $demon) {
     $legacy[] = $demon;
 }
 
-$listEditorsSql = 'SELECT username, country_code, youtube_channel
+$listEditorsSql = 'SELECT username, ' . user_select_display_name_expression() . ', country_code, youtube_channel
                    FROM users
                    WHERE role IN ("owner", "list_editor")';
 if ($hasUserBannedColumn) {
@@ -183,9 +410,9 @@ if ($hasUserBannedColumn) {
 $listEditorsSql .= '
                    ORDER BY created_at ASC, username ASC
                    LIMIT 20';
-$listEditors = db()->query($listEditorsSql)->fetchAll();
+$listEditors = $pdo->query($listEditorsSql)->fetchAll();
 
-$listHelpersSql = 'SELECT username, country_code, youtube_channel
+$listHelpersSql = 'SELECT username, ' . user_select_display_name_expression() . ', country_code, youtube_channel
                    FROM users
                    WHERE role = "list_helper"';
 if ($hasUserBannedColumn) {
@@ -194,7 +421,7 @@ if ($hasUserBannedColumn) {
 $listHelpersSql .= '
                    ORDER BY created_at ASC, username ASC
                    LIMIT 20';
-$listHelpers = db()->query($listHelpersSql)->fetchAll();
+$listHelpers = $pdo->query($listHelpersSql)->fetchAll();
 
 $discordWidgetUrl = discord_server_widget_url();
 $pageDescription = (!$showExtendedList && !$showLegacyList)
@@ -244,13 +471,26 @@ render_header('Main List', 'list', [
             $verifier = trim((string) ($demon['verifier'] ?? ''));
             $publisherUserId = isset($demon['publisher_user_id']) ? (int) $demon['publisher_user_id'] : 0;
             $verifierUserId = isset($demon['verifier_user_id']) ? (int) $demon['verifier_user_id'] : 0;
-            $cardSearchText = strtolower((string) ($demon['name'] . ' ' . $creatorSearchText . ' ' . $publisher . ' ' . $verifier . ' ' . $demon['difficulty']));
+            $publisherLabel = user_public_name_by_id($publisherUserId > 0 ? $publisherUserId : null, $publisher) ?? $publisher;
+            $verifierLabel = user_public_name_by_id($verifierUserId > 0 ? $verifierUserId : null, $verifier) ?? $verifier;
+            $cardSearchText = strtolower((string) ($demon['name'] . ' ' . $creatorSearchText . ' ' . $publisher . ' ' . $publisherLabel . ' ' . $verifier . ' ' . $verifierLabel . ' ' . $demon['difficulty']));
             $requirement = (int) $demon['requirement'];
             $position = (int) $demon['position'];
+            $currentPosition = (int) ($demon['current_position'] ?? $position);
             $minimumScore = number_format(pointercrate_score($position, $requirement, $requirement), 2);
             $fullScore = number_format(pointercrate_score($position, $requirement, 100), 2);
+            $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
+            $bucket = $isTimeMachineView
+                ? historical_list_bucket($position)
+                : demonlist_list_bucket($position, $isLegacy);
             ?>
-            <section class="panel fade flex mobile-col" style="overflow: hidden;" data-search-value="<?= e($cardSearchText) ?>">
+            <section
+                class="panel fade flex mobile-col"
+                style="overflow: hidden;"
+                data-search-value="<?= e($cardSearchText) ?>"
+                data-roulette-target="<?= e((string) ($demon['id'] ?? 0)) ?>"
+                data-roulette-bucket="<?= e($bucket) ?>"
+            >
                 <a
                     class="thumb ratio-16-9"
                     href="<?= e(base_url((string) ((int) $demon['position']))) ?>"
@@ -269,6 +509,11 @@ render_header('Main List', 'list', [
                         <div class="demon-points" style="text-align: left; font-size: 0.8em;">
                             <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) points
                         </div>
+                        <?php if ($isTimeMachineView): ?>
+                            <div class="muted" style="text-align: left; font-size: 0.85em; margin-top: 4px;">
+                                <?= historical_list_bucket($currentPosition) === 'legacy' ? 'Currently Legacy' : 'Currently #' . e((string) $currentPosition) ?>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </section>
@@ -291,7 +536,7 @@ render_header('Main List', 'list', [
                         $countryCode = normalize_country_code((string) ($editor['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
                         $youtubeChannel = trim((string) ($editor['youtube_channel'] ?? ''));
-                        $username = e((string) $editor['username']);
+                        $username = e(user_display_name_from_row($editor));
                         ?>
                         <li>
                             <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
@@ -315,7 +560,7 @@ render_header('Main List', 'list', [
                         $countryCode = normalize_country_code((string) ($helper['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
                         $youtubeChannel = trim((string) ($helper['youtube_channel'] ?? ''));
-                        $username = e((string) $helper['username']);
+                        $username = e(user_display_name_from_row($helper));
                         ?>
                         <li>
                             <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>

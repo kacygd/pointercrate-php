@@ -79,7 +79,10 @@ function render_player_role_link(string $name, ?int $userId = null): string
         return '-';
     }
 
-    $label = '<b>' . e($trimmed) . '</b>';
+    $labelText = $userId !== null && $userId > 0
+        ? (user_public_name_by_id($userId, $trimmed) ?? $trimmed)
+        : $trimmed;
+    $label = '<b>' . e($labelText) . '</b>';
     if ($userId !== null && $userId > 0) {
         $url = base_url('players.php?uid=' . $userId);
         return '<a class="player-link" href="' . e($url) . '">' . $label . '</a>';
@@ -278,13 +281,13 @@ for ($i = 0, $count = count($allDemons); $i < $count; $i++) {
 }
 
 $completionsSql = $hasUserBannedColumn
-    ? 'SELECT c.*, u.country_code
+    ? 'SELECT c.*, u.country_code, ' . user_select_display_name_expression('u', 'username', 'display_name') . '
        FROM completions c
        LEFT JOIN users u ON LOWER(u.username) = LOWER(c.player)
        WHERE c.demon_id = :id
          AND (u.id IS NULL OR COALESCE(u.is_banned, 0) = 0)
        ORDER BY c.progress DESC, COALESCE(c.placement, 999999), c.created_at ASC'
-    : 'SELECT c.*, u.country_code
+    : 'SELECT c.*, u.country_code, ' . user_select_display_name_expression('u', 'username', 'display_name') . '
        FROM completions c
        LEFT JOIN users u ON LOWER(u.username) = LOWER(c.player)
        WHERE c.demon_id = :id
@@ -301,7 +304,7 @@ $historyStmt = db()->prepare('SELECT created_at, old_position, new_position, not
 $historyStmt->execute([':demon_id' => $id]);
 $positionHistory = $historyStmt->fetchAll();
 
-$listEditorsSql = 'SELECT username, country_code, youtube_channel
+$listEditorsSql = 'SELECT username, ' . user_select_display_name_expression() . ', country_code, youtube_channel
                    FROM users
                    WHERE role IN ("owner", "list_editor")';
 if ($hasUserBannedColumn) {
@@ -312,7 +315,7 @@ $listEditorsSql .= '
                    LIMIT 20';
 $listEditors = db()->query($listEditorsSql)->fetchAll();
 
-$listHelpersSql = 'SELECT username, country_code, youtube_channel
+$listHelpersSql = 'SELECT username, ' . user_select_display_name_expression() . ', country_code, youtube_channel
                    FROM users
                    WHERE role = "list_helper"';
 if ($hasUserBannedColumn) {
@@ -345,6 +348,34 @@ $verifier = trim((string) ($demon['verifier'] ?? ''));
 $publisherUserId = isset($demon['publisher_user_id']) ? (int) $demon['publisher_user_id'] : 0;
 $verifierUserId = isset($demon['verifier_user_id']) ? (int) $demon['verifier_user_id'] : 0;
 $verifiedMetaSuffix = $verifier !== '' ? ', verified by ' . $verifier : '';
+$levelInfoRows = demon_level_info_rows();
+
+$renderLevelInfoValue = static function (string $field) use (
+    $demon,
+    $position,
+    $category,
+    $requirement,
+    $creator,
+    $publisher,
+    $publisherUserId,
+    $verifier,
+    $verifierUserId
+): string {
+    return match ($field) {
+        'position' => '#' . $position,
+        'category' => e($category),
+        'difficulty' => e((string) ($demon['difficulty'] ?? '-')),
+        'requirement' => $requirement . '%',
+        'creator' => render_creator_credit($demon),
+        'publisher' => $publisher !== '' ? render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) : '-',
+        'verifier' => $verifier !== '' ? render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) : '-',
+        'level_id' => e((string) (($demon['level_id'] ?? '') !== '' ? $demon['level_id'] : '-')),
+        'level_length' => e((string) (($demon['level_length'] ?? '') !== '' ? $demon['level_length'] : '-')),
+        'song' => e((string) (($demon['song'] ?? '') !== '' ? $demon['song'] : '-')),
+        'object_count' => ($demon['object_count'] ?? null) !== null ? e(number_format((int) $demon['object_count'])) : '-',
+        default => '-',
+    };
+};
 
 $metaDescription = sprintf(
     '#%d - %s by %s, published by %s%s. %d%% to qualify, %s points at 100%%.',
@@ -414,19 +445,15 @@ render_header((string) $demon['name'], 'list', [
             <div class="detail-grid demon-detail-grid" style="margin-top: 12px;">
                 <div class="panel subtle">
                     <h3>Level Info</h3>
-                    <dl class="key-value compact">
-                        <div><dt>Position</dt><dd>#<?= $position ?></dd></div>
-                        <div><dt>Category</dt><dd><?= e($category) ?></dd></div>
-                        <div><dt>Difficulty</dt><dd><?= e((string) $demon['difficulty']) ?></dd></div>
-                        <div><dt>Requirement</dt><dd><?= $requirement ?>%</dd></div>
-                        <div><dt>Created by</dt><dd><?= render_creator_credit($demon) ?></dd></div>
-                        <div><dt>Published by</dt><dd><?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?></dd></div>
-                        <div><dt>Verified by</dt><dd><?= $verifier !== '' ? render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) : '-' ?></dd></div>
-                        <div><dt>Level ID</dt><dd><?= e((string) ($demon['level_id'] ?: '-')) ?></dd></div>
-                        <div><dt>Level Length</dt><dd><?= e((string) ($demon['level_length'] ?: '-')) ?></dd></div>
-                        <div><dt>Song</dt><dd><?= e((string) ($demon['song'] ?: '-')) ?></dd></div>
-                        <div><dt>Object Count</dt><dd><?= $demon['object_count'] !== null ? number_format((int) $demon['object_count']) : '-' ?></dd></div>
-                    </dl>
+                    <?php if ($levelInfoRows === []): ?>
+                        <p class="muted">No level info rows configured.</p>
+                    <?php else: ?>
+                        <dl class="key-value compact">
+                            <?php foreach ($levelInfoRows as $row): ?>
+                                <div><dt><?= e((string) ($row['label'] ?? '')) ?></dt><dd><?= $renderLevelInfoValue((string) ($row['field'] ?? '')) ?></dd></div>
+                            <?php endforeach; ?>
+                        </dl>
+                    <?php endif; ?>
                 </div>
                 <div class="panel subtle">
                     <h3>Scoring</h3>
@@ -474,12 +501,13 @@ render_header((string) $demon['name'], 'list', [
                                 $countryCode = normalize_country_code((string) ($completion['country_code'] ?? ''));
                                 $playerFlag = country_flag_html($countryCode, true);
                                 $playerName = (string) $completion['player'];
+                                $playerLabel = trim((string) ($completion['display_name'] ?? $playerName));
                                 $playerProfileUrl = base_url('players.php?user=' . rawurlencode($playerName));
                                 ?>
                                 <tr>
                                     <td>
                                         <span class="player-inline">
-                                            <?= $playerFlag ?><a class="player-link" href="<?= e($playerProfileUrl) ?>" title="<?= e($playerName) ?>"><?= e($playerName) ?></a>
+                                            <?= $playerFlag ?><a class="player-link" href="<?= e($playerProfileUrl) ?>" title="<?= e($playerName) ?>"><?= e($playerLabel) ?></a>
                                         </span>
                                     </td>
                                     <td><?= $progress ?>%</td>
@@ -552,7 +580,7 @@ render_header((string) $demon['name'], 'list', [
                         $countryCode = normalize_country_code((string) ($editor['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
                         $youtubeChannel = trim((string) ($editor['youtube_channel'] ?? ''));
-                        $username = e((string) $editor['username']);
+                        $username = e(user_display_name_from_row($editor));
                         ?>
                         <li>
                             <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
@@ -576,7 +604,7 @@ render_header((string) $demon['name'], 'list', [
                         $countryCode = normalize_country_code((string) ($helper['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
                         $youtubeChannel = trim((string) ($helper['youtube_channel'] ?? ''));
-                        $username = e((string) $helper['username']);
+                        $username = e(user_display_name_from_row($helper));
                         ?>
                         <li>
                             <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>

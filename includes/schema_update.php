@@ -93,10 +93,35 @@ function schema_users_role_enum_ready(PDO $pdo): bool
     return true;
 }
 
+function schema_app_settings_value_text_ready(PDO $pdo): bool
+{
+    if (!schema_table_exists($pdo, 'app_settings')) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT data_type
+         FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND table_name = 'app_settings'
+           AND column_name = 'setting_value'
+         LIMIT 1"
+    );
+    $stmt->execute();
+
+    $dataType = strtolower((string) ($stmt->fetchColumn() ?: ''));
+    return in_array($dataType, ['text', 'mediumtext', 'longtext'], true);
+}
+
 function schema_apply_users_role_enum(PDO $pdo): void
 {
     $pdo->exec("UPDATE users SET role = 'owner' WHERE role = 'admin'");
     $pdo->exec("ALTER TABLE users MODIFY COLUMN role ENUM('player', 'list_helper', 'list_editor', 'owner') NOT NULL DEFAULT 'player'");
+}
+
+function schema_target_version(): string
+{
+    return '2026-05-display-name';
 }
 
 function schema_needs_update(PDO $pdo): bool
@@ -125,7 +150,7 @@ function schema_needs_update(PDO $pdo): bool
     if (!schema_users_role_enum_ready($pdo)) {
         return true;
     }
-    if (schema_col_exists($pdo, 'users', 'display_name')) {
+    if (!schema_col_exists($pdo, 'users', 'display_name')) {
         return true;
     }
     if (!schema_col_exists($pdo, 'demons', 'creator')) {
@@ -153,6 +178,9 @@ function schema_needs_update(PDO $pdo): bool
         return true;
     }
     if (!schema_table_exists($pdo, 'app_settings')) {
+        return true;
+    }
+    if (!schema_app_settings_value_text_ready($pdo)) {
         return true;
     }
 
@@ -205,9 +233,20 @@ function run_schema_update(PDO $pdo): array
         $logs[] = '[OK] Updated users.role enum values';
     }
 
-    if (schema_col_exists($pdo, 'users', 'display_name')) {
-        $pdo->exec('ALTER TABLE users DROP COLUMN display_name');
-        $logs[] = '[OK] Removed users.display_name';
+    if (!schema_col_exists($pdo, 'users', 'display_name')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN display_name VARCHAR(60) NULL AFTER username');
+        $logs[] = '[OK] Added users.display_name';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN display_name VARCHAR(60) NULL');
+
+    $clearedDisplayNames = (int) $pdo->exec(
+        "UPDATE users
+         SET display_name = NULL
+         WHERE display_name IS NOT NULL
+           AND TRIM(display_name) = ''"
+    );
+    if ($clearedDisplayNames > 0) {
+        $logs[] = '[OK] Cleared blank users.display_name values: ' . $clearedDisplayNames . ' row(s)';
     }
 
     if (!schema_col_exists($pdo, 'demons', 'creator')) {
@@ -247,11 +286,15 @@ function run_schema_update(PDO $pdo): array
         $pdo->exec(
             "CREATE TABLE IF NOT EXISTS app_settings (
                 setting_key VARCHAR(80) PRIMARY KEY,
-                setting_value VARCHAR(255) NOT NULL,
+                setting_value TEXT NOT NULL,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         );
         $logs[] = '[OK] Added app_settings table';
+    }
+    if (!schema_app_settings_value_text_ready($pdo)) {
+        $pdo->exec('ALTER TABLE app_settings MODIFY COLUMN setting_value TEXT NOT NULL');
+        $logs[] = '[OK] Expanded app_settings.setting_value to TEXT';
     }
 
     $seededListSettings = (int) $pdo->exec(
@@ -265,6 +308,10 @@ function run_schema_update(PDO $pdo): array
     $logs[] = '[OK] Ensured default list settings (Main 1-75, Extended 76-150, Legacy remaining): '
         . $seededListSettings
         . ' inserted key(s)';
+
+    if (app_setting_set('schema.version', schema_target_version())) {
+        $logs[] = '[OK] Updated schema.version to ' . schema_target_version();
+    }
 
     $publisherBackfilled = $pdo->exec(
         "UPDATE demons d
@@ -420,17 +467,18 @@ function ensure_schema_updated_on_bootstrap(): void
         return;
     }
 
-    if ((int) config('app.updated', 0) === 1) {
-        return;
-    }
-
     try {
         $pdo = db();
+
+        if (app_setting_get('schema.version', '') === schema_target_version()) {
+            return;
+        }
 
         if (schema_needs_update($pdo)) {
             run_schema_update($pdo);
         }
 
+        app_setting_set('schema.version', schema_target_version());
         schema_set_updated_flag(1);
     } catch (Throwable $e) {
         if ((bool) config('app.debug', false)) {

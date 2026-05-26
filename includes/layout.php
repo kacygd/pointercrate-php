@@ -61,7 +61,10 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
     $error = flash('error');
     $user = current_user();
     $showAdminLink = is_admin();
-    $profileActive = in_array($activeNav, ['account', 'submit', 'guidelines'], true);
+    $profileActive = in_array($activeNav, ['account', 'submit'], true);
+    $timeMachineActive = $activeNav === 'time_machine';
+    $statsViewerActive = $activeNav === 'players';
+    $demonlistActive = in_array($activeNav, ['list', 'guidelines', 'roulette', 'time_machine'], true);
 
     $styleFilePath = dirname(__DIR__) . '/assets/css/style.css';
     $styleVersion = is_file($styleFilePath) ? (string) filemtime($styleFilePath) : '1';
@@ -108,11 +111,19 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
             </a>
         </div>
 
-        <div class="nav-group">
-            <a class="nav-item hover white <?= $activeNav === 'list' ? 'active' : '' ?>" href="<?= e(base_url('index.php')) ?>">Main List</a>
+        <div class="nav-group nav-demonlist-menu">
+            <a class="nav-item hover white nav-demonlist-trigger <?= $demonlistActive ? 'active' : '' ?>" href="<?= e(base_url('index.php')) ?>">
+                <span class="nav-demonlist-title"><?= e($appName) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
+            </a>
+            <ul class="nav-hover-dropdown white nav-demonlist-dropdown">
+                <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(base_url('guidelines.php')) ?>">Guidelines</a></li>
+                <li><a class="white hover <?= $activeNav === 'roulette' ? 'active' : '' ?>" href="<?= e(base_url('roulette.php')) ?>">Roulette</a></li>
+                <li><a class="white hover <?= $timeMachineActive ? 'active' : '' ?>" href="<?= e(base_url('time-machine.php')) ?>">Time Machine</a></li>
+            </ul>
         </div>
+
         <div class="nav-group">
-            <a class="nav-item hover white <?= $activeNav === 'players' ? 'active' : '' ?>" href="<?= e(base_url('players.php')) ?>">Stats Viewer</a>
+            <a class="nav-item hover white <?= $statsViewerActive ? 'active' : '' ?>" href="<?= e(base_url('players.php')) ?>">Stats Viewer</a>
         </div>
 
         <?php if ($showAdminLink): ?>
@@ -123,11 +134,10 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
 
         <?php if ($user !== null): ?>
             <div class="nav-group nav-group-right nav-auth-status">
-                <div class="nav-item hover white <?= $profileActive ? 'active' : '' ?>"><?= e((string) $user['username']) ?></div>
+                <div class="nav-item hover white <?= $profileActive ? 'active' : '' ?>"><?= e(user_display_name_from_row($user)) ?></div>
                 <div class="nav-hover-dropdown white nav-profile-dropdown">
                     <a href="<?= e(base_url('account.php')) ?>">View Profile</a>
-                    <a href="<?= e(base_url('submit.php')) ?>">Submit Record</a>
-                    <a href="<?= e(base_url('guidelines.php')) ?>">Guidelines</a>
+                    <a href="<?= e(base_url('submit.php')) ?>">Record Submitter</a>
                     <form method="post" action="<?= e(base_url('logout.php')) ?>" class="nav-profile-logout">
                         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                         <button type="submit">Logout</button>
@@ -151,14 +161,17 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
 
         <div class="nav-drop-down" id="mobile-nav-dropdown">
             <a class="nav-item hover white" href="<?= e(base_url('index.php')) ?>">Main List</a>
+            <a class="nav-item hover white" href="<?= e(base_url('guidelines.php')) ?>">Guidelines</a>
+            <a class="nav-item hover white" href="<?= e(base_url('submit.php')) ?>">Record Submitter</a>
+            <a class="nav-item hover white" href="<?= e(base_url('roulette.php')) ?>">Roulette</a>
+            <a class="nav-item hover white" href="<?= e(base_url('time-machine.php')) ?>">Time Machine</a>
+            <div class="nav-mobile-divider" aria-hidden="true"></div>
             <a class="nav-item hover white" href="<?= e(base_url('players.php')) ?>">Stats Viewer</a>
             <?php if ($showAdminLink): ?>
                 <a class="nav-item hover white" href="<?= e(base_url('admin.php')) ?>">Admin</a>
             <?php endif; ?>
             <?php if ($user !== null): ?>
                 <a class="nav-item hover white" href="<?= e(base_url('account.php')) ?>">View Profile</a>
-                <a class="nav-item hover white" href="<?= e(base_url('submit.php')) ?>">Submit Record</a>
-                <a class="nav-item hover white" href="<?= e(base_url('guidelines.php')) ?>">Guidelines</a>
                 <form method="post" action="<?= e(base_url('logout.php')) ?>" class="nav-mobile-form">
                     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                     <button type="submit" class="nav-item hover white">Logout</button>
@@ -203,6 +216,8 @@ function render_footer(): void
             <h2>Navigation</h2>
             <a class="link" href="<?= e(base_url('index.php')) ?>">Main List</a><br>
             <a class="link" href="<?= e(base_url('players.php')) ?>">Stats Viewer</a><br>
+            <a class="link" href="<?= e(base_url('roulette.php')) ?>">Roulette</a><br>
+            <a class="link" href="<?= e(base_url('time-machine.php')) ?>">Time Machine</a><br>
             <a class="link" href="<?= e(base_url('guidelines.php')) ?>">Guidelines</a><br>
             <a class="link" href="<?= e(base_url('submit.php')) ?>">Submit Record</a>
         </nav>
@@ -221,5 +236,9 @@ function render_footer(): void
 </html>
 <?php
 }
+
+
+
+
 
 

@@ -30,6 +30,12 @@ try {
         $logs[] = '[OK] Schema is already up to date.';
     }
 
+    if (app_setting_set('schema.version', schema_target_version())) {
+        $logs[] = '[OK] Updated schema.version to ' . schema_target_version();
+    } else {
+        $logs[] = '[WARN] Could not update schema.version in app_settings.';
+    }
+
     if (schema_set_updated_flag(1)) {
         $logs[] = '[OK] Set app.updated = 1 in config.php';
     } else {

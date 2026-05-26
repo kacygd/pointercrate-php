@@ -26,7 +26,7 @@ if (method_is_post()) {
 
     if ($errors === []) {
         try {
-            $stmt = db()->prepare('SELECT id, username, email, password_hash, role, created_at
+            $stmt = db()->prepare('SELECT id, username, ' . user_select_display_name_expression() . ', email, password_hash, role, created_at
                                    FROM users
                                    WHERE username = :username
                                    LIMIT 1');
@@ -37,7 +37,7 @@ if (method_is_post()) {
                 $errors[] = 'Invalid username or password.';
             } else {
                 login_user($user);
-                flash('success', 'Welcome back, ' . (string) $user['username'] . '.');
+                flash('success', 'Welcome back, ' . user_display_name_from_row($user) . '.');
                 redirect($nextPath);
             }
         } catch (Throwable) {

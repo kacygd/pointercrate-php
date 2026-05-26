@@ -143,9 +143,9 @@ function normalize_public_path(string $path): string
         $normalized = 'demon.php?id=' . (int) $match[1];
     } elseif (preg_match('/^id=([0-9]+)$/i', $trimmed, $match) === 1) {
         $normalized = 'id=' . (int) $match[1];
-    } elseif (preg_match('/^(players|guidelines|submit|admin|account|profile|login|logout|register)\.php$/i', $trimmed, $match) === 1) {
+    } elseif (preg_match('/^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php$/i', $trimmed, $match) === 1) {
         $normalized = strtolower($match[1]);
-    } elseif (preg_match('/^(players|guidelines|submit|admin|account|profile|login|logout|register)\.php\?(.+)$/i', $trimmed, $match) === 1) {
+    } elseif (preg_match('/^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php\?(.+)$/i', $trimmed, $match) === 1) {
         $normalized = strtolower($match[1]) . '?' . $match[2];
     }
 
@@ -303,6 +303,64 @@ function users_has_is_banned_column(?PDO $pdo = null): bool
     return $result;
 }
 
+function users_has_display_name_column(?PDO $pdo = null): bool
+{
+    static $checked = false;
+    static $result = false;
+
+    if ($checked) {
+        return $result;
+    }
+
+    $checked = true;
+
+    try {
+        $pdo = $pdo instanceof PDO ? $pdo : db();
+        $stmt = $pdo->query(
+            "SELECT COUNT(*)
+             FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND table_name = 'users'
+               AND column_name = 'display_name'"
+        );
+        $result = (int) $stmt->fetchColumn() > 0;
+    } catch (Throwable) {
+        $result = false;
+    }
+
+    return $result;
+}
+
+function user_select_display_name_expression(string $tableAlias = '', string $usernameColumn = 'username', string $displayNameColumn = 'display_name'): string
+{
+    $prefix = '';
+    $normalizedAlias = trim($tableAlias);
+    if ($normalizedAlias !== '') {
+        $prefix = rtrim($normalizedAlias, '.') . '.';
+    }
+
+    if (users_has_display_name_column()) {
+        return 'COALESCE(NULLIF(' . $prefix . $displayNameColumn . ", ''), " . $prefix . $usernameColumn . ') AS display_name';
+    }
+
+    return $prefix . $usernameColumn . ' AS display_name';
+}
+
+function user_display_name_from_row(array $user, string $fallbackKey = 'username'): string
+{
+    $displayName = normalize_display_name((string) ($user['display_name'] ?? ''));
+    if ($displayName !== '') {
+        return $displayName;
+    }
+
+    return trim((string) ($user[$fallbackKey] ?? ''));
+}
+
+function user_has_custom_display_name(array $user): bool
+{
+    return normalize_display_name((string) ($user['display_name'] ?? '')) !== '';
+}
+
 function app_settings_table_ready(?PDO $pdo = null): bool
 {
     static $ready = null;
@@ -315,7 +373,7 @@ function app_settings_table_ready(?PDO $pdo = null): bool
         $pdo->exec(
             "CREATE TABLE IF NOT EXISTS app_settings (
                 setting_key VARCHAR(80) PRIMARY KEY,
-                setting_value VARCHAR(255) NOT NULL,
+                setting_value TEXT NOT NULL,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         );
@@ -549,6 +607,113 @@ function demonlist_set_list_limits(int $mainLimit, int $extendedLimit): bool
         && app_setting_set('list.extended_max_rank', (string) $extendedLimit);
 }
 
+function demon_level_info_field_definitions(): array
+{
+    return [
+        'position' => 'Position',
+        'category' => 'Category',
+        'difficulty' => 'Difficulty',
+        'requirement' => 'Requirement',
+        'creator' => 'Created by',
+        'publisher' => 'Published by',
+        'verifier' => 'Verified by',
+        'level_id' => 'Level ID',
+        'level_length' => 'Level Length',
+        'song' => 'Song',
+        'object_count' => 'Object Count',
+    ];
+}
+
+function demon_level_info_default_rows(): array
+{
+    $definitions = demon_level_info_field_definitions();
+    $rows = [];
+    foreach (array_keys($definitions) as $field) {
+        $rows[] = [
+            'field' => $field,
+            'label' => $definitions[$field],
+        ];
+    }
+
+    return $rows;
+}
+
+function demon_level_info_sanitize_rows(array $rows, bool $fallbackToDefault = false): array
+{
+    $definitions = demon_level_info_field_definitions();
+    $sanitized = [];
+    $seen = [];
+
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $field = strtolower(trim((string) ($row['field'] ?? '')));
+        if (!array_key_exists($field, $definitions) || isset($seen[$field])) {
+            continue;
+        }
+
+        $label = normalize_display_name((string) ($row['label'] ?? ''));
+        if ($label === '') {
+            $label = $definitions[$field];
+        }
+        $label = function_exists('mb_substr')
+            ? (string) mb_substr($label, 0, 60, 'UTF-8')
+            : (string) substr($label, 0, 60);
+
+        $sanitized[] = [
+            'field' => $field,
+            'label' => $label,
+        ];
+        $seen[$field] = true;
+    }
+
+    if ($sanitized === [] && $fallbackToDefault) {
+        return demon_level_info_default_rows();
+    }
+
+    return $sanitized;
+}
+
+function demon_level_info_rows(): array
+{
+    $raw = app_setting_get('demon.level_info_rows', null);
+    if (!is_string($raw) || trim($raw) === '') {
+        return demon_level_info_default_rows();
+    }
+
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return demon_level_info_default_rows();
+    }
+
+    return demon_level_info_sanitize_rows($decoded, false);
+}
+
+function demon_level_info_set_rows(array $rows): bool
+{
+    $encoded = json_encode(
+        demon_level_info_sanitize_rows($rows, false),
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
+    if (!is_string($encoded)) {
+        return false;
+    }
+
+    return app_setting_set('demon.level_info_rows', $encoded);
+}
+
+function demon_level_info_restore_default_rows(): bool
+{
+    $encoded = json_encode(demon_level_info_default_rows(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($encoded)) {
+        return false;
+    }
+
+    return app_setting_set('demon.level_info_rows', $encoded);
+}
+
 function demonlist_list_bucket(int $position, bool $legacy): string
 {
     if ($position < 1) {
@@ -593,7 +758,7 @@ function demonlist_extended_list_dropdown_description(bool $includeScoreHint = f
         return 'No ranks are currently assigned to Extended List.';
     }
 
-    $description = 'Demons ranked ' . $firstExtendedRank . '-' . $extendedLimit;
+    $description = 'Demons top ' . $firstExtendedRank . '-' . $extendedLimit;
     if ($includeScoreHint) {
         $description .= ' that still count toward score';
     }
@@ -604,7 +769,7 @@ function demonlist_extended_list_dropdown_description(bool $includeScoreHint = f
 function demonlist_legacy_list_dropdown_description(): string
 {
     $firstLegacyRank = demonlist_extended_list_limit() + 1;
-    return 'Demons ranked #' . $firstLegacyRank . '+ or manually marked as legacy.';
+    return 'Demons top ' . $firstLegacyRank . '+ or manually marked as legacy.';
 }
 
 function demonlist_is_ranked_entry(int $position, bool $legacy): bool
@@ -1094,6 +1259,26 @@ function validate_username(string $username): bool
     return (bool) preg_match('/^[a-zA-Z0-9_]{3,24}$/', $username);
 }
 
+function normalize_display_name(string $displayName): string
+{
+    $collapsed = preg_replace('/\s+/u', ' ', trim($displayName));
+    return trim((string) ($collapsed ?? $displayName));
+}
+
+function validate_display_name(string $displayName): bool
+{
+    $normalized = normalize_display_name($displayName);
+    if ($normalized === '') {
+        return false;
+    }
+
+    $length = function_exists('mb_strlen')
+        ? mb_strlen($normalized, 'UTF-8')
+        : strlen($normalized);
+
+    return $length >= 1 && $length <= 40;
+}
+
 function country_name_map(): array
 {
     static $map = null;
@@ -1253,7 +1438,19 @@ function current_user(): ?array
     }
 
     try {
-        $stmt = db()->prepare('SELECT id, username, email, country_code, youtube_channel, password_hash, role, points, created_at
+        $selectFields = [
+            'id',
+            'username',
+            user_select_display_name_expression(),
+            'email',
+            'country_code',
+            'youtube_channel',
+            'password_hash',
+            'role',
+            'points',
+            'created_at',
+        ];
+        $stmt = db()->prepare('SELECT ' . implode(', ', $selectFields) . '
                                FROM users
                                WHERE id = :id
                                LIMIT 1');
@@ -1286,7 +1483,41 @@ function current_user_id(): ?int
 function current_user_display_name(): ?string
 {
     $user = current_user();
-    return $user !== null ? (string) $user['username'] : null;
+    return $user !== null ? user_display_name_from_row($user) : null;
+}
+
+function user_public_name_by_id(?int $userId, ?string $fallback = null): ?string
+{
+    static $cache = [];
+
+    $normalizedUserId = (int) ($userId ?? 0);
+    if ($normalizedUserId < 1) {
+        return $fallback;
+    }
+
+    if (array_key_exists($normalizedUserId, $cache)) {
+        return $cache[$normalizedUserId] ?? $fallback;
+    }
+
+    try {
+        $stmt = db()->prepare(
+            'SELECT username, ' . user_select_display_name_expression() . '
+             FROM users
+             WHERE id = :id
+             LIMIT 1'
+        );
+        $stmt->execute([':id' => $normalizedUserId]);
+        $user = $stmt->fetch();
+        if ($user === false) {
+            $cache[$normalizedUserId] = null;
+            return $fallback;
+        }
+
+        $cache[$normalizedUserId] = user_display_name_from_row($user);
+        return $cache[$normalizedUserId] ?? $fallback;
+    } catch (Throwable) {
+        return $fallback;
+    }
 }
 
 function login_user(array $user): void

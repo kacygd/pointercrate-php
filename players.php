@@ -82,6 +82,7 @@ $hasUserBannedColumn = users_has_is_banned_column($pdo);
 $userSelectFields = [
     'id',
     'username',
+    users_has_display_name_column($pdo) ? 'display_name' : 'NULL AS display_name',
     'country_code',
     'role',
     'points',
@@ -164,6 +165,7 @@ $ensurePlayer = static function (string $rawName) use (&$playersByKey): ?string 
             'user_id' => null,
             'has_account' => false,
             'username' => $name,
+            'display_name' => $name,
             'country_code' => null,
             'role' => 'player',
             'is_banned' => false,
@@ -227,6 +229,7 @@ foreach ($users as $user) {
     }
     $playersByKey[$key]['has_account'] = true;
     $playersByKey[$key]['username'] = $username;
+    $playersByKey[$key]['display_name'] = user_display_name_from_row($user);
     $playersByKey[$key]['country_code'] = normalize_country_code((string) ($user['country_code'] ?? ''));
     $playersByKey[$key]['role'] = (string) ($user['role'] ?? 'player');
     $playersByKey[$key]['is_banned'] = (int) ($user['is_banned'] ?? 0) === 1;
@@ -603,6 +606,7 @@ foreach ($players as $player) {
         'key' => (string) $player['key'],
         'user_id' => $player['user_id'] !== null ? (int) $player['user_id'] : null,
         'username' => (string) $player['username'],
+        'display_name' => (string) ($player['display_name'] ?? $player['username']),
         'country_code' => $countryCode ?? '',
         'rank' => $player['rank'] !== null ? (int) $player['rank'] : null,
         'points' => $points,
@@ -626,7 +630,8 @@ foreach ($players as $player) {
         'demons_verified' => $serializeDemonItems((array) $player['demons_verified']),
         'progress_on' => $serializeDemonItems((array) $player['progress_on'], true),
         'flag_url' => country_flag_asset_url($countryCode),
-        'search' => strtolower((string) $player['username']) . ' '
+        'search' => strtolower((string) ($player['display_name'] ?? $player['username'])) . ' '
+            . strtolower((string) $player['username']) . ' '
             . (($player['rank'] !== null) ? ('#' . (int) $player['rank']) : '') . ' '
             . number_format($points, 2) . ' '
             . (int) $player['total_completions'],
@@ -683,11 +688,11 @@ render_header('Stats Viewer', 'players');
                             class="stats-player-item <?= $index === $selectedIndex ? 'active' : '' ?>"
                             data-player-key="<?= e((string) $player['key']) ?>"
                             data-country-code="<?= e((string) ($countryCode ?? '')) ?>"
-                            data-search-value="<?= e(strtolower((string) $player['username']) . ' ' . strtolower($rankLabel)) ?>"
+                            data-search-value="<?= e(strtolower((string) ($player['display_name'] ?? $player['username'])) . ' ' . strtolower((string) $player['username']) . ' ' . strtolower($rankLabel)) ?>"
                         >
                             <button type="button" class="stats-player-button" data-player-select="<?= e((string) $player['key']) ?>">
                                 <span class="stats-player-rank"><?= e($rankLabel) ?></span>
-                                <span class="stats-player-name"><?= $countryFlag ?><span><?= e((string) $player['username']) ?></span></span>
+                                <span class="stats-player-name"><?= $countryFlag ?><span><?= e((string) ($player['display_name'] ?? $player['username'])) ?></span></span>
                                 <span class="stats-player-score"><?= e(number_format((float) $player['points'], 2)) ?></span>
                             </button>
                         </li>
@@ -704,7 +709,7 @@ render_header('Stats Viewer', 'players');
                 <div class="stats-viewer-player-head">
                     <h2 class="stats-viewer-player-title">
                         <span id="stats-player-flag"><?= $selectedFlag ?></span>
-                        <span id="stats-player-name" class="stats-viewer-player-name"><?= e((string) $selectedPlayer['username']) ?></span>
+                        <span id="stats-player-name" class="stats-viewer-player-name"><?= e((string) ($selectedPlayer['display_name'] ?? $selectedPlayer['username'])) ?></span>
                     </h2>
                 </div>
 
@@ -920,7 +925,7 @@ render_header('Stats Viewer', 'players');
 
                 renderFlag(player.flag_url || '');
                 if (nameEl instanceof HTMLElement) {
-                    nameEl.textContent = player.username;
+                    nameEl.textContent = player.display_name || player.username;
                 }
 
                 if (rankEl instanceof HTMLElement) {

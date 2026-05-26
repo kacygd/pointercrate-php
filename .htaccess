@@ -4,8 +4,8 @@ RewriteEngine On
 RewriteCond %{THE_REQUEST} \s/+[^\s]*index\.php(?:[?\s]|$) [NC]
 RewriteRule ^index\.php$ ./ [R=301,L]
 
-RewriteCond %{THE_REQUEST} \s/+[^\s]*?(players|guidelines|submit|admin|account|profile|login|logout|register)\.php(?:[?\s]|$) [NC]
-RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register)\.php$ ./$1 [R=301,L]
+RewriteCond %{THE_REQUEST} \s/+[^\s]*?(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php(?:[?\s]|$) [NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php$ ./$1 [R=301,L]
 
 # Keep existing files and folders untouched.
 RewriteCond %{REQUEST_FILENAME} -f [OR]
@@ -16,4 +16,4 @@ RewriteRule ^ - [L]
 RewriteRule ^$ index.php [L]
 RewriteRule ^([0-9]+)$ demon.php?rank=$1 [QSA,L,NC]
 RewriteRule ^id=([0-9]+)$ demon.php?id=$1 [QSA,L,NC]
-RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register)$ $1.php [QSA,L,NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)$ $1.php [QSA,L,NC]

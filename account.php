@@ -21,8 +21,14 @@ if (method_is_post()) {
     }
 
     if ($action === 'update_profile') {
+        $displayNameInput = normalize_display_name((string) ($_POST['display_name'] ?? ''));
         $countryInput = trim((string) ($_POST['country_code'] ?? ''));
         $countryPicker = trim((string) ($_POST['country_picker'] ?? ''));
+
+        if ($displayNameInput !== '' && !validate_display_name($displayNameInput)) {
+            flash('error', 'Display name must be between 1 and 40 characters.');
+            redirect('account.php');
+        }
 
         if (strcasecmp($countryPicker, 'Not set') === 0) {
             $countryPicker = '';
@@ -47,12 +53,28 @@ if (method_is_post()) {
             $youtubeChannel = trim((string) ($_POST['youtube_channel'] ?? ''));
         }
 
-        $update = db()->prepare('UPDATE users SET country_code = :country_code, youtube_channel = :youtube_channel WHERE id = :id');
-        $update->execute([
-            ':country_code' => $countryCode,
-            ':youtube_channel' => $youtubeChannel !== '' ? $youtubeChannel : null,
-            ':id' => (int) $user['id'],
-        ]);
+        $displayName = $displayNameInput !== '' ? $displayNameInput : null;
+
+        if (users_has_display_name_column()) {
+            $update = db()->prepare('UPDATE users
+                                     SET display_name = :display_name,
+                                         country_code = :country_code,
+                                         youtube_channel = :youtube_channel
+                                     WHERE id = :id');
+            $update->execute([
+                ':display_name' => $displayName,
+                ':country_code' => $countryCode,
+                ':youtube_channel' => $youtubeChannel !== '' ? $youtubeChannel : null,
+                ':id' => (int) $user['id'],
+            ]);
+        } else {
+            $update = db()->prepare('UPDATE users SET country_code = :country_code, youtube_channel = :youtube_channel WHERE id = :id');
+            $update->execute([
+                ':country_code' => $countryCode,
+                ':youtube_channel' => $youtubeChannel !== '' ? $youtubeChannel : null,
+                ':id' => (int) $user['id'],
+            ]);
+        }
 
         flash('success', 'Profile updated.');
         redirect('account.php');
@@ -113,11 +135,22 @@ if (method_is_post()) {
         }
 
         if ($errors === []) {
-            $update = db()->prepare('UPDATE users SET username = :username WHERE id = :id');
-            $update->execute([
-                ':username' => $newUsername,
-                ':id' => (int) $user['id'],
-            ]);
+            $displayNameRaw = normalize_display_name((string) ($user['display_name'] ?? ''));
+            $shouldFollowUsername = $displayNameRaw === '' || $displayNameRaw === (string) $user['username'];
+
+            if (users_has_display_name_column() && $shouldFollowUsername) {
+                $update = db()->prepare('UPDATE users SET username = :username, display_name = NULL WHERE id = :id');
+                $update->execute([
+                    ':username' => $newUsername,
+                    ':id' => (int) $user['id'],
+                ]);
+            } else {
+                $update = db()->prepare('UPDATE users SET username = :username WHERE id = :id');
+                $update->execute([
+                    ':username' => $newUsername,
+                    ':id' => (int) $user['id'],
+                ]);
+            }
             flash('success', 'Username updated successfully.');
             redirect('account.php');
         } else {
@@ -176,17 +209,20 @@ $countryPickerText = ($countryCode !== null && isset($countryOptions[$countryCod
     : '';
 $userRole = current_user_role();
 $isStaff = in_array($userRole, ['owner', 'list_editor', 'list_helper'], true);
+$userDisplayName = user_display_name_from_row($user);
+$hasCustomDisplayName = user_has_custom_display_name($user);
 
 render_header('Account', 'account');
 ?>
 <section class="panel fade">
     <div class="panel-head">
         <h1>My Account</h1>
-        <p>Signed in as <b><?= e((string) $user['username']) ?></b></p>
+        <p>Signed in as <b><?= e($userDisplayName) ?></b><?php if ($hasCustomDisplayName): ?> <span class="muted">(@<?= e((string) $user['username']) ?>)</span><?php endif; ?></p>
     </div>
 
     <dl class="key-value" style="max-width: 640px; margin: 0 auto;">
         <div><dt>Username</dt><dd><?= e((string) $user['username']) ?></dd></div>
+        <div><dt>Display Name</dt><dd><?= e($userDisplayName) ?></dd></div>
         <div><dt>Email</dt><dd><?= e((string) ($user['email'] ?? '-')) ?></dd></div>
         <?php if ($isStaff): ?>
             <div><dt>YouTube Channel</dt><dd><?= e((string) ($user['youtube_channel'] ?? '-')) ?></dd></div>
@@ -201,12 +237,25 @@ render_header('Account', 'account');
 <section class="panel fade panel-narrow">
     <div class="panel-head">
         <h2>Profile Settings</h2>
-        <p><?php if ($isStaff): ?>Set your country and YouTube channel to display on the list.<?php else: ?>Set your country to show your flag on the player list.<?php endif; ?></p>
+        <p><?php if ($isStaff): ?>Set your display name, country, and YouTube channel for public pages.<?php else: ?>Set your display name and country for public player pages.<?php endif; ?></p>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(base_url('account.php')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="update_profile">
+
+        <label class="field">
+            <span>Display Name</span>
+            <input
+                type="text"
+                name="display_name"
+                value="<?= e($userDisplayName) ?>"
+                maxlength="40"
+                placeholder="<?= e((string) $user['username']) ?>"
+                autocomplete="nickname"
+            >
+            <small class="muted">Shown publicly across the site. Leave blank to use your username.</small>
+        </label>
 
         <label class="field">
             <span>Country</span>
@@ -390,6 +439,3 @@ render_header('Account', 'account');
     </div>
 </section>
 <?php render_footer(); ?>
-
-
-
