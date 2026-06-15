@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/bootstrap.php';
+require dirname(__DIR__) . '/bootstrap.php';
 
 
 function record_position_event(PDO $pdo, int $demonId, ?int $oldPosition, int $newPosition, ?int $changedByUserId, ?string $note = null): void
@@ -53,6 +53,19 @@ function ensure_user_banned_column(PDO $pdo): void
     }
 
     $pdo->exec('ALTER TABLE users MODIFY COLUMN is_banned TINYINT(1) NOT NULL DEFAULT 0');
+}
+
+function ensure_user_comments_disabled_column(PDO $pdo): void
+{
+    if (!admin_column_exists($pdo, 'users', 'comments_disabled')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN comments_disabled TINYINT(1) NOT NULL DEFAULT 0 AFTER is_banned');
+    }
+
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN comments_disabled TINYINT(1) NOT NULL DEFAULT 0');
+
+    if (!admin_index_exists($pdo, 'users', 'idx_users_comments_disabled')) {
+        $pdo->exec('ALTER TABLE users ADD INDEX idx_users_comments_disabled (comments_disabled)');
+    }
 }
 
 function admin_index_exists(PDO $pdo, string $table, string $index): bool
@@ -143,6 +156,55 @@ function admin_user_id_by_username(PDO $pdo, string $username): ?int
     return $userId > 0 ? $userId : null;
 }
 
+function admin_badge_uploaded_image_url(?array $file): ?string
+{
+    if (!is_array($file) || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+
+    $error = (int) ($file['error'] ?? UPLOAD_ERR_OK);
+    if ($error !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('Badge image upload failed.');
+    }
+
+    $size = (int) ($file['size'] ?? 0);
+    if ($size < 1 || $size > 2 * 1024 * 1024) {
+        throw new RuntimeException('Badge image must be smaller than 2MB.');
+    }
+
+    $tmpName = (string) ($file['tmp_name'] ?? '');
+    if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+        throw new RuntimeException('Invalid uploaded badge image.');
+    }
+
+    $extension = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+    if ($extension === 'jpeg') {
+        $extension = 'jpg';
+    }
+
+    $allowedExtensions = ['png', 'jpg', 'gif', 'webp'];
+    if (!in_array($extension, $allowedExtensions, true)) {
+        throw new RuntimeException('Badge upload must be PNG, JPG, GIF, or WEBP.');
+    }
+
+    if (@getimagesize($tmpName) === false) {
+        throw new RuntimeException('Uploaded badge file is not a valid image.');
+    }
+
+    $targetDir = dirname(__DIR__) . '/assets/badges';
+    if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+        throw new RuntimeException('Could not create badge image folder.');
+    }
+
+    $fileName = 'badge-' . date('YmdHis') . '-' . bin2hex(random_bytes(4)) . '.' . $extension;
+    $targetPath = $targetDir . DIRECTORY_SEPARATOR . $fileName;
+    if (!move_uploaded_file($tmpName, $targetPath)) {
+        throw new RuntimeException('Could not save badge image.');
+    }
+
+    return 'assets/badges/' . $fileName;
+}
+
 function admin_webhook_actor_label(): string
 {
     $name = trim((string) (current_user_display_name() ?? 'System'));
@@ -186,19 +248,39 @@ function admin_webhook_add_change(array &$changes, string $label, string $before
     ];
 }
 
+function admin_webhook_changes_text(array $changes, int $limit = 8): string
+{
+    $lines = [];
+    foreach ($changes as $change) {
+        if (!is_array($change)) {
+            continue;
+        }
+
+        $name = admin_webhook_text($change['name'] ?? null);
+        $value = admin_webhook_text($change['value'] ?? null);
+        $lines[] = $name . ': ' . $value;
+
+        if (count($lines) >= $limit) {
+            break;
+        }
+    }
+
+    $remaining = count($changes) - count($lines);
+    if ($remaining > 0) {
+        $lines[] = '+' . $remaining . ' more';
+    }
+
+    return $lines !== [] ? implode("\n", $lines) : '-';
+}
+
 function admin_notify_level_added(array $level): void
 {
     $embed = [
-        'title' => 'Level Added',
+        'title' => 'Level added',
         'color' => 5814783,
         'fields' => [
             ['name' => 'Level', 'value' => '#' . (int) $level['position'] . ' - ' . admin_webhook_text($level['name']), 'inline' => false],
-            ['name' => 'List', 'value' => admin_webhook_list_label((int) $level['legacy']), 'inline' => true],
-            ['name' => 'Difficulty', 'value' => admin_webhook_text($level['difficulty']), 'inline' => true],
-            ['name' => 'Requirement', 'value' => (int) $level['requirement'] . '%', 'inline' => true],
-            ['name' => 'Creator(s)', 'value' => admin_webhook_text($level['creator_display'] ?? null), 'inline' => false],
-            ['name' => 'Publisher', 'value' => admin_webhook_text($level['publisher']), 'inline' => true],
-            ['name' => 'Verifier', 'value' => admin_webhook_text($level['verifier']), 'inline' => true],
+            ['name' => 'Info', 'value' => admin_webhook_list_label((int) $level['legacy']) . ' / ' . (int) $level['requirement'] . '%', 'inline' => true],
             ['name' => 'By', 'value' => admin_webhook_actor_label(), 'inline' => true],
         ],
         'timestamp' => gmdate('c'),
@@ -209,6 +291,59 @@ function admin_notify_level_added(array $level): void
     }
 
     send_discord_webhook('', [$embed]);
+    admin_notify_level_added_linked_users($level);
+}
+
+function admin_notify_level_added_linked_users(array $level): void
+{
+    if (!users_has_discord_link_columns()) {
+        return;
+    }
+
+    $recipients = [];
+    $publisherUserId = (int) ($level['publisher_user_id'] ?? 0);
+    if ($publisherUserId > 0) {
+        $recipients[$publisherUserId][] = 'Publisher';
+    }
+    $verifierUserId = (int) ($level['verifier_user_id'] ?? 0);
+    if ($verifierUserId > 0) {
+        $recipients[$verifierUserId][] = 'Verifier';
+    }
+    if ($recipients === []) {
+        return;
+    }
+
+    $position = (int) ($level['position'] ?? 0);
+    $levelName = admin_webhook_text($level['name'] ?? null);
+    $levelUrl = $position > 0 ? absolute_url((string) $position) : absolute_url('index.php');
+    $baseFields = [
+        ['name' => 'Level', 'value' => '#' . $position . ' - ' . $levelName, 'inline' => false],
+        ['name' => 'Requirement', 'value' => (int) ($level['requirement'] ?? 0) . '%', 'inline' => true],
+        ['name' => 'List', 'value' => admin_webhook_list_label((int) ($level['legacy'] ?? 0)), 'inline' => true],
+        ['name' => 'Added By', 'value' => admin_webhook_actor_label(), 'inline' => true],
+    ];
+
+    $pdo = db();
+    foreach ($recipients as $userId => $roles) {
+        $embed = [
+            'title' => 'Level added',
+            'description' => 'A level connected to your account was added.',
+            'url' => $levelUrl,
+            'color' => 5814783,
+            'fields' => array_merge(
+                [['name' => 'Role', 'value' => implode(', ', array_unique($roles)), 'inline' => true]],
+                $baseFields
+            ),
+            'timestamp' => gmdate('c'),
+        ];
+
+        send_discord_user_notification(
+            $pdo,
+            (int) $userId,
+            app_name() . ': level added.',
+            [$embed]
+        );
+    }
 }
 
 function admin_creator_parts_from_input(string $input): array
@@ -259,6 +394,13 @@ function admin_notify_level_updated(array $before, array $after, string $moveNot
         admin_webhook_list_label((int) ($after['legacy'] ?? 0)),
         true
     );
+    admin_webhook_add_change(
+        $changes,
+        'Comments',
+        (int) ($before['comments_disabled'] ?? 0) === 1 ? 'Disabled' : 'Enabled',
+        (int) ($after['comments_disabled'] ?? 0) === 1 ? 'Disabled' : 'Enabled',
+        true
+    );
 
     if ($changes === []) {
         return;
@@ -266,19 +408,18 @@ function admin_notify_level_updated(array $before, array $after, string $moveNot
 
     $fields = [
         ['name' => 'Level', 'value' => '#' . (int) ($after['position'] ?? 0) . ' - ' . admin_webhook_text($after['name'] ?? null), 'inline' => false],
-        ['name' => 'Demon ID', 'value' => '#' . (int) ($after['id'] ?? 0), 'inline' => true],
         ['name' => 'By', 'value' => admin_webhook_actor_label(), 'inline' => true],
-        ['name' => 'Changed Fields', 'value' => (string) count($changes), 'inline' => true],
+        ['name' => 'Changes', 'value' => admin_webhook_changes_text($changes), 'inline' => false],
     ];
 
     if ($moveNote !== '') {
-        $fields[] = ['name' => 'Move Note', 'value' => $moveNote, 'inline' => false];
+        $fields[] = ['name' => 'Note', 'value' => $moveNote, 'inline' => false];
     }
 
     $embed = [
-        'title' => 'Level Updated',
+        'title' => 'Level updated',
         'color' => 15105570,
-        'fields' => array_merge($fields, $changes),
+        'fields' => $fields,
         'timestamp' => gmdate('c'),
     ];
 
@@ -296,20 +437,38 @@ function admin_notify_level_moved(string $name, int $demonId, int $oldPosition, 
     }
 
     $embed = [
-        'title' => 'Level Position Updated',
+        'title' => 'Rank changed',
         'color' => 15105570,
         'fields' => [
             ['name' => 'Level', 'value' => admin_webhook_text($name), 'inline' => false],
-            ['name' => 'Change', 'value' => '#' . $oldPosition . ' -> #' . $newPosition, 'inline' => true],
+            ['name' => 'Rank', 'value' => '#' . $oldPosition . ' -> #' . $newPosition, 'inline' => true],
             ['name' => 'By', 'value' => admin_webhook_actor_label(), 'inline' => true],
-            ['name' => 'Reason', 'value' => $note !== '' ? $note : 'Position moved in admin panel', 'inline' => false],
         ],
         'timestamp' => gmdate('c'),
     ];
+    if ($note !== '') {
+        $embed['fields'][] = ['name' => 'Note', 'value' => $note, 'inline' => false];
+    }
 
     if ($demonId > 0) {
         $embed['url'] = absolute_url((string) $newPosition);
     }
+
+    send_discord_webhook('', [$embed]);
+}
+
+function admin_notify_level_deleted(array $level): void
+{
+    $embed = [
+        'title' => 'Level deleted',
+        'color' => 15548997,
+        'fields' => [
+            ['name' => 'Level', 'value' => '#' . (int) ($level['position'] ?? 0) . ' - ' . admin_webhook_text($level['name'] ?? null), 'inline' => false],
+            ['name' => 'Records', 'value' => (string) (int) ($level['records_removed'] ?? 0), 'inline' => true],
+            ['name' => 'By', 'value' => admin_webhook_actor_label(), 'inline' => true],
+        ],
+        'timestamp' => gmdate('c'),
+    ];
 
     send_discord_webhook('', [$embed]);
 }
@@ -324,6 +483,13 @@ function admin_notify_user_updated(array $before, array $after, float $bonusDelt
         'Banned',
         ((int) $before['is_banned'] === 1 ? 'Yes' : 'No'),
         ((int) $after['is_banned'] === 1 ? 'Yes' : 'No'),
+        true
+    );
+    admin_webhook_add_change(
+        $changes,
+        'Commenting Disabled',
+        ((int) ($before['comments_disabled'] ?? 0) === 1 ? 'Yes' : 'No'),
+        ((int) ($after['comments_disabled'] ?? 0) === 1 ? 'Yes' : 'No'),
         true
     );
     admin_webhook_add_change(
@@ -348,13 +514,13 @@ function admin_notify_user_updated(array $before, array $after, float $bonusDelt
     $fields = [
         ['name' => 'User', 'value' => admin_webhook_text($after['username']) . ' (#' . (int) $after['id'] . ')', 'inline' => true],
         ['name' => 'By', 'value' => admin_webhook_actor_label(), 'inline' => true],
-        ['name' => 'Bonus Delta', 'value' => ($bonusDelta >= 0 ? '+' : '') . number_format($bonusDelta, 2, '.', ''), 'inline' => true],
+        ['name' => 'Changes', 'value' => admin_webhook_changes_text($changes), 'inline' => false],
     ];
 
     $embed = [
-        'title' => 'User Management Updated',
+        'title' => 'User updated',
         'color' => (int) $after['is_banned'] === 1 ? 15158332 : 3447003,
-        'fields' => array_merge($fields, $changes),
+        'fields' => $fields,
         'timestamp' => gmdate('c'),
     ];
 
@@ -365,19 +531,19 @@ function admin_notify_submission_reviewed(array $submission, string $decision, s
 {
     $decision = strtolower($decision);
     $decisionLabel = strtoupper($decision);
+    $decisionTitle = $decision === 'approved' ? 'Submission approved' : 'Submission rejected';
 
     $fields = [
         ['name' => 'Submission', 'value' => '#' . (int) ($submission['id'] ?? 0), 'inline' => true],
-        ['name' => 'Decision', 'value' => $decisionLabel, 'inline' => true],
-        ['name' => 'Type', 'value' => admin_webhook_text($submission['type'] ?? null), 'inline' => true],
         ['name' => 'Demon', 'value' => admin_webhook_text($submission['demon_name'] ?? null), 'inline' => true],
         ['name' => 'Player', 'value' => admin_webhook_text($playerName), 'inline' => true],
-        ['name' => 'Submitted Progress', 'value' => (int) ($submission['progress'] ?? 0) . '%', 'inline' => true],
-        ['name' => 'Reviewed By', 'value' => admin_webhook_actor_label(), 'inline' => true],
+        ['name' => 'Progress', 'value' => (int) ($submission['progress'] ?? 0) . '%', 'inline' => true],
+        ['name' => 'By', 'value' => admin_webhook_actor_label(), 'inline' => true],
     ];
 
+    $details = [];
     if ($reviewNote !== '') {
-        $fields[] = ['name' => 'Review Note', 'value' => $reviewNote, 'inline' => false];
+        $details[] = 'Note: ' . $reviewNote;
     }
 
     foreach ($recordFields as $field) {
@@ -391,21 +557,89 @@ function admin_notify_submission_reviewed(array $submission, string $decision, s
             continue;
         }
 
-        $fields[] = [
-            'name' => $name,
-            'value' => $value,
-            'inline' => !empty($field['inline']),
-        ];
+        $details[] = $name . ': ' . $value;
+        if (count($details) >= 6) {
+            break;
+        }
+    }
+
+    if ($details !== []) {
+        $fields[] = ['name' => 'Details', 'value' => implode("\n", $details), 'inline' => false];
     }
 
     $embed = [
-        'title' => 'Submission Review ' . $decisionLabel,
+        'title' => $decisionTitle,
         'color' => $decision === 'approved' ? 5763719 : 15548997,
         'fields' => $fields,
         'timestamp' => gmdate('c'),
     ];
 
     send_discord_webhook('', [$embed]);
+    admin_notify_submission_submitter_discord($submission, $decision, $reviewNote, $playerName, $recordFields);
+}
+
+function admin_notify_submission_submitter_discord(array $submission, string $decision, string $reviewNote, string $playerName, array $recordFields = []): void
+{
+    if (!users_has_discord_link_columns()) {
+        return;
+    }
+
+    $submitterUserId = (int) ($submission['submitted_by_user_id'] ?? 0);
+    if ($submitterUserId < 1) {
+        return;
+    }
+
+    $decision = strtolower($decision);
+    $decisionLabel = strtoupper($decision);
+    $fields = [
+        ['name' => 'Submission', 'value' => '#' . (int) ($submission['id'] ?? 0), 'inline' => true],
+        ['name' => 'Decision', 'value' => $decisionLabel, 'inline' => true],
+        ['name' => 'Demon', 'value' => admin_webhook_text($submission['demon_name'] ?? null), 'inline' => false],
+        ['name' => 'Player', 'value' => admin_webhook_text($playerName), 'inline' => true],
+        ['name' => 'Progress', 'value' => (int) ($submission['progress'] ?? 0) . '%', 'inline' => true],
+        ['name' => 'Reviewed By', 'value' => admin_webhook_actor_label(), 'inline' => true],
+    ];
+
+    if ($reviewNote !== '') {
+        $fields[] = ['name' => 'Review Note', 'value' => $reviewNote, 'inline' => false];
+    }
+
+    foreach ($recordFields as $field) {
+        if (!is_array($field)) {
+            continue;
+        }
+        $name = trim((string) ($field['name'] ?? ''));
+        $value = trim((string) ($field['value'] ?? ''));
+        if ($name === '' || $value === '') {
+            continue;
+        }
+        $fields[] = [
+            'name' => $name,
+            'value' => $value,
+            'inline' => !empty($field['inline']),
+        ];
+        if (count($fields) >= 25) {
+            break;
+        }
+    }
+
+    $embed = [
+        'title' => 'Your Submission Was ' . $decisionLabel,
+        'description' => $decision === 'approved'
+            ? 'Record accepted.'
+            : 'Record rejected.',
+        'url' => absolute_url('account.php'),
+        'color' => $decision === 'approved' ? 5763719 : 15548997,
+        'fields' => $fields,
+        'timestamp' => gmdate('c'),
+    ];
+
+    send_discord_user_notification(
+        db(),
+        $submitterUserId,
+        app_name() . ': submission #' . (int) ($submission['id'] ?? 0) . ' ' . $decision . '.',
+        [$embed]
+    );
 }
 
 if (method_is_post()) {
@@ -458,7 +692,7 @@ if (method_is_post()) {
         redirect('admin.php#admin-scoring');
     }
 
-    if ($action === 'update_list_visibility' && has_owner_access()) {
+    if ($action === 'update_list_visibility' && can_manage_list_visibility()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
             redirect('admin.php#admin-list-visibility');
@@ -550,21 +784,36 @@ if (method_is_post()) {
             redirect('admin.php#admin-level-info-rows');
         }
 
+        $types = $_POST['level_info_type'] ?? [];
         $fields = $_POST['level_info_field'] ?? [];
+        $keys = $_POST['level_info_custom_key'] ?? [];
         $labels = $_POST['level_info_label'] ?? [];
-        if (!is_array($fields) || !is_array($labels)) {
+        $defaultValues = $_POST['level_info_default_value'] ?? [];
+        if (
+            !is_array($types)
+            || !is_array($fields)
+            || !is_array($keys)
+            || !is_array($labels)
+            || !is_array($defaultValues)
+        ) {
             flash('error', 'Invalid Level Info rows payload.');
             redirect('admin.php#admin-level-info-rows');
         }
 
+        $types = array_values($types);
         $fields = array_values($fields);
+        $keys = array_values($keys);
         $labels = array_values($labels);
+        $defaultValues = array_values($defaultValues);
 
         $rows = [];
-        foreach ($fields as $index => $field) {
+        foreach ($types as $index => $type) {
             $rows[] = [
-                'field' => (string) $field,
+                'type' => (string) $type,
+                'field' => (string) ($fields[$index] ?? ''),
+                'key' => (string) ($keys[$index] ?? ''),
                 'label' => (string) ($labels[$index] ?? ''),
+                'default_value' => (string) ($defaultValues[$index] ?? ''),
             ];
         }
 
@@ -577,7 +826,115 @@ if (method_is_post()) {
         redirect('admin.php#admin-level-info-rows');
     }
 
-    if ($action === 'update_role_permissions' && has_owner_access()) {
+    if ($action === 'update_comment_settings' && can_manage_levels()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect('admin.php#admin-level-comments');
+        }
+
+        $commentsEnabled = isset($_POST['comments_enabled']);
+        $levelNameInput = trim((string) ($_POST['comment_level_name'] ?? ''));
+        $levelCommentStatus = strtolower(trim((string) ($_POST['level_comment_status'] ?? 'keep')));
+        if (!in_array($levelCommentStatus, ['keep', 'enabled', 'disabled'], true)) {
+            flash('error', 'Invalid level comment status.');
+            redirect('admin.php#admin-level-comments');
+        }
+
+        $pdo = db();
+
+        try {
+            $pdo->beginTransaction();
+
+            if (!level_comments_set_enabled($commentsEnabled)) {
+                throw new RuntimeException('Could not save global comment setting.');
+            }
+
+            $levelMessage = '';
+            if ($levelNameInput !== '') {
+                if ($levelCommentStatus === 'keep') {
+                    throw new RuntimeException('Choose Enable or Disable for the selected level.');
+                }
+
+                $targetStmt = $pdo->prepare('SELECT id, name FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1 FOR UPDATE');
+                $targetStmt->execute([':name' => $levelNameInput]);
+                $target = $targetStmt->fetch();
+
+                if ($target === false) {
+                    $partial = $pdo->prepare('SELECT id, name FROM demons WHERE LOWER(name) LIKE :query ORDER BY position ASC LIMIT 2');
+                    $partial->execute([':query' => '%' . strtolower($levelNameInput) . '%']);
+                    $matches = $partial->fetchAll();
+
+                    if (count($matches) === 0) {
+                        throw new RuntimeException('Level not found. Please type a valid level name.');
+                    }
+                    if (count($matches) > 1) {
+                        throw new RuntimeException('Multiple levels match this name. Please type the full level name.');
+                    }
+
+                    $target = $matches[0];
+                }
+
+                $levelCommentsDisabled = $levelCommentStatus === 'disabled' ? 1 : 0;
+                $updateLevelComments = $pdo->prepare('UPDATE demons SET comments_disabled = :comments_disabled WHERE id = :id');
+                $updateLevelComments->execute([
+                    ':comments_disabled' => $levelCommentsDisabled,
+                    ':id' => (int) $target['id'],
+                ]);
+
+                $levelMessage = ' Level "' . (string) $target['name'] . '" comments: '
+                    . ($levelCommentsDisabled === 1 ? 'disabled' : 'enabled') . '.';
+            }
+
+            $pdo->commit();
+            flash('success', 'Comments are now ' . ($commentsEnabled ? 'enabled' : 'disabled') . ' for the list.' . $levelMessage);
+        } catch (Throwable $throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $throwable->getMessage());
+        }
+
+        redirect('admin.php#admin-level-comments');
+    }
+
+    if ($action === 'delete_reported_level_comment' && can_moderate_level_comments()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect('admin.php#admin-level-comments');
+        }
+
+        $commentId = (int) ($_POST['comment_id'] ?? 0);
+        if ($commentId < 1) {
+            flash('error', 'Choose a reported comment to delete.');
+            redirect('admin.php#admin-level-comments');
+        }
+
+        try {
+            $pdo = db();
+            $commentStmt = $pdo->prepare(
+                'SELECT lc.id, d.name AS demon_name
+                 FROM level_comments lc
+                 INNER JOIN demons d ON d.id = lc.demon_id
+                 WHERE lc.id = :id
+                 LIMIT 1'
+            );
+            $commentStmt->execute([':id' => $commentId]);
+            $comment = $commentStmt->fetch();
+            if ($comment === false) {
+                throw new RuntimeException('Reported comment not found.');
+            }
+
+            $delete = $pdo->prepare('DELETE FROM level_comments WHERE id = :id');
+            $delete->execute([':id' => $commentId]);
+            flash('success', 'Deleted reported comment from ' . (string) $comment['demon_name'] . '.');
+        } catch (Throwable $throwable) {
+            flash('error', $throwable->getMessage());
+        }
+
+        redirect('admin.php#admin-level-comments');
+    }
+
+    if ($action === 'update_role_permissions' && can_manage_role_permissions()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
             redirect('admin.php#admin-role-permissions');
@@ -618,6 +975,208 @@ if (method_is_post()) {
 
         redirect('admin.php#admin-role-permissions');
     }
+
+    if ($action === 'create_badge' && can_manage_badges()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect('admin.php#admin-badges');
+        }
+
+        $badgeName = normalize_badge_name((string) ($_POST['badge_name'] ?? ''));
+        $badgeDescription = normalize_badge_description((string) ($_POST['badge_description'] ?? ''));
+        try {
+            $badgeImageUrl = admin_badge_uploaded_image_url($_FILES['badge_image_file'] ?? null);
+        } catch (Throwable $throwable) {
+            flash('error', $throwable->getMessage());
+            redirect('admin.php#admin-badges');
+        }
+        if ($badgeName === '') {
+            flash('error', 'Badge name is required.');
+            redirect('admin.php#admin-badges');
+        }
+        if ($badgeImageUrl === null || $badgeImageUrl === '') {
+            flash('error', 'Badge image is required. Please upload a PNG, JPG, GIF, or WEBP image.');
+            redirect('admin.php#admin-badges');
+        }
+
+        try {
+            $stmt = db()->prepare(
+                'INSERT INTO badges (name, description, image_url, created_by_user_id)
+                 VALUES (:name, :description, :image_url, :created_by_user_id)'
+            );
+            $stmt->execute([
+                ':name' => $badgeName,
+                ':description' => $badgeDescription !== '' ? $badgeDescription : null,
+                ':image_url' => $badgeImageUrl,
+                ':created_by_user_id' => current_user_id(),
+            ]);
+
+            flash('success', 'Created badge "' . $badgeName . '".');
+        } catch (Throwable $throwable) {
+            $message = $throwable instanceof PDOException && (string) $throwable->getCode() === '23000'
+                ? 'A badge with that name already exists.'
+                : 'Could not create badge: ' . $throwable->getMessage();
+            flash('error', $message);
+        }
+
+        redirect('admin.php#admin-badges');
+    }
+
+    if ($action === 'update_badge' && can_manage_badges()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect('admin.php#admin-badges');
+        }
+
+        $badgeId = (int) ($_POST['badge_id'] ?? 0);
+        $badgeName = normalize_badge_name((string) ($_POST['badge_name'] ?? ''));
+        $badgeDescription = normalize_badge_description((string) ($_POST['badge_description'] ?? ''));
+
+        if ($badgeId < 1 || $badgeName === '') {
+            flash('error', 'Choose a badge and enter a badge name.');
+            redirect('admin.php#admin-badges');
+        }
+
+        try {
+            $pdo = db();
+            $badgeStmt = $pdo->prepare('SELECT id, name, image_url FROM badges WHERE id = :id LIMIT 1');
+            $badgeStmt->execute([':id' => $badgeId]);
+            $badge = $badgeStmt->fetch();
+            if ($badge === false) {
+                throw new RuntimeException('Badge not found.');
+            }
+
+            $uploadedBadgeImageUrl = admin_badge_uploaded_image_url($_FILES['badge_image_file'] ?? null);
+            $badgeImageUrl = $uploadedBadgeImageUrl;
+            if ($badgeImageUrl === null || $badgeImageUrl === '') {
+                $badgeImageUrl = normalize_badge_image_url((string) ($badge['image_url'] ?? ''));
+            }
+            if ($badgeImageUrl === '') {
+                throw new RuntimeException('Badge image is required. Please upload a PNG, JPG, GIF, or WEBP image.');
+            }
+
+            $update = $pdo->prepare(
+                'UPDATE badges
+                 SET name = :name,
+                     description = :description,
+                     image_url = :image_url,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = :id'
+            );
+            $update->execute([
+                ':name' => $badgeName,
+                ':description' => $badgeDescription !== '' ? $badgeDescription : null,
+                ':image_url' => $badgeImageUrl,
+                ':id' => $badgeId,
+            ]);
+
+            flash('success', 'Updated badge "' . $badgeName . '".');
+        } catch (Throwable $throwable) {
+            $message = $throwable instanceof PDOException && (string) $throwable->getCode() === '23000'
+                ? 'A badge with that name already exists.'
+                : $throwable->getMessage();
+            flash('error', $message);
+        }
+
+        redirect('admin.php#admin-badges');
+    }
+
+    if ($action === 'delete_badge' && can_manage_badges()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect('admin.php#admin-badges');
+        }
+
+        $badgeId = (int) ($_POST['badge_id'] ?? 0);
+        if ($badgeId < 1) {
+            flash('error', 'Choose a badge to delete.');
+            redirect('admin.php#admin-badges');
+        }
+
+        try {
+            $pdo = db();
+            $pdo->beginTransaction();
+
+            $badgeStmt = $pdo->prepare('SELECT id, name FROM badges WHERE id = :id LIMIT 1 FOR UPDATE');
+            $badgeStmt->execute([':id' => $badgeId]);
+            $badge = $badgeStmt->fetch();
+            if ($badge === false) {
+                throw new RuntimeException('Badge not found.');
+            }
+
+            $removeAssignments = $pdo->prepare('DELETE FROM user_badges WHERE badge_id = :badge_id');
+            $removeAssignments->execute([':badge_id' => $badgeId]);
+
+            $deleteBadge = $pdo->prepare('DELETE FROM badges WHERE id = :id');
+            $deleteBadge->execute([':id' => $badgeId]);
+
+            $pdo->commit();
+            flash('success', 'Deleted badge "' . (string) $badge['name'] . '".');
+        } catch (Throwable $throwable) {
+            if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', 'Could not delete badge: ' . $throwable->getMessage());
+        }
+
+        redirect('admin.php#admin-badges');
+    }
+
+    if ($action === 'assign_badge' && can_manage_badges()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect('admin.php#admin-badges');
+        }
+
+        $badgeId = (int) ($_POST['badge_id'] ?? 0);
+        $targetUsername = trim((string) ($_POST['badge_username'] ?? ''));
+        $mode = strtolower(trim((string) ($_POST['badge_mode'] ?? 'assign')));
+
+        if ($badgeId < 1 || $targetUsername === '' || !in_array($mode, ['assign', 'remove'], true)) {
+            flash('error', 'Choose a badge, user, and valid action.');
+            redirect('admin.php#admin-badges');
+        }
+
+        try {
+            $pdo = db();
+            $userId = admin_user_id_by_username($pdo, $targetUsername);
+            if ($userId === null) {
+                throw new RuntimeException('User not found.');
+            }
+
+            $badgeStmt = $pdo->prepare('SELECT id, name FROM badges WHERE id = :id AND COALESCE(is_active, 1) = 1 LIMIT 1');
+            $badgeStmt->execute([':id' => $badgeId]);
+            $badge = $badgeStmt->fetch();
+            if ($badge === false) {
+                throw new RuntimeException('Badge not found.');
+            }
+
+            if ($mode === 'assign') {
+                $assign = $pdo->prepare(
+                    'INSERT IGNORE INTO user_badges (user_id, badge_id, assigned_by_user_id)
+                     VALUES (:user_id, :badge_id, :assigned_by_user_id)'
+                );
+                $assign->execute([
+                    ':user_id' => $userId,
+                    ':badge_id' => $badgeId,
+                    ':assigned_by_user_id' => current_user_id(),
+                ]);
+                flash('success', 'Assigned "' . (string) $badge['name'] . '" to ' . $targetUsername . '.');
+            } else {
+                $remove = $pdo->prepare('DELETE FROM user_badges WHERE user_id = :user_id AND badge_id = :badge_id');
+                $remove->execute([
+                    ':user_id' => $userId,
+                    ':badge_id' => $badgeId,
+                ]);
+                flash('success', 'Removed "' . (string) $badge['name'] . '" from ' . $targetUsername . '.');
+            }
+        } catch (Throwable $throwable) {
+            flash('error', $throwable->getMessage());
+        }
+
+        redirect('admin.php#admin-badges');
+    }
+
     if ($action === 'claim_contributor' && can_claim_contributors()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
@@ -732,6 +1291,11 @@ if (method_is_post()) {
         $song = trim((string) ($_POST['song'] ?? ''));
         $objectCountInput = trim((string) ($_POST['object_count'] ?? ''));
         $legacy = isset($_POST['legacy']) ? 1 : 0;
+        $commentsDisabled = isset($_POST['comments_disabled']) ? 1 : 0;
+        $customLevelInfoUpdates = demon_level_info_custom_value_updates_from_post(
+            $_POST['custom_level_info'] ?? [],
+            $_POST['custom_level_info_clear'] ?? []
+        );
 
         $errors = [];
         if ($name === '') {
@@ -815,9 +1379,9 @@ if (method_is_post()) {
             $verifierUserId = admin_user_id_by_username($pdo, $verifier);
 
             $insert = $pdo->prepare('INSERT INTO demons
-                (position, name, difficulty, requirement, creator, creator_more, publisher, publisher_user_id, verifier, verifier_user_id, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy)
+                (position, name, difficulty, requirement, creator, creator_more, publisher, publisher_user_id, verifier, verifier_user_id, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy, comments_disabled)
                 VALUES
-                (:position, :name, :difficulty, :requirement, :creator, :creator_more, :publisher, :publisher_user_id, :verifier, :verifier_user_id, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy)');
+                (:position, :name, :difficulty, :requirement, :creator, :creator_more, :publisher, :publisher_user_id, :verifier, :verifier_user_id, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy, :comments_disabled)');
 
             $insert->execute([
                 ':position' => $position,
@@ -837,9 +1401,19 @@ if (method_is_post()) {
                 ':song' => $song !== '' ? $song : null,
                 ':object_count' => $objectCount,
                 ':legacy' => $legacy,
+                ':comments_disabled' => $commentsDisabled,
             ]);
 
             $newDemonId = (int) $pdo->lastInsertId();
+            if (!demon_level_info_save_custom_values(
+                $pdo,
+                $newDemonId,
+                $customLevelInfoUpdates['values'],
+                $customLevelInfoUpdates['clears']
+            )) {
+                throw new RuntimeException('Could not save custom Level Info values.');
+            }
+
             record_position_event($pdo, $newDemonId, null, $position, current_user_id(), 'Level added');
 
             $createdLevelData = [
@@ -852,7 +1426,9 @@ if (method_is_post()) {
                 'creator_more' => $creatorParts['creator_more'],
                 'creator_display' => $creatorParts['creator_display'],
                 'publisher' => $publisher,
+                'publisher_user_id' => $publisherUserId,
                 'verifier' => $verifier,
+                'verifier_user_id' => $verifierUserId,
                 'video_url' => $videoUrl,
                 'thumbnail_url' => $thumbnail,
                 'level_id' => $levelId,
@@ -860,6 +1436,7 @@ if (method_is_post()) {
                 'song' => $song,
                 'object_count' => $objectCount,
                 'legacy' => $legacy,
+                'comments_disabled' => $commentsDisabled,
             ];
 
             $pdo->commit();
@@ -896,8 +1473,13 @@ if (method_is_post()) {
         $songInput = trim((string) ($_POST['song'] ?? ''));
         $objectCountInput = trim((string) ($_POST['object_count'] ?? ''));
         $legacyStatus = (string) ($_POST['legacy_status'] ?? 'keep');
+        $commentStatus = strtolower(trim((string) ($_POST['comment_status'] ?? 'keep')));
         $newPositionInput = trim((string) ($_POST['new_position'] ?? ''));
         $moveNote = trim((string) ($_POST['move_note'] ?? ''));
+        $customLevelInfoUpdates = demon_level_info_custom_value_updates_from_post(
+            $_POST['custom_level_info'] ?? [],
+            $_POST['custom_level_info_clear'] ?? []
+        );
 
         if ($targetNameInput === '') {
             flash('error', 'Level name is required for editing.');
@@ -922,6 +1504,9 @@ if (method_is_post()) {
         }
         if (!in_array($legacyStatus, ['keep', 'normal', 'legacy'], true)) {
             $errors[] = 'Invalid legacy status option.';
+        }
+        if (!in_array($commentStatus, ['keep', 'enabled', 'disabled'], true)) {
+            $errors[] = 'Invalid comment status option.';
         }
 
         if ($errors !== []) {
@@ -982,6 +1567,7 @@ if (method_is_post()) {
                 'song' => (string) ($target['song'] ?? ''),
                 'object_count' => $target['object_count'] !== null ? (int) $target['object_count'] : null,
                 'legacy' => (int) $target['legacy'],
+                'comments_disabled' => (int) ($target['comments_disabled'] ?? 0),
             ];
 
             $currentPublisherUserId = isset($target['publisher_user_id']) ? (int) $target['publisher_user_id'] : 0;
@@ -1022,6 +1608,14 @@ if (method_is_post()) {
             }
             if ($legacyStatus === 'legacy') {
                 $finalLegacy = 1;
+            }
+
+            $finalCommentsDisabled = (int) ($target['comments_disabled'] ?? 0);
+            if ($commentStatus === 'enabled') {
+                $finalCommentsDisabled = 0;
+            }
+            if ($commentStatus === 'disabled') {
+                $finalCommentsDisabled = 1;
             }
 
             if ($finalName === '') {
@@ -1138,7 +1732,8 @@ if (method_is_post()) {
                     level_length = :level_length,
                     song = :song,
                     object_count = :object_count,
-                    legacy = :legacy
+                    legacy = :legacy,
+                    comments_disabled = :comments_disabled
                 WHERE id = :id');
 
             $update->execute([
@@ -1159,8 +1754,18 @@ if (method_is_post()) {
                 ':song' => $finalSong !== '' ? $finalSong : null,
                 ':object_count' => $finalObjectCount,
                 ':legacy' => $finalLegacy,
+                ':comments_disabled' => $finalCommentsDisabled,
                 ':id' => $demonId,
             ]);
+
+            if (!demon_level_info_save_custom_values(
+                $pdo,
+                $demonId,
+                $customLevelInfoUpdates['values'],
+                $customLevelInfoUpdates['clears']
+            )) {
+                throw new RuntimeException('Could not save custom Level Info values.');
+            }
 
             $afterLevelData = [
                 'id' => $demonId,
@@ -1180,6 +1785,7 @@ if (method_is_post()) {
                 'song' => $finalSong,
                 'object_count' => $finalObjectCount,
                 'legacy' => $finalLegacy,
+                'comments_disabled' => $finalCommentsDisabled,
             ];
 
             $pdo->commit();
@@ -1195,6 +1801,114 @@ if (method_is_post()) {
 
         redirect('admin.php');
     }
+
+    if ($action === 'delete_level' && can_manage_levels()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', 'Invalid session token.');
+            redirect('admin.php#admin-delete-level');
+        }
+
+        $targetNameInput = trim((string) ($_POST['demon_name'] ?? ''));
+        $confirmNameInput = trim((string) ($_POST['confirm_name'] ?? ''));
+
+        if ($targetNameInput === '' || $confirmNameInput === '') {
+            flash('error', 'Level name and confirmation are required for deletion.');
+            redirect('admin.php#admin-delete-level');
+        }
+
+        $pdo = db();
+
+        try {
+            $pdo->beginTransaction();
+
+            $targetStmt = $pdo->prepare('SELECT * FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1 FOR UPDATE');
+            $targetStmt->execute([':name' => $targetNameInput]);
+            $target = $targetStmt->fetch();
+
+            if ($target === false) {
+                $partial = $pdo->prepare('SELECT id, name FROM demons WHERE LOWER(name) LIKE :query ORDER BY position ASC LIMIT 2');
+                $partial->execute([':query' => '%' . strtolower($targetNameInput) . '%']);
+                $matches = $partial->fetchAll();
+
+                if (count($matches) === 0) {
+                    throw new RuntimeException('Level not found. Please type a valid level name.');
+                }
+                if (count($matches) > 1) {
+                    throw new RuntimeException('Multiple levels match this name. Please type the full level name.');
+                }
+
+                $targetStmt = $pdo->prepare('SELECT * FROM demons WHERE id = :id LIMIT 1 FOR UPDATE');
+                $targetStmt->execute([':id' => (int) $matches[0]['id']]);
+                $target = $targetStmt->fetch();
+            }
+
+            if ($target === false) {
+                throw new RuntimeException('Level not found.');
+            }
+
+            $demonId = (int) $target['id'];
+            $demonName = (string) $target['name'];
+            $oldPosition = (int) $target['position'];
+
+            if (strcasecmp($confirmNameInput, $demonName) !== 0) {
+                throw new RuntimeException('Confirmation does not match the selected level name.');
+            }
+
+            $recordsStmt = $pdo->prepare('SELECT COUNT(*) FROM completions WHERE demon_id = :id');
+            $recordsStmt->execute([':id' => $demonId]);
+            $recordsRemoved = (int) $recordsStmt->fetchColumn();
+            $maxPosition = (int) $pdo->query('SELECT COALESCE(MAX(position), 0) FROM demons')->fetchColumn();
+
+            $deleteRecords = $pdo->prepare('DELETE FROM completions WHERE demon_id = :id');
+            $deleteRecords->execute([':id' => $demonId]);
+
+            $deleteHistory = $pdo->prepare('DELETE FROM demon_position_history WHERE demon_id = :id');
+            $deleteHistory->execute([':id' => $demonId]);
+
+            $delete = $pdo->prepare('DELETE FROM demons WHERE id = :id');
+            $delete->execute([':id' => $demonId]);
+
+            if ($oldPosition < $maxPosition) {
+                $positionOffset = $maxPosition + 1;
+
+                $lift = $pdo->prepare('UPDATE demons
+                    SET position = position + :offset
+                    WHERE position > :old_position');
+                $lift->execute([
+                    ':offset' => $positionOffset,
+                    ':old_position' => $oldPosition,
+                ]);
+
+                $drop = $pdo->prepare('UPDATE demons
+                    SET position = position - :shift
+                    WHERE position > :lifted_from');
+                $drop->execute([
+                    ':shift' => $positionOffset + 1,
+                    ':lifted_from' => $oldPosition + $positionOffset,
+                ]);
+            }
+
+            $deletedLevelData = [
+                'id' => $demonId,
+                'position' => $oldPosition,
+                'name' => $demonName,
+                'records_removed' => $recordsRemoved,
+            ];
+
+            $pdo->commit();
+            admin_notify_level_deleted($deletedLevelData);
+
+            flash('success', 'Deleted #' . $oldPosition . ' - ' . $demonName . ' and shifted later positions down.');
+        } catch (Throwable $throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $throwable->getMessage());
+        }
+
+        redirect('admin.php#admin-delete-level');
+    }
+
     if ($action === 'move_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
@@ -1358,6 +2072,7 @@ if (method_is_post()) {
         $allowedRoleInputs = ['player', 'list_helper', 'list_editor', 'owner'];
         $role = normalize_user_role($roleInput);
         $isBannedInput = (string) ($_POST['is_banned'] ?? '0');
+        $commentsDisabledInput = (string) ($_POST['comments_disabled'] ?? '0');
         $bonusInput = trim((string) ($_POST['bonus_delta'] ?? '0'));
 
         if ($userId < 1 || !in_array($roleInput, $allowedRoleInputs, true)) {
@@ -1368,12 +2083,17 @@ if (method_is_post()) {
             flash('error', 'Invalid banned status value.');
             redirect($redirectTarget);
         }
+        if (!in_array($commentsDisabledInput, ['0', '1'], true)) {
+            flash('error', 'Invalid comment status value.');
+            redirect($redirectTarget);
+        }
         if (!is_numeric($bonusInput)) {
             flash('error', 'Bonus value must be a valid number.');
             redirect($redirectTarget);
         }
 
         $isBanned = $isBannedInput === '1' ? 1 : 0;
+        $commentsDisabled = $commentsDisabledInput === '1' ? 1 : 0;
         $bonusDelta = round((float) $bonusInput, 2);
         if ($bonusDelta < -999999 || $bonusDelta > 999999) {
             flash('error', 'Bonus value is out of range.');
@@ -1386,11 +2106,12 @@ if (method_is_post()) {
             $pdo->beginTransaction();
             ensure_bonus_points_column($pdo);
             ensure_user_banned_column($pdo);
+            ensure_user_comments_disabled_column($pdo);
             if (!schema_users_role_enum_ready($pdo)) {
                 schema_apply_users_role_enum($pdo);
             }
 
-            $userStmt = $pdo->prepare('SELECT id, username, role, is_banned, bonus_points, points FROM users WHERE id = :id LIMIT 1 FOR UPDATE');
+            $userStmt = $pdo->prepare('SELECT id, username, role, is_banned, comments_disabled, bonus_points, points FROM users WHERE id = :id LIMIT 1 FOR UPDATE');
             $userStmt->execute([':id' => $userId]);
             $target = $userStmt->fetch();
             if ($target === false) {
@@ -1400,11 +2121,12 @@ if (method_is_post()) {
             $currentRole = (string) $target['role'];
             $currentRoleNormalized = normalize_user_role($currentRole);
             $currentBanned = (int) ($target['is_banned'] ?? 0) === 1 ? 1 : 0;
+            $currentCommentsDisabled = (int) ($target['comments_disabled'] ?? 0) === 1 ? 1 : 0;
 
-            if (!has_owner_access() && $role !== $currentRoleNormalized) {
-                throw new RuntimeException('Only owner can change user roles.');
+            if (!can_manage_user_roles() && $role !== $currentRoleNormalized) {
+                throw new RuntimeException('You do not have permission to change user roles.');
             }
-            if (!has_owner_access()) {
+            if (!can_manage_user_roles()) {
                 $role = $currentRoleNormalized;
             }
 
@@ -1429,6 +2151,7 @@ if (method_is_post()) {
                 'username' => (string) $target['username'],
                 'role' => $currentRoleNormalized,
                 'is_banned' => $currentBanned,
+                'comments_disabled' => $currentCommentsDisabled,
                 'bonus_points' => $currentBonus,
                 'points' => $currentPoints,
             ];
@@ -1436,12 +2159,14 @@ if (method_is_post()) {
             $updateUser = $pdo->prepare('UPDATE users
                                          SET role = :role,
                                              is_banned = :is_banned,
+                                             comments_disabled = :comments_disabled,
                                              bonus_points = :bonus_points,
                                              points = ROUND(COALESCE(points, 0.00) + :bonus_delta, 2)
                                          WHERE id = :id');
             $updateUser->execute([
                 ':role' => $role,
                 ':is_banned' => $isBanned,
+                ':comments_disabled' => $commentsDisabled,
                 ':bonus_points' => $newBonus,
                 ':bonus_delta' => $bonusDelta,
                 ':id' => $userId,
@@ -1452,6 +2177,7 @@ if (method_is_post()) {
                 'username' => (string) $target['username'],
                 'role' => $role,
                 'is_banned' => $isBanned,
+                'comments_disabled' => $commentsDisabled,
                 'bonus_points' => $newBonus,
                 'points' => $newPoints,
             ];
@@ -1469,7 +2195,7 @@ if (method_is_post()) {
 
         redirect($redirectTarget);
     }
-    if ($action === 'reset_password' && has_owner_access()) {
+    if ($action === 'reset_password' && can_reset_passwords()) {
         $usersQueryRedirect = trim((string) ($_POST['users_q'] ?? ''));
         $redirectTarget = $usersQueryRedirect !== ''
             ? ('admin.php?users_q=' . rawurlencode($usersQueryRedirect) . '#admin-user-management')
@@ -1747,6 +2473,7 @@ $reviewed = db()->query('SELECT s.*, u.username AS submitter_username
 $adminPdo = db();
 $hasBonusPoints = admin_column_exists($adminPdo, 'users', 'bonus_points');
 $hasUserBanned = admin_column_exists($adminPdo, 'users', 'is_banned');
+$hasUserCommentsDisabled = admin_column_exists($adminPdo, 'users', 'comments_disabled');
 
 $stats = [
     'pending' => (int) $adminPdo->query('SELECT COUNT(*) FROM submissions WHERE status = "pending"')->fetchColumn(),
@@ -1788,6 +2515,7 @@ $usersSelectFields = [
     'points',
     $hasBonusPoints ? 'bonus_points' : '0.00 AS bonus_points',
     $hasUserBanned ? 'is_banned' : '0 AS is_banned',
+    $hasUserCommentsDisabled ? 'comments_disabled' : '0 AS comments_disabled',
     'created_at',
 ];
 $usersQuery = trim((string) ($_GET['users_q'] ?? ''));
@@ -1828,16 +2556,76 @@ $canManageUsers = can_manage_users();
 $canManageScoring = can_manage_scoring();
 $canClaimContributors = can_claim_contributors();
 $canReviewSubmissions = can_review_submissions();
-$canManageListVisibility = has_owner_access();
-$canManageRolePermissions = has_owner_access();
-$canManageUserRoles = has_owner_access();
+$canManageListVisibility = can_manage_list_visibility();
+$canManageRolePermissions = can_manage_role_permissions();
+$canManageUserRoles = can_manage_user_roles();
+$canManageBadges = can_manage_badges();
+$canModerateLevelComments = can_moderate_level_comments();
+$canResetPasswords = can_reset_passwords();
 $levelInfoFieldDefinitions = demon_level_info_field_definitions();
 $levelInfoRows = demon_level_info_rows();
+$levelInfoCustomRows = demon_level_info_custom_rows($levelInfoRows);
+$levelCommentsEnabled = level_comments_enabled();
+$hasCommentsDisabledColumn = admin_column_exists($adminPdo, 'demons', 'comments_disabled');
+$levelCommentsDisabledCount = $hasCommentsDisabledColumn
+    ? (int) $adminPdo->query('SELECT COUNT(*) FROM demons WHERE COALESCE(comments_disabled, 0) = 1')->fetchColumn()
+    : 0;
+$reportedLevelComments = [];
+$reportedLevelCommentsError = '';
+if ($canModerateLevelComments && schema_table_exists($adminPdo, 'level_comment_reports')) {
+    try {
+        $reportedCommentsSql = 'SELECT lc.id,
+                   lc.parent_comment_id,
+                   lc.body,
+                   lc.created_at,
+                   lc.updated_at,
+                   d.position AS demon_position,
+                   d.name AS demon_name,
+                   u.id AS user_id,
+                   u.username,
+                   u.country_code,
+                   ' . user_select_display_name_expression('u', 'username', 'display_name') . ',
+                   reports.report_count,
+                   reports.latest_reported_at,
+                   reports.report_summary
+            FROM (
+                SELECT lcr.comment_id,
+                       COUNT(*) AS report_count,
+                       MAX(lcr.created_at) AS latest_reported_at,
+                       GROUP_CONCAT(
+                           CONCAT(
+                               COALESCE(ru.username, CONCAT(\'User #\', lcr.user_id)),
+                               CASE
+                                   WHEN lcr.reason IS NULL OR TRIM(lcr.reason) = \'\' THEN \'\'
+                                   ELSE CONCAT(\': \', lcr.reason)
+                               END
+                           )
+                           ORDER BY lcr.created_at DESC
+                           SEPARATOR \'\\n\'
+                       ) AS report_summary
+                FROM level_comment_reports lcr
+                LEFT JOIN users ru ON ru.id = lcr.user_id
+                GROUP BY lcr.comment_id
+            ) reports
+            INNER JOIN level_comments lc ON lc.id = reports.comment_id
+            INNER JOIN demons d ON d.id = lc.demon_id
+            INNER JOIN users u ON u.id = lc.user_id
+            ORDER BY reports.latest_reported_at DESC
+            LIMIT 50';
+        $reportedLevelComments = $adminPdo->query($reportedCommentsSql)->fetchAll();
+    } catch (Throwable $throwable) {
+        $reportedLevelComments = [];
+        $reportedLevelCommentsError = $throwable->getMessage();
+    }
+}
+$badgeList = $canManageBadges ? badge_fetch_all($adminPdo) : [];
 $hasGeneralQuickActions = $canManageLevels
     || $canManageUsers
     || $canManageScoring
     || $canClaimContributors
-    || $canReviewSubmissions;
+    || $canReviewSubmissions
+    || $canManageBadges
+    || $canModerateLevelComments;
 $hasOwnerOnlyQuickActions = $canManageRolePermissions || $canManageListVisibility;
 $editableStaffRoles = ['list_editor', 'list_helper'];
 $permissionDefinitions = admin_permission_definitions();
@@ -1886,15 +2674,29 @@ render_header('Admin', 'admin');
                         <span class="admin-action-title">Edit Level</span>
                         <small>Update level info and ranking.</small>
                     </a>
+                    <a class="admin-action-tile" href="#admin-delete-level" data-open-admin-section="admin-delete-level">
+                        <span class="admin-action-title">Delete Level</span>
+                        <small>Remove a level and close the rank gap.</small>
+                    </a>
                     <a class="admin-action-tile" href="#admin-level-info-rows" data-open-admin-section="admin-level-info-rows">
                         <span class="admin-action-title">Level Info Rows</span>
                         <small>Control rows shown on level pages.</small>
+                    </a>
+                    <a class="admin-action-tile" href="#admin-level-comments" data-open-admin-section="admin-level-comments">
+                        <span class="admin-action-title">Level Comments</span>
+                        <small>Open or close comments globally and per level.</small>
+                    </a>
+                <?php endif; ?>
+                <?php if (!$canManageLevels && $canModerateLevelComments): ?>
+                    <a class="admin-action-tile" href="#admin-level-comments" data-open-admin-section="admin-level-comments">
+                        <span class="admin-action-title">Level Comments</span>
+                        <small>Review reported comments and delete abusive threads.</small>
                     </a>
                 <?php endif; ?>
                 <?php if ($canManageUsers): ?>
                     <a class="admin-action-tile" href="#admin-user-management" data-open-admin-section="admin-user-management">
                         <span class="admin-action-title">User Management</span>
-                        <small>Adjust role, ban status, and bonus points.</small>
+                        <small>Adjust role, ban status, comment access, and bonus points.</small>
                     </a>
                 <?php endif; ?>
                 <?php if ($canManageScoring): ?>
@@ -1919,6 +2721,12 @@ render_header('Admin', 'admin');
                         <small>Check moderation history.</small>
                     </a>
                 <?php endif; ?>
+                <?php if ($canManageBadges): ?>
+                    <a class="admin-action-tile" href="#admin-badges" data-open-admin-section="admin-badges">
+                        <span class="admin-action-title">Badges</span>
+                        <small>Upload badge icons and assign them to accounts.</small>
+                    </a>
+                <?php endif; ?>
                 <?php if (!$hasGeneralQuickActions): ?>
                     <div class="muted">No admin tools assigned for your current role.</div>
                 <?php endif; ?>
@@ -1927,21 +2735,21 @@ render_header('Admin', 'admin');
 
         <?php if ($hasOwnerOnlyQuickActions): ?>
             <div class="admin-action-group admin-action-group-owner">
-                <h3 class="admin-action-group-title">Owner Only</h3>
-                <p class="admin-action-group-note">These settings are only available to the owner role.</p>
+                <h3 class="admin-action-group-title">Restricted Tools</h3>
+                <p class="admin-action-group-note">These settings are available to roles with the matching permission.</p>
                 <div class="admin-quick-actions admin-quick-actions-owner">
                     <?php if ($canManageRolePermissions): ?>
                         <a class="admin-action-tile is-owner" href="#admin-role-permissions" data-open-admin-section="admin-role-permissions">
                             <span class="admin-action-title">Role Permissions</span>
                             <small>Customize List Editor and List Helper rights in database.</small>
-                            <span class="admin-action-meta">Owner Only</span>
+                            <span class="admin-action-meta">Restricted</span>
                         </a>
                     <?php endif; ?>
                     <?php if ($canManageListVisibility): ?>
                         <a class="admin-action-tile is-owner" href="#admin-list-visibility" data-open-admin-section="admin-list-visibility">
                             <span class="admin-action-title">List Visibility</span>
                             <small>Choose section visibility and rank ranges for Main/Extended.</small>
-                            <span class="admin-action-meta">Owner Only</span>
+                            <span class="admin-action-meta">Restricted</span>
                         </a>
                     <?php endif; ?>
                 </div>
@@ -1958,7 +2766,7 @@ render_header('Admin', 'admin');
 <section class="panel fade admin-tool-section admin-role-permissions-section" id="admin-role-permissions">
     <div class="panel-head">
         <h2>Role Permissions</h2>
-        <p>Owner can customize List Editor and List Helper permissions stored in database. Owner always keeps full permissions.</p>
+        <p>Customize List Editor and List Helper permissions stored in database. Owner always keeps full permissions.</p>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(base_url('admin.php#admin-role-permissions')) ?>">
@@ -2001,6 +2809,136 @@ render_header('Admin', 'admin');
 
         <button class="button blue hover" type="submit">Save Role Permissions</button>
     </form>
+</section>
+<?php endif; ?>
+
+<?php if ($canManageBadges): ?>
+<section class="panel fade admin-tool-section admin-badges-section" id="admin-badges">
+    <div class="panel-head">
+        <h2>Badges</h2>
+        <p>Uploaded badge images shown beside comments and on Stats Viewer profiles.</p>
+    </div>
+
+    <div class="admin-badge-layout">
+        <form class="stack-form admin-badge-form" method="post" action="<?= e(base_url('admin.php#admin-badges')) ?>" enctype="multipart/form-data">
+            <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="action" value="create_badge">
+
+            <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
+                <label class="field">
+                    <span>Badge Label</span>
+                    <input type="text" name="badge_name" maxlength="<?= (int) badge_name_max_length() ?>" placeholder="Mythic Badge" required>
+                </label>
+                <label class="field">
+                    <span>Description</span>
+                    <input type="text" name="badge_description" maxlength="<?= (int) badge_description_max_length() ?>" placeholder="Optional hover text">
+                </label>
+            </div>
+
+            <label class="field">
+                <span>Upload Badge Image</span>
+                <input type="file" name="badge_image_file" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp" required>
+            </label>
+
+            <button class="button blue hover" type="submit">Create Badge</button>
+        </form>
+
+        <form class="stack-form admin-badge-form" method="post" action="<?= e(base_url('admin.php#admin-badges')) ?>">
+            <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="action" value="assign_badge">
+
+            <label class="field">
+                <span>Badge</span>
+                <select name="badge_id" <?= $badgeList === [] ? 'disabled' : '' ?> required>
+                    <?php if ($badgeList === []): ?>
+                        <option value="">Create a badge first</option>
+                    <?php endif; ?>
+                    <?php foreach ($badgeList as $badge): ?>
+                        <option value="<?= (int) $badge['id'] ?>"><?= e((string) $badge['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+
+            <label class="field">
+                <span>Username</span>
+                <input type="text" name="badge_username" data-suggest-list="admin-badge-user-list" placeholder="Exact username" autocomplete="off" required>
+            </label>
+
+            <div class="admin-badge-actions">
+                <button class="button blue hover" type="submit" name="badge_mode" value="assign" <?= $badgeList === [] ? 'disabled' : '' ?>>Assign</button>
+                <button class="button ghost hover" type="submit" name="badge_mode" value="remove" <?= $badgeList === [] ? 'disabled' : '' ?>>Remove</button>
+            </div>
+        </form>
+    </div>
+
+    <datalist id="admin-badge-user-list">
+        <?php foreach ($claimUsers as $claimUser): ?>
+            <option value="<?= e((string) ($claimUser['username'] ?? '')) ?>"></option>
+        <?php endforeach; ?>
+    </datalist>
+
+    <div class="table-wrap admin-badge-table-wrap">
+        <table class="data-table admin-badge-table">
+            <thead>
+                <tr>
+                    <th>Badge</th>
+                    <th>Assigned</th>
+                    <th>Edit</th>
+                    <th>Delete</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if ($badgeList === []): ?>
+                    <tr><td colspan="4" class="muted">No badges created yet.</td></tr>
+                <?php endif; ?>
+                <?php foreach ($badgeList as $badge): ?>
+                    <?php $badgePreviewHtml = render_user_badges([$badge], 'admin-badge-preview'); ?>
+                    <tr>
+                        <td>
+                            <div class="admin-badge-preview-cell">
+                                <?= $badgePreviewHtml !== '' ? $badgePreviewHtml : '<span class="muted">No image</span>' ?>
+                                <div>
+                                    <strong><?= e((string) $badge['name']) ?></strong>
+                                    <small><?= e((string) ($badge['description'] !== '' ? $badge['description'] : 'No description')) ?></small>
+                                </div>
+                            </div>
+                        </td>
+                        <td><?= (int) ($badge['assigned_count'] ?? 0) ?></td>
+                        <td>
+                            <form class="admin-badge-edit-form" method="post" action="<?= e(base_url('admin.php#admin-badges')) ?>" enctype="multipart/form-data">
+                                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="action" value="update_badge">
+                                <input type="hidden" name="badge_id" value="<?= (int) $badge['id'] ?>">
+
+                                <label class="field">
+                                    <span>Label</span>
+                                    <input type="text" name="badge_name" maxlength="<?= (int) badge_name_max_length() ?>" value="<?= e((string) $badge['name']) ?>" required>
+                                </label>
+                                <label class="field">
+                                    <span>Description</span>
+                                    <input type="text" name="badge_description" maxlength="<?= (int) badge_description_max_length() ?>" value="<?= e((string) $badge['description']) ?>">
+                                </label>
+                                <label class="field">
+                                    <span>Replace Image</span>
+                                    <input type="file" name="badge_image_file" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp">
+                                </label>
+
+                                <button class="button blue hover small" type="submit">Save Badge</button>
+                            </form>
+                        </td>
+                        <td>
+                            <form method="post" action="<?= e(base_url('admin.php#admin-badges')) ?>">
+                                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="action" value="delete_badge">
+                                <input type="hidden" name="badge_id" value="<?= (int) $badge['id'] ?>">
+                                <button class="button danger hover small" type="submit" data-confirm="Delete this badge and remove it from every user?">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
 </section>
 <?php endif; ?>
 
@@ -2103,7 +3041,7 @@ render_header('Admin', 'admin');
 <section class="panel fade admin-tool-section" id="admin-level-info-rows">
     <div class="panel-head">
         <h2>Level Info Rows</h2>
-        <p>Choose which rows appear in the Level Info box on each level page.</p>
+        <p>Choose built-in rows or add custom rows for the Level Info box on each level page.</p>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(base_url('admin.php#admin-level-info-rows')) ?>" data-level-info-builder>
@@ -2112,18 +3050,42 @@ render_header('Admin', 'admin');
 
         <div class="admin-level-info-builder" data-level-info-rows>
             <?php foreach ($levelInfoRows as $row): ?>
+                <?php
+                $rowType = (string) ($row['type'] ?? 'field');
+                $rowType = $rowType === 'custom' ? 'custom' : 'field';
+                $isCustomRow = $rowType === 'custom';
+                $rowField = (string) ($row['field'] ?? 'position');
+                if (!array_key_exists($rowField, $levelInfoFieldDefinitions)) {
+                    $rowField = 'position';
+                }
+                $rowKey = (string) ($row['key'] ?? '');
+                $rowLabel = (string) ($row['label'] ?? '');
+                $rowDefaultValue = (string) ($row['default_value'] ?? '');
+                ?>
                 <div class="admin-level-info-row" data-level-info-row>
                     <label class="field">
+                        <span>Type</span>
+                        <select name="level_info_type[]" data-level-info-type>
+                            <option value="field" <?= !$isCustomRow ? 'selected' : '' ?>>Built-in Field</option>
+                            <option value="custom" <?= $isCustomRow ? 'selected' : '' ?>>Custom Row</option>
+                        </select>
+                    </label>
+                    <label class="field admin-level-info-field-wrap" data-level-info-field-wrap <?= $isCustomRow ? 'hidden' : '' ?>>
                         <span>Source</span>
                         <select name="level_info_field[]">
                             <?php foreach ($levelInfoFieldDefinitions as $field => $defaultLabel): ?>
-                                <option value="<?= e($field) ?>" <?= (string) ($row['field'] ?? '') === $field ? 'selected' : '' ?>><?= e($defaultLabel) ?></option>
+                                <option value="<?= e($field) ?>" <?= $rowField === $field ? 'selected' : '' ?>><?= e($defaultLabel) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </label>
+                    <input type="hidden" name="level_info_custom_key[]" value="<?= e($rowKey) ?>" data-level-info-custom-key>
                     <label class="field">
                         <span>Label</span>
-                        <input type="text" name="level_info_label[]" value="<?= e((string) ($row['label'] ?? '')) ?>" placeholder="Use default label">
+                        <input type="text" name="level_info_label[]" value="<?= e($rowLabel) ?>" placeholder="<?= $isCustomRow ? 'Custom label' : 'Use default label' ?>">
+                    </label>
+                    <label class="field admin-level-info-custom-wrap" data-level-info-custom-wrap <?= !$isCustomRow ? 'hidden' : '' ?>>
+                        <span>Default Value</span>
+                        <input type="text" name="level_info_default_value[]" value="<?= e($rowDefaultValue) ?>" placeholder="Optional fallback value">
                     </label>
                     <button class="button white hover admin-level-info-remove" type="button" data-level-info-remove>Remove</button>
                 </div>
@@ -2133,6 +3095,13 @@ render_header('Admin', 'admin');
         <template data-level-info-template>
             <div class="admin-level-info-row" data-level-info-row>
                 <label class="field">
+                    <span>Type</span>
+                    <select name="level_info_type[]" data-level-info-type>
+                        <option value="field" selected>Built-in Field</option>
+                        <option value="custom">Custom Row</option>
+                    </select>
+                </label>
+                <label class="field admin-level-info-field-wrap" data-level-info-field-wrap>
                     <span>Source</span>
                     <select name="level_info_field[]">
                         <?php foreach ($levelInfoFieldDefinitions as $field => $defaultLabel): ?>
@@ -2140,9 +3109,14 @@ render_header('Admin', 'admin');
                         <?php endforeach; ?>
                     </select>
                 </label>
+                <input type="hidden" name="level_info_custom_key[]" data-level-info-custom-key>
                 <label class="field">
                     <span>Label</span>
                     <input type="text" name="level_info_label[]" placeholder="Use default label">
+                </label>
+                <label class="field admin-level-info-custom-wrap" data-level-info-custom-wrap hidden>
+                    <span>Default Value</span>
+                    <input type="text" name="level_info_default_value[]" placeholder="Optional fallback value">
                 </label>
                 <button class="button white hover admin-level-info-remove" type="button" data-level-info-remove>Remove</button>
             </div>
@@ -2154,6 +3128,102 @@ render_header('Admin', 'admin');
             <button class="button white hover" type="submit" name="mode" value="restore">Restore Defaults</button>
         </div>
     </form>
+</section>
+<?php endif; ?>
+
+<?php if ($canManageLevels || $canModerateLevelComments): ?>
+<section class="panel fade admin-tool-section" id="admin-level-comments">
+    <div class="panel-head">
+        <h2>Level Comments</h2>
+        <p>Enable comments for the list, close comments per level, and review reported comments.</p>
+    </div>
+
+    <?php if ($canManageLevels): ?>
+    <form class="stack-form panel-narrow" method="post" action="<?= e(base_url('admin.php#admin-level-comments')) ?>">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="update_comment_settings">
+
+        <label class="cb-container" style="text-align: left;">
+            <input type="checkbox" name="comments_enabled" value="1" <?= $levelCommentsEnabled ? 'checked' : '' ?>>
+            <span class="checkmark"></span>
+            Enable comments across the whole list
+        </label>
+
+        <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
+            <label class="field">
+                <span>Level Name (optional)</span>
+                <input type="text" name="comment_level_name" data-suggest-list="admin-demon-list" placeholder="Type level name..." autocomplete="off">
+            </label>
+            <label class="field">
+                <span>Level Comment Status</span>
+                <select name="level_comment_status">
+                    <option value="keep">No level change</option>
+                    <option value="enabled">Enable on this level</option>
+                    <option value="disabled">Disable on this level</option>
+                </select>
+            </label>
+        </div>
+
+        <small class="muted" style="text-align: left;">
+            Current global status: <?= $levelCommentsEnabled ? 'enabled' : 'disabled' ?>.
+            Levels with comments disabled: <?= (int) $levelCommentsDisabledCount ?>.
+            Only logged-in users can post comments.
+        </small>
+
+        <button class="button blue hover" type="submit">Save Comment Settings</button>
+    </form>
+    <?php endif; ?>
+
+    <?php if ($canModerateLevelComments): ?>
+        <div class="admin-reported-comments">
+            <div class="panel-head">
+                <h3>Reported Comments</h3>
+                <?php if ($reportedLevelCommentsError !== ''): ?>
+                    <p>Could not load reported comments.</p>
+                <?php else: ?>
+                    <p><?= count($reportedLevelComments) ?> reported comment<?= count($reportedLevelComments) === 1 ? '' : 's' ?> awaiting review.</p>
+                <?php endif; ?>
+            </div>
+
+            <?php if ($reportedLevelCommentsError !== ''): ?>
+                <div class="info-red">Could not load reported comments: <?= e($reportedLevelCommentsError) ?></div>
+            <?php elseif ($reportedLevelComments === []): ?>
+                <p class="muted" style="text-align: left;">No reported comments right now.</p>
+            <?php endif; ?>
+
+            <?php foreach ($reportedLevelComments as $reportedComment): ?>
+                <?php
+                $reportedCommentId = (int) ($reportedComment['id'] ?? 0);
+                $reportedPosition = (int) ($reportedComment['demon_position'] ?? 0);
+                $reportedCommentUrl = $reportedPosition > 0
+                    ? base_url((string) $reportedPosition . '#comment-' . $reportedCommentId)
+                    : base_url('index.php');
+                $reportedAuthor = user_display_name_from_row($reportedComment);
+                $reportedBody = trim((string) ($reportedComment['body'] ?? ''));
+                $reportedSummary = trim((string) ($reportedComment['report_summary'] ?? ''));
+                ?>
+                <article class="moderation-card reported-comment-card">
+                    <div class="moderation-head">
+                        <strong>#<?= $reportedCommentId ?></strong>
+                        <span class="badge error"><?= (int) ($reportedComment['report_count'] ?? 0) ?> report<?= (int) ($reportedComment['report_count'] ?? 0) === 1 ? '' : 's' ?></span>
+                        <span class="muted">Latest: <?= e(date('Y-m-d H:i', strtotime((string) ($reportedComment['latest_reported_at'] ?? 'now')))) ?></span>
+                    </div>
+                    <dl class="key-value compact">
+                        <div><dt>Level</dt><dd><a class="link" href="<?= e($reportedCommentUrl) ?>">#<?= $reportedPosition ?> <?= e((string) ($reportedComment['demon_name'] ?? 'Unknown')) ?></a></dd></div>
+                        <div><dt>Author</dt><dd><?= e($reportedAuthor !== '' ? $reportedAuthor : (string) ($reportedComment['username'] ?? 'Unknown')) ?></dd></div>
+                        <div><dt>Comment</dt><dd><?= e($reportedBody !== '' ? $reportedBody : '-') ?></dd></div>
+                        <div><dt>Reports</dt><dd><?= nl2br(e($reportedSummary !== '' ? $reportedSummary : '-')) ?></dd></div>
+                    </dl>
+                    <form method="post" action="<?= e(base_url('admin.php#admin-level-comments')) ?>">
+                        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="delete_reported_level_comment">
+                        <input type="hidden" name="comment_id" value="<?= $reportedCommentId ?>">
+                        <button class="button danger hover small" type="submit" data-confirm="Delete this reported comment? Replies under it will also be removed.">Delete Comment</button>
+                    </form>
+                </article>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
 </section>
 <?php endif; ?>
 
@@ -2282,10 +3352,34 @@ render_header('Admin', 'admin');
             </label>
         </div>
 
+        <?php if ($levelInfoCustomRows !== []): ?>
+            <div class="admin-custom-level-info">
+                <h3>Custom Level Info</h3>
+                <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
+                    <?php foreach ($levelInfoCustomRows as $customRow): ?>
+                        <label class="field">
+                            <span><?= e((string) $customRow['label']) ?></span>
+                            <input
+                                type="text"
+                                name="custom_level_info[<?= e((string) $customRow['key']) ?>]"
+                                placeholder="<?= e((string) ($customRow['default_value'] !== '' ? $customRow['default_value'] : 'Optional value')) ?>"
+                            >
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+
         <label class="cb-container" style="text-align: left; margin-top: 6px;">
             <input type="checkbox" name="legacy" value="1">
             <span class="checkmark"></span>
             Mark as Legacy list entry
+        </label>
+
+        <label class="cb-container" style="text-align: left; margin-top: 6px;">
+            <input type="checkbox" name="comments_disabled" value="1">
+            <span class="checkmark"></span>
+            Disable comments for this level
         </label>
 
         <button class="button blue hover" type="submit">Add Level</button>
@@ -2373,13 +3467,46 @@ render_header('Admin', 'admin');
             </label>
         </div>
 
-        <div class="detail-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+        <?php if ($levelInfoCustomRows !== []): ?>
+            <div class="admin-custom-level-info">
+                <h3>Custom Level Info</h3>
+                <div class="admin-custom-level-info-grid">
+                    <?php foreach ($levelInfoCustomRows as $customRow): ?>
+                        <div class="admin-custom-level-info-field">
+                            <label class="field">
+                                <span><?= e((string) $customRow['label']) ?></span>
+                                <input
+                                    type="text"
+                                    name="custom_level_info[<?= e((string) $customRow['key']) ?>]"
+                                    placeholder="Leave blank to keep current/default"
+                                >
+                            </label>
+                            <label class="cb-container admin-custom-level-info-clear">
+                                <input type="checkbox" name="custom_level_info_clear[<?= e((string) $customRow['key']) ?>]" value="1">
+                                <span class="checkmark"></span>
+                                Clear
+                            </label>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <div class="detail-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
             <label class="field">
                 <span>Legacy Status</span>
                 <select name="legacy_status">
                     <option value="keep">Keep current</option>
                     <option value="normal">Set as Current List</option>
                     <option value="legacy">Set as Legacy</option>
+                </select>
+            </label>
+            <label class="field">
+                <span>Comment Status</span>
+                <select name="comment_status">
+                    <option value="keep">Keep current</option>
+                    <option value="enabled">Enable comments</option>
+                    <option value="disabled">Disable comments</option>
                 </select>
             </label>
             <label class="field">
@@ -2401,6 +3528,34 @@ render_header('Admin', 'admin');
         <?php endforeach; ?>
     </datalist>
 </section>
+
+<section class="panel fade admin-tool-section" id="admin-delete-level">
+    <div class="panel-head">
+        <h2>Delete Level</h2>
+        <p>Remove a level from the list. Records for that level are deleted and later positions are shifted down.</p>
+    </div>
+
+    <form class="stack-form panel-narrow" method="post" action="<?= e(base_url('admin.php#admin-delete-level')) ?>">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="delete_level">
+
+        <label class="field">
+            <span>Level to Delete</span>
+            <input type="text" name="demon_name" data-suggest-list="admin-demon-list" placeholder="Type level name..." autocomplete="off" required>
+        </label>
+
+        <label class="field">
+            <span>Confirm Level Name</span>
+            <input type="text" name="confirm_name" placeholder="Retype the exact level name" autocomplete="off" required>
+        </label>
+
+        <small class="muted" style="text-align: left;">
+            This cannot be undone from the admin panel. Existing completion records and position history for this level are removed.
+        </small>
+
+        <button class="button red hover" type="submit">Delete Level</button>
+    </form>
+</section>
 <?php endif; ?>
 
 <?php if ($canManageUsers): ?>
@@ -2408,9 +3563,9 @@ render_header('Admin', 'admin');
     <div class="panel-head">
         <h2>User Management</h2>
         <p>
-            Adjust role, banned status, and bonus points for each account in one place.
+            Adjust role, banned status, comment access, and bonus points for each account in one place.
             <?php if (!$canManageUserRoles): ?>
-                Only owner can change roles; your access is limited to ban/bonus updates.
+                Your access does not include role changes; role fields are read-only.
             <?php endif; ?>
         </p>
     </div>
@@ -2438,6 +3593,7 @@ render_header('Admin', 'admin');
                     <th>Email</th>
                     <th>Role</th>
                     <th>Banned</th>
+                    <th>Comments</th>
                     <th>Points</th>
                     <th>Bonus</th>
                     <th>Joined</th>
@@ -2446,9 +3602,9 @@ render_header('Admin', 'admin');
             </thead>
             <tbody id="admin-user-table-body">
                 <?php if ($usersQuery === ''): ?>
-                    <tr><td colspan="9" class="muted">Enter a username and press Search to load users.</td></tr>
+                    <tr><td colspan="10" class="muted">Enter a username and press Search to load users.</td></tr>
                 <?php elseif ($users === []): ?>
-                    <tr><td colspan="9" class="muted">No users found for "<?= e($usersQuery) ?>".</td></tr>
+                    <tr><td colspan="10" class="muted">No users found for "<?= e($usersQuery) ?>".</td></tr>
                 <?php endif; ?>
 
                 <?php foreach ($users as $member): ?>
@@ -2459,10 +3615,11 @@ render_header('Admin', 'admin');
                     $memberRoleLabel = role_label($memberRole);
                     $isCurrentUser = current_user_id() !== null && (int) $member['id'] === (int) current_user_id();
                     $isBanned = (int) ($member['is_banned'] ?? 0) === 1;
+                    $commentsDisabledForUser = (int) ($member['comments_disabled'] ?? 0) === 1;
                     $countryCode = normalize_country_code((string) ($member['country_code'] ?? ''));
                     $countryText = country_flag_html($countryCode);
                     ?>
-                    <tr data-user-row data-search-value="<?= e(strtolower((string) $member['username'] . ' ' . (string) ($member['email'] ?? '') . ' ' . (string) $member['role'] . ' ' . ($isBanned ? 'banned' : 'active'))) ?>">
+                    <tr data-user-row data-search-value="<?= e(strtolower((string) $member['username'] . ' ' . (string) ($member['email'] ?? '') . ' ' . (string) $member['role'] . ' ' . ($isBanned ? 'banned' : 'active') . ' ' . ($commentsDisabledForUser ? 'comments disabled' : 'comments enabled'))) ?>">
                         <td>#<?= (int) $member['id'] ?></td>
                         <td>
                             <div class="admin-user-identity">
@@ -2475,6 +3632,7 @@ render_header('Admin', 'admin');
                         <td><?= e((string) ($member['email'] ?: '-')) ?></td>
                         <td><span class="badge <?= $memberIsOwner ? 'approved' : '' ?>"><?= e(strtoupper($memberRoleLabel)) ?></span></td>
                         <td><span class="badge <?= $isBanned ? 'error' : 'success' ?>"><?= $isBanned ? 'BANNED' : 'ACTIVE' ?></span></td>
+                        <td><span class="badge <?= $commentsDisabledForUser ? 'error' : 'success' ?>"><?= $commentsDisabledForUser ? 'DISABLED' : 'ENABLED' ?></span></td>
                         <td><?= e(number_format((float) ($member['points'] ?? 0.0), 2)) ?></td>
                         <td><?= e(number_format((float) ($member['bonus_points'] ?? 0.0), 2)) ?></td>
                         <td><?= e(date('Y-m-d', strtotime((string) $member['created_at']))) ?></td>
@@ -2508,6 +3666,13 @@ render_header('Admin', 'admin');
                                         </select>
                                     </label>
                                     <label class="admin-user-edit-field">
+                                        <span>Comments</span>
+                                        <select name="comments_disabled">
+                                            <option value="0" <?= !$commentsDisabledForUser ? 'selected' : '' ?>>ENABLED</option>
+                                            <option value="1" <?= $commentsDisabledForUser ? 'selected' : '' ?>>DISABLED</option>
+                                        </select>
+                                    </label>
+                                    <label class="admin-user-edit-field">
                                         <span>Bonus +/-</span>
                                         <input type="number" name="bonus_delta" step="0.01" value="0" placeholder="+10 or -5">
                                     </label>
@@ -2515,13 +3680,15 @@ render_header('Admin', 'admin');
 
                                 <button class="button blue hover small" type="submit">Save</button>
                             </form>
-                            <form class="admin-user-reset-form" method="post" action="<?= e(base_url('admin.php')) ?>" style="display: inline;">
-                                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-                                <input type="hidden" name="action" value="reset_password">
-                                <input type="hidden" name="user_id" value="<?= (int) $member['id'] ?>">
-                                <input type="hidden" name="users_q" value="<?= e($usersQuery) ?>">
-                                <button class="button orange hover small" type="submit" title="Reset password to 123456">Reset Password</button>
-                            </form>
+                            <?php if ($canResetPasswords): ?>
+                                <form class="admin-user-reset-form" method="post" action="<?= e(base_url('admin.php')) ?>" style="display: inline;">
+                                    <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                                    <input type="hidden" name="action" value="reset_password">
+                                    <input type="hidden" name="user_id" value="<?= (int) $member['id'] ?>">
+                                    <input type="hidden" name="users_q" value="<?= e($usersQuery) ?>">
+                                    <button class="button orange hover small" type="submit" title="Reset password to 123456">Reset Password</button>
+                                </form>
+                            <?php endif; ?>
                             <?php if ($isCurrentUser): ?>
                                 <span class="muted admin-user-note">(you)</span>
                             <?php endif; ?>

@@ -1,10 +1,14 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/bootstrap.php';
+require dirname(__DIR__) . '/bootstrap.php';
+
+$nextRaw = trim((string) ($_GET['next'] ?? $_POST['next'] ?? ''));
+$hasNext = $nextRaw !== '';
+$nextPath = auth_next_path($nextRaw, 'submit.php');
 
 if (is_logged_in()) {
-    redirect('account.php');
+    redirect($hasNext ? $nextPath : 'account.php');
 }
 
 $form = [
@@ -70,11 +74,11 @@ if (method_is_post()) {
             if ($user !== false) {
                 login_user($user);
                 flash('success', 'Account created successfully. You can now submit records.');
-                redirect('submit.php');
+                redirect($nextPath);
             }
 
             flash('success', 'Account created. Please login.');
-            redirect('login.php');
+            redirect($hasNext ? 'login.php?next=' . rawurlencode($nextPath) : 'login.php');
         } catch (PDOException $exception) {
             if ($exception->getCode() === '23000') {
                 $errors[] = 'Username or email already exists.';
@@ -97,8 +101,9 @@ render_header('Register', 'register');
         <div class="info-red"><?= e(implode(' ', $errors)) ?></div>
     <?php endif; ?>
 
-    <form class="stack-form" method="post" action="<?= e(base_url('register.php')) ?>">
+    <form class="stack-form" method="post" action="<?= e($hasNext ? base_url('register.php?next=' . rawurlencode($nextPath)) : base_url('register.php')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="next" value="<?= e($nextPath) ?>">
 
         <label class="field">
             <span>Username</span>
@@ -124,7 +129,7 @@ render_header('Register', 'register');
     </form>
 
     <p class="muted" style="margin-top: 12px;">
-        Already registered? <a class="link" href="<?= e(base_url('login.php')) ?>">Login now</a>
+        Already registered? <a class="link" href="<?= e($hasNext ? base_url('login.php?next=' . rawurlencode($nextPath)) : base_url('login.php')) ?>">Login now</a>
     </p>
 </section>
 <?php render_footer(); ?>

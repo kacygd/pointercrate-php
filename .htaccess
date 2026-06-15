@@ -1,19 +1,64 @@
 RewriteEngine On
+Options -Indexes
+DirectoryIndex pages/index.php
 
 # Redirect explicit script URLs to pretty URLs.
-RewriteCond %{THE_REQUEST} \s/+[^\s]*index\.php(?:[?\s]|$) [NC]
-RewriteRule ^index\.php$ ./ [R=301,L]
+RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
+RewriteCond %{THE_REQUEST} \s+(.*/)index\.php(?:[?\s]|$) [NC]
+RewriteRule ^index\.php$ %1 [R=301,L]
 
-RewriteCond %{THE_REQUEST} \s/+[^\s]*?(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php(?:[?\s]|$) [NC]
-RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php$ ./$1 [R=301,L]
+RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
+RewriteCond %{THE_REQUEST} \s+(.*/)(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php(?:[?\s]|$) [NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php$ %1%2 [R=301,L]
+
+RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
+RewriteCond %{THE_REQUEST} \s+(.*/)demon\.php\?rank=([0-9]+) [NC]
+RewriteRule ^demon\.php$ %1%2? [R=301,L]
+
+RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
+RewriteCond %{THE_REQUEST} \s+(.*/)demon\.php\?id=([0-9]+) [NC]
+RewriteRule ^demon\.php$ %1id=%2? [R=301,L]
+
+# Hide internal page implementation URLs.
+RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
+RewriteCond %{THE_REQUEST} \s+(.*/)pages/?(?:[?\s]|$) [NC]
+RewriteRule ^pages/?$ %1 [R=301,L]
+
+RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
+RewriteCond %{THE_REQUEST} \s+(.*/)pages/index\.php(?:[?\s]|$) [NC]
+RewriteRule ^pages/index\.php$ %1 [R=301,L]
+
+RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
+RewriteCond %{THE_REQUEST} \s+(.*/)pages/(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php(?:[?\s]|$) [NC]
+RewriteRule ^pages/(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php$ %1%2 [R=301,L]
+
+RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
+RewriteCond %{THE_REQUEST} \s+(.*/)pages/demon\.php\?rank=([0-9]+) [NC]
+RewriteRule ^pages/demon\.php$ %1%2? [R=301,L]
+
+RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
+RewriteCond %{THE_REQUEST} \s+(.*/)pages/demon\.php\?id=([0-9]+) [NC]
+RewriteRule ^pages/demon\.php$ %1id=%2? [R=301,L]
+
+RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
+RewriteCond %{THE_REQUEST} \s+(.*/)pages/demon\.php(?:[?\s]|$) [NC]
+RewriteRule ^pages/demon\.php$ %1 [R=301,L]
+
+# Site root is a real directory, so route it before the "keep existing folders" guard.
+RewriteRule ^$ pages/index.php [L]
 
 # Keep existing files and folders untouched.
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
+# Legacy script routes are served internally so POST forms keep their data.
+RewriteRule ^index\.php$ pages/index.php [QSA,L,NC]
+RewriteRule ^demon\.php$ pages/demon.php [QSA,L,NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php$ pages/$1.php [QSA,L,NC]
+
 # Pretty URL routes.
-RewriteRule ^$ index.php [L]
-RewriteRule ^([0-9]+)$ demon.php?rank=$1 [QSA,L,NC]
-RewriteRule ^id=([0-9]+)$ demon.php?id=$1 [QSA,L,NC]
-RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)$ $1.php [QSA,L,NC]
+RewriteRule ^([0-9]+)/comments/page/([0-9]+)$ pages/demon.php?rank=$1&comment_page=$2 [QSA,L,NC]
+RewriteRule ^([0-9]+)$ pages/demon.php?rank=$1 [QSA,L,NC]
+RewriteRule ^id=([0-9]+)$ pages/demon.php?id=$1 [QSA,L,NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)$ pages/$1.php [QSA,L,NC]

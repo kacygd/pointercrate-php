@@ -24,7 +24,7 @@ $pdo = db();
 $logs = [];
 
 try {
-    if (schema_needs_update($pdo)) {
+    if (schema_config_needs_update() || schema_needs_update($pdo)) {
         $logs = array_merge($logs, run_schema_update($pdo));
     } else {
         $logs[] = '[OK] Schema is already up to date.';

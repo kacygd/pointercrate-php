@@ -65,6 +65,10 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
     $timeMachineActive = $activeNav === 'time_machine';
     $statsViewerActive = $activeNav === 'players';
     $demonlistActive = in_array($activeNav, ['list', 'guidelines', 'roulette', 'time_machine'], true);
+    $loginUrl = base_url('login.php');
+    if (!in_array($activeNav, ['login', 'register'], true)) {
+        $loginUrl = base_url('login.php?next=' . rawurlencode(auth_next_path(current_request_path_with_query())));
+    }
 
     $styleFilePath = dirname(__DIR__) . '/assets/css/style.css';
     $styleVersion = is_file($styleFilePath) ? (string) filemtime($styleFilePath) : '1';
@@ -146,7 +150,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
             </div>
         <?php else: ?>
             <div class="nav-group nav-group-right nav-auth-status">
-                <a class="nav-item hover white <?= $activeNav === 'login' ? 'active' : '' ?>" href="<?= e(base_url('login.php')) ?>">Login</a>
+                <a class="nav-item hover white <?= $activeNav === 'login' ? 'active' : '' ?>" href="<?= e($loginUrl) ?>">Login</a>
             </div>
         <?php endif; ?>
 
@@ -177,7 +181,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
                     <button type="submit" class="nav-item hover white">Logout</button>
                 </form>
             <?php else: ?>
-                <a class="nav-item hover white" href="<?= e(base_url('login.php')) ?>">Login</a>
+                <a class="nav-item hover white" href="<?= e($loginUrl) ?>">Login</a>
             <?php endif; ?>
         </div>
     </nav>
@@ -199,6 +203,18 @@ function render_footer(): void
 {
     $appName = app_name();
     $year = date('Y');
+    $currentPath = trim(strtolower(current_path()), '/');
+    $isAuthPage = str_ends_with($currentPath, 'login')
+        || str_ends_with($currentPath, 'login.php')
+        || str_ends_with($currentPath, 'register')
+        || str_ends_with($currentPath, 'register.php');
+    $footerLoginUrl = base_url('login.php');
+    $footerRegisterUrl = base_url('register.php');
+    if (!$isAuthPage) {
+        $footerNextPath = auth_next_path(current_request_path_with_query());
+        $footerLoginUrl = base_url('login.php?next=' . rawurlencode($footerNextPath));
+        $footerRegisterUrl = base_url('register.php?next=' . rawurlencode($footerNextPath));
+    }
     $scriptFilePath = dirname(__DIR__) . '/assets/js/app.js';
     $scriptVersion = is_file($scriptFilePath) ? (string) filemtime($scriptFilePath) : '1';
     $scriptSrc = base_url('assets/js/app.js?v=' . rawurlencode($scriptVersion));
@@ -223,8 +239,8 @@ function render_footer(): void
         </nav>
         <nav>
             <h2>Account</h2>
-            <a class="link" href="<?= e(base_url('register.php')) ?>">Register</a><br>
-            <a class="link" href="<?= e(base_url('login.php')) ?>">Login</a><br>
+            <a class="link" href="<?= e($footerRegisterUrl) ?>">Register</a><br>
+            <a class="link" href="<?= e($footerLoginUrl) ?>">Login</a><br>
             <a class="link" href="<?= e(base_url('account.php')) ?>">My Account</a>
         </nav>
     </div>

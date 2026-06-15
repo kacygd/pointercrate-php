@@ -1,6 +1,7 @@
 ﻿# Pointercrate-PHP
 
 Pointercrate-inspired demonlist built with PHP + MySQL.
+I suggest use x10Hosting
 
 ## Features
 
@@ -8,7 +9,7 @@ Pointercrate-inspired demonlist built with PHP + MySQL.
 - Level detail page with scoring, records, and position history.
 - Record submission to player account.
 - Admin panel for level management, rank changes, and user roles.
-- Discord webhook notifications.
+- Discord bot/webhook notifications.
 
 ## Requirements
 
@@ -37,6 +38,7 @@ When updating, remember to change the value `'updated' => 0` to update the datab
 ### Discord
 
 - `webhook_url`: event notifications (submit/review/level updates)
+- `bot_token`: Bot DM notify user about their record/verify
 - `server_widget_url`: full widget URL
   - example: `https://discord.com/widget?id=...&theme=dark`
 - `server_id`: used if `server_widget_url` is empty

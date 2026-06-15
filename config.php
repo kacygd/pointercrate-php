@@ -25,6 +25,8 @@ return [
     ],
     'discord' => [
         'webhook_url' => '', // Optional: paste Discord webhook URL to receive notifications
+        'bot_token' => '', // Optional: Discord bot token used for account linking DMs. Keep this server-side only.
+        'bot_api_base_url' => 'https://discord.com/api/v10',
         'server_widget_url' => '', // Optional: full Discord widget URL (https://discord.com/widget?id=...)
         'server_id' => '', // Optional: server ID used when server_widget_url is empty
         'server_theme' => 'dark', // dark | light

@@ -255,6 +255,22 @@ function discord_webhook_url(): ?string
     return $url;
 }
 
+function discord_bot_token(): ?string
+{
+    $token = trim((string) config('discord.bot_token', ''));
+    return $token !== '' ? $token : null;
+}
+
+function discord_bot_api_base_url(): string
+{
+    $url = trim((string) config('discord.bot_api_base_url', 'https://discord.com/api/v10'));
+    if ($url === '' || filter_var($url, FILTER_VALIDATE_URL) === false) {
+        return 'https://discord.com/api/v10';
+    }
+
+    return rtrim($url, '/');
+}
+
 function discord_server_widget_url(): ?string
 {
     $direct = trim((string) config('discord.server_widget_url', ''));
@@ -273,6 +289,41 @@ function discord_server_widget_url(): ?string
     }
 
     return 'https://discord.com/widget?id=' . rawurlencode($serverId) . '&theme=' . rawurlencode($theme);
+}
+
+function users_has_discord_link_columns(?PDO $pdo = null): bool
+{
+    static $checked = false;
+    static $result = false;
+
+    if ($checked) {
+        return $result;
+    }
+
+    $checked = true;
+
+    try {
+        $pdo = $pdo instanceof PDO ? $pdo : db();
+        $stmt = $pdo->query(
+            "SELECT COUNT(*)
+             FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND table_name = 'users'
+               AND column_name IN (
+                   'discord_user_id',
+                   'discord_username',
+                   'discord_link_pending_user_id',
+                   'discord_link_code_hash',
+                   'discord_link_code_expires_at',
+                   'discord_link_requested_at'
+               )"
+        );
+        $result = (int) $stmt->fetchColumn() >= 6;
+    } catch (Throwable) {
+        $result = false;
+    }
+
+    return $result;
 }
 
 function users_has_is_banned_column(?PDO $pdo = null): bool
@@ -294,6 +345,34 @@ function users_has_is_banned_column(?PDO $pdo = null): bool
              WHERE table_schema = DATABASE()
                AND table_name = 'users'
                AND column_name = 'is_banned'"
+        );
+        $result = (int) $stmt->fetchColumn() > 0;
+    } catch (Throwable) {
+        $result = false;
+    }
+
+    return $result;
+}
+
+function users_has_comments_disabled_column(?PDO $pdo = null): bool
+{
+    static $checked = false;
+    static $result = false;
+
+    if ($checked) {
+        return $result;
+    }
+
+    $checked = true;
+
+    try {
+        $pdo = $pdo instanceof PDO ? $pdo : db();
+        $stmt = $pdo->query(
+            "SELECT COUNT(*)
+             FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND table_name = 'users'
+               AND column_name = 'comments_disabled'"
         );
         $result = (int) $stmt->fetchColumn() > 0;
     } catch (Throwable) {
@@ -624,12 +703,66 @@ function demon_level_info_field_definitions(): array
     ];
 }
 
+function demon_level_info_label(string $label, string $fallback): string
+{
+    $label = normalize_display_name($label);
+    if ($label === '') {
+        $label = $fallback;
+    }
+
+    return function_exists('mb_substr')
+        ? (string) mb_substr($label, 0, 60, 'UTF-8')
+        : (string) substr($label, 0, 60);
+}
+
+function demon_level_info_value(string $value, int $maxLength = 500): string
+{
+    $value = preg_replace('/\s+/u', ' ', trim($value));
+    $value = trim((string) ($value ?? ''));
+
+    return function_exists('mb_substr')
+        ? (string) mb_substr($value, 0, $maxLength, 'UTF-8')
+        : (string) substr($value, 0, $maxLength);
+}
+
+function demon_level_info_normalize_custom_key(string $key): string
+{
+    $key = strtolower(trim($key));
+    $key = (string) preg_replace('/[^a-z0-9]+/', '-', $key);
+    $key = trim($key, '-');
+
+    return function_exists('mb_substr')
+        ? (string) mb_substr($key, 0, 64, 'UTF-8')
+        : (string) substr($key, 0, 64);
+}
+
+function demon_level_info_unique_custom_key(string $baseKey, array $seen): string
+{
+    $baseKey = demon_level_info_normalize_custom_key($baseKey);
+    if ($baseKey === '') {
+        $baseKey = 'custom';
+    }
+
+    $key = $baseKey;
+    $suffix = 2;
+    while (isset($seen['custom:' . $key])) {
+        $candidateBase = function_exists('mb_substr')
+            ? (string) mb_substr($baseKey, 0, 57, 'UTF-8')
+            : (string) substr($baseKey, 0, 57);
+        $key = rtrim($candidateBase, '-') . '-' . $suffix;
+        $suffix++;
+    }
+
+    return $key;
+}
+
 function demon_level_info_default_rows(): array
 {
     $definitions = demon_level_info_field_definitions();
     $rows = [];
     foreach (array_keys($definitions) as $field) {
         $rows[] = [
+            'type' => 'field',
             'field' => $field,
             'label' => $definitions[$field],
         ];
@@ -644,29 +777,45 @@ function demon_level_info_sanitize_rows(array $rows, bool $fallbackToDefault = f
     $sanitized = [];
     $seen = [];
 
-    foreach ($rows as $row) {
+    foreach ($rows as $index => $row) {
         if (!is_array($row)) {
             continue;
         }
 
-        $field = strtolower(trim((string) ($row['field'] ?? '')));
-        if (!array_key_exists($field, $definitions) || isset($seen[$field])) {
+        $type = strtolower(trim((string) ($row['type'] ?? 'field')));
+        if (!in_array($type, ['field', 'custom'], true)) {
+            $type = 'field';
+        }
+
+        if ($type === 'custom') {
+            $label = demon_level_info_label((string) ($row['label'] ?? ''), 'Custom Row');
+            $keyBase = (string) ($row['key'] ?? '');
+            if ($keyBase === '') {
+                $keyBase = $label !== '' ? $label : 'custom-' . ((int) $index + 1);
+            }
+            $key = demon_level_info_unique_custom_key($keyBase, $seen);
+
+            $sanitized[] = [
+                'type' => 'custom',
+                'key' => $key,
+                'label' => $label,
+                'default_value' => demon_level_info_value((string) ($row['default_value'] ?? '')),
+            ];
+            $seen['custom:' . $key] = true;
             continue;
         }
 
-        $label = normalize_display_name((string) ($row['label'] ?? ''));
-        if ($label === '') {
-            $label = $definitions[$field];
+        $field = strtolower(trim((string) ($row['field'] ?? '')));
+        if (!array_key_exists($field, $definitions) || isset($seen['field:' . $field])) {
+            continue;
         }
-        $label = function_exists('mb_substr')
-            ? (string) mb_substr($label, 0, 60, 'UTF-8')
-            : (string) substr($label, 0, 60);
 
         $sanitized[] = [
+            'type' => 'field',
             'field' => $field,
-            'label' => $label,
+            'label' => demon_level_info_label((string) ($row['label'] ?? ''), $definitions[$field]),
         ];
-        $seen[$field] = true;
+        $seen['field:' . $field] = true;
     }
 
     if ($sanitized === [] && $fallbackToDefault) {
@@ -712,6 +861,506 @@ function demon_level_info_restore_default_rows(): bool
     }
 
     return app_setting_set('demon.level_info_rows', $encoded);
+}
+
+function demon_level_info_custom_rows(?array $rows = null): array
+{
+    $rows = $rows ?? demon_level_info_rows();
+    $customRows = [];
+
+    foreach ($rows as $row) {
+        if (!is_array($row) || (string) ($row['type'] ?? 'field') !== 'custom') {
+            continue;
+        }
+
+        $key = demon_level_info_normalize_custom_key((string) ($row['key'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+
+        $customRows[] = [
+            'type' => 'custom',
+            'key' => $key,
+            'label' => demon_level_info_label((string) ($row['label'] ?? ''), 'Custom Row'),
+            'default_value' => demon_level_info_value((string) ($row['default_value'] ?? '')),
+        ];
+    }
+
+    return $customRows;
+}
+
+function demon_level_info_custom_values(PDO $pdo, int $demonId): array
+{
+    if ($demonId < 1) {
+        return [];
+    }
+
+    try {
+        $stmt = $pdo->prepare('SELECT row_key, row_value FROM demon_level_info_values WHERE demon_id = :demon_id');
+        $stmt->execute([':demon_id' => $demonId]);
+        $values = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $key = demon_level_info_normalize_custom_key((string) ($row['row_key'] ?? ''));
+            if ($key === '') {
+                continue;
+            }
+
+            $values[$key] = (string) ($row['row_value'] ?? '');
+        }
+
+        return $values;
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+function demon_level_info_custom_value_updates_from_post(mixed $rawValues, mixed $rawClears): array
+{
+    $values = [];
+    if (is_array($rawValues)) {
+        foreach ($rawValues as $key => $value) {
+            $normalizedKey = demon_level_info_normalize_custom_key((string) $key);
+            if ($normalizedKey === '') {
+                continue;
+            }
+
+            $values[$normalizedKey] = demon_level_info_value((string) $value);
+        }
+    }
+
+    $clears = [];
+    if (is_array($rawClears)) {
+        foreach ($rawClears as $key => $value) {
+            $normalizedKey = demon_level_info_normalize_custom_key((string) $key);
+            if ($normalizedKey === '') {
+                continue;
+            }
+
+            if (app_setting_truthy((string) $value, false)) {
+                $clears[] = $normalizedKey;
+            }
+        }
+    }
+
+    return [
+        'values' => $values,
+        'clears' => array_values(array_unique($clears)),
+    ];
+}
+
+function demon_level_info_save_custom_values(PDO $pdo, int $demonId, array $values, array $clearKeys = []): bool
+{
+    if ($demonId < 1) {
+        return false;
+    }
+
+    $allowedKeys = [];
+    foreach (demon_level_info_custom_rows() as $row) {
+        $allowedKeys[(string) $row['key']] = true;
+    }
+    if ($allowedKeys === []) {
+        return true;
+    }
+
+    try {
+        if ($clearKeys !== []) {
+            $delete = $pdo->prepare('DELETE FROM demon_level_info_values WHERE demon_id = :demon_id AND row_key = :row_key');
+            foreach ($clearKeys as $key) {
+                $key = demon_level_info_normalize_custom_key((string) $key);
+                if ($key === '' || !isset($allowedKeys[$key])) {
+                    continue;
+                }
+
+                $delete->execute([
+                    ':demon_id' => $demonId,
+                    ':row_key' => $key,
+                ]);
+            }
+        }
+
+        $upsert = $pdo->prepare(
+            'INSERT INTO demon_level_info_values (demon_id, row_key, row_value)
+             VALUES (:demon_id, :row_key, :row_value)
+             ON DUPLICATE KEY UPDATE
+                row_value = VALUES(row_value),
+                updated_at = CURRENT_TIMESTAMP'
+        );
+        foreach ($values as $key => $value) {
+            $key = demon_level_info_normalize_custom_key((string) $key);
+            $value = demon_level_info_value((string) $value);
+            if ($key === '' || !isset($allowedKeys[$key]) || $value === '') {
+                continue;
+            }
+
+            $upsert->execute([
+                ':demon_id' => $demonId,
+                ':row_key' => $key,
+                ':row_value' => $value,
+            ]);
+        }
+
+        return true;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+function level_comments_enabled(): bool
+{
+    return app_setting_truthy(app_setting_get('level_comments.enabled', null), true);
+}
+
+function level_comments_set_enabled(bool $enabled): bool
+{
+    return app_setting_set('level_comments.enabled', $enabled ? '1' : '0');
+}
+
+function level_comments_enabled_for_demon(array $demon): bool
+{
+    return level_comments_enabled() && (int) ($demon['comments_disabled'] ?? 0) !== 1;
+}
+
+function current_user_comments_disabled(): bool
+{
+    if (!users_has_comments_disabled_column()) {
+        return false;
+    }
+
+    $user = current_user();
+    return $user !== null && (int) ($user['comments_disabled'] ?? 0) === 1;
+}
+
+function current_user_can_comment(): bool
+{
+    return is_logged_in() && !current_user_comments_disabled();
+}
+
+function level_comments_disabled_message(array $demon): ?string
+{
+    if (!level_comments_enabled()) {
+        return 'Comments are disabled for the whole list.';
+    }
+
+    if ((int) ($demon['comments_disabled'] ?? 0) === 1) {
+        return 'Comments are disabled for this level.';
+    }
+
+    return null;
+}
+
+function level_comment_body_max_length(): int
+{
+    return 1000;
+}
+
+function normalize_level_comment_body(string $body): string
+{
+    $body = str_replace(["\r\n", "\r"], "\n", trim($body));
+    $body = (string) preg_replace("/[ \t]+/u", ' ', $body);
+    $body = (string) preg_replace("/\n{3,}/u", "\n\n", $body);
+
+    return function_exists('mb_substr')
+        ? (string) mb_substr($body, 0, level_comment_body_max_length(), 'UTF-8')
+        : (string) substr($body, 0, level_comment_body_max_length());
+}
+
+function can_pin_level_comments(): bool
+{
+    return can_moderate_level_comments();
+}
+
+function level_comment_reaction_value(string $reaction): ?int
+{
+    return match (strtolower(trim($reaction))) {
+        'like' => 1,
+        'dislike' => -1,
+        default => null,
+    };
+}
+
+function level_comment_report_reason_max_length(): int
+{
+    return 255;
+}
+
+function normalize_level_comment_report_reason(string $reason): string
+{
+    $reason = trim(str_replace(["\r", "\n"], ' ', $reason));
+    $reason = (string) preg_replace('/\s+/u', ' ', $reason);
+
+    return function_exists('mb_substr')
+        ? (string) mb_substr($reason, 0, level_comment_report_reason_max_length(), 'UTF-8')
+        : (string) substr($reason, 0, level_comment_report_reason_max_length());
+}
+
+function badge_name_max_length(): int
+{
+    return 36;
+}
+
+function badge_description_max_length(): int
+{
+    return 140;
+}
+
+function normalize_badge_name(string $name): string
+{
+    $name = normalize_display_name($name);
+
+    return function_exists('mb_substr')
+        ? (string) mb_substr($name, 0, badge_name_max_length(), 'UTF-8')
+        : (string) substr($name, 0, badge_name_max_length());
+}
+
+function normalize_badge_description(string $description): string
+{
+    $description = normalize_display_name($description);
+
+    return function_exists('mb_substr')
+        ? (string) mb_substr($description, 0, badge_description_max_length(), 'UTF-8')
+        : (string) substr($description, 0, badge_description_max_length());
+}
+
+function normalize_badge_image_url(string $imageUrl): string
+{
+    $imageUrl = trim(str_replace(["\r", "\n"], '', $imageUrl));
+    if ($imageUrl === '') {
+        return '';
+    }
+
+    $imageUrl = function_exists('mb_substr')
+        ? (string) mb_substr($imageUrl, 0, 255, 'UTF-8')
+        : (string) substr($imageUrl, 0, 255);
+
+    if (preg_match('#^https?://#i', $imageUrl) === 1) {
+        return filter_var($imageUrl, FILTER_VALIDATE_URL) !== false ? $imageUrl : '';
+    }
+
+    if (str_starts_with($imageUrl, '//')) {
+        return '';
+    }
+
+    return preg_match('#^[A-Za-z0-9_./~%-]+\.(?:png|jpe?g|gif|webp|svg)$#i', ltrim($imageUrl, '/')) === 1
+        ? $imageUrl
+        : '';
+}
+
+function badge_image_src(string $imageUrl): string
+{
+    $imageUrl = normalize_badge_image_url($imageUrl);
+    if ($imageUrl === '') {
+        return '';
+    }
+
+    return preg_match('#^https?://#i', $imageUrl) === 1
+        ? $imageUrl
+        : base_url($imageUrl);
+}
+
+function normalize_badge_color(string $color, string $fallback = '#465A7A'): string
+{
+    $normalize = static function (string $value): ?string {
+        $value = strtoupper(trim($value));
+        if (preg_match('/^#?([0-9A-F]{3})$/', $value, $match) === 1) {
+            $hex = $match[1];
+            return '#' . $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+        }
+        if (preg_match('/^#?([0-9A-F]{6})$/', $value, $match) === 1) {
+            return '#' . $match[1];
+        }
+
+        return null;
+    };
+
+    return $normalize($color) ?? $normalize($fallback) ?? '#465A7A';
+}
+
+function badge_text_color_for_background(string $background): string
+{
+    $hex = ltrim(normalize_badge_color($background), '#');
+    $r = hexdec(substr($hex, 0, 2)) / 255;
+    $g = hexdec(substr($hex, 2, 2)) / 255;
+    $b = hexdec(substr($hex, 4, 2)) / 255;
+
+    $linear = static function (float $channel): float {
+        return $channel <= 0.03928
+            ? $channel / 12.92
+            : (($channel + 0.055) / 1.055) ** 2.4;
+    };
+
+    $luminance = 0.2126 * $linear($r) + 0.7152 * $linear($g) + 0.0722 * $linear($b);
+    return $luminance > 0.48 ? '#182030' : '#FFFFFF';
+}
+
+function sanitize_badge_row(array $row): ?array
+{
+    $name = normalize_badge_name((string) ($row['name'] ?? ''));
+    if ($name === '') {
+        return null;
+    }
+
+    $color = normalize_badge_color((string) ($row['color'] ?? ''));
+    $textColor = normalize_badge_color(
+        (string) ($row['text_color'] ?? ''),
+        badge_text_color_for_background($color)
+    );
+
+    return [
+        'id' => (int) ($row['id'] ?? 0),
+        'name' => $name,
+        'description' => normalize_badge_description((string) ($row['description'] ?? '')),
+        'image_url' => normalize_badge_image_url((string) ($row['image_url'] ?? '')),
+        'color' => $color,
+        'text_color' => $textColor,
+        'is_active' => (int) ($row['is_active'] ?? 1) === 1,
+        'assigned_count' => (int) ($row['assigned_count'] ?? 0),
+        'created_at' => (string) ($row['created_at'] ?? ''),
+        'assigned_at' => (string) ($row['assigned_at'] ?? ''),
+    ];
+}
+
+function badge_fetch_all(PDO $pdo, bool $activeOnly = true): array
+{
+    try {
+        $sql = 'SELECT b.id, b.name, b.description, b.image_url, b.color, b.text_color, b.is_active, b.created_at,
+                       COALESCE(assigned.assignment_count, 0) AS assigned_count
+                FROM badges b
+                LEFT JOIN (
+                    SELECT badge_id, COUNT(*) AS assignment_count
+                    FROM user_badges
+                    GROUP BY badge_id
+                ) assigned ON assigned.badge_id = b.id';
+        if ($activeOnly) {
+            $sql .= ' WHERE COALESCE(b.is_active, 1) = 1';
+        }
+        $sql .= ' ORDER BY b.created_at DESC, b.name ASC';
+
+        $badges = [];
+        foreach ($pdo->query($sql)->fetchAll() as $row) {
+            $badge = is_array($row) ? sanitize_badge_row($row) : null;
+            if ($badge !== null && (int) $badge['id'] > 0) {
+                $badges[] = $badge;
+            }
+        }
+
+        return $badges;
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+function user_badges_by_user_ids(PDO $pdo, array $userIds): array
+{
+    $ids = [];
+    foreach ($userIds as $userId) {
+        $userId = (int) $userId;
+        if ($userId > 0) {
+            $ids[$userId] = $userId;
+        }
+    }
+
+    if ($ids === []) {
+        return [];
+    }
+
+    try {
+        $placeholders = [];
+        $params = [];
+        foreach (array_values($ids) as $index => $userId) {
+            $placeholder = ':user_id_' . $index;
+            $placeholders[] = $placeholder;
+            $params[$placeholder] = $userId;
+        }
+
+        $stmt = $pdo->prepare(
+            'SELECT ub.user_id, ub.assigned_at,
+                    b.id, b.name, b.description, b.image_url, b.color, b.text_color, b.is_active, b.created_at
+             FROM user_badges ub
+             INNER JOIN badges b ON b.id = ub.badge_id
+             WHERE ub.user_id IN (' . implode(', ', $placeholders) . ')
+               AND COALESCE(b.is_active, 1) = 1
+             ORDER BY ub.assigned_at ASC, b.name ASC'
+        );
+        $stmt->execute($params);
+
+        $badgesByUser = [];
+        foreach ($stmt->fetchAll() as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $userId = (int) ($row['user_id'] ?? 0);
+            $badge = sanitize_badge_row($row);
+            if ($userId < 1 || $badge === null || (int) $badge['id'] < 1) {
+                continue;
+            }
+
+            $badgesByUser[$userId][] = $badge;
+        }
+
+        return $badgesByUser;
+    } catch (Throwable) {
+        return [];
+    }
+}
+
+function user_badges_for_user(PDO $pdo, int $userId): array
+{
+    $badges = user_badges_by_user_ids($pdo, [$userId]);
+    return $badges[$userId] ?? [];
+}
+
+function user_badges_payload(array $badges): array
+{
+    $payload = [];
+    foreach ($badges as $badge) {
+        if (!is_array($badge)) {
+            continue;
+        }
+
+        $sanitized = sanitize_badge_row($badge);
+        if ($sanitized === null || (int) $sanitized['id'] < 1) {
+            continue;
+        }
+
+        $payload[] = [
+            'id' => (int) $sanitized['id'],
+            'name' => (string) $sanitized['name'],
+            'description' => (string) $sanitized['description'],
+            'image_url' => badge_image_src((string) $sanitized['image_url']),
+            'color' => (string) $sanitized['color'],
+            'text_color' => (string) $sanitized['text_color'],
+        ];
+    }
+
+    return $payload;
+}
+
+function render_user_badges(array $badges, string $className = ''): string
+{
+    $items = [];
+    foreach (user_badges_payload($badges) as $badge) {
+        $name = (string) $badge['name'];
+        $description = (string) $badge['description'];
+        $title = $description !== '' ? $name . ' - ' . $description : $name;
+        $imageUrl = badge_image_src((string) ($badge['image_url'] ?? ''));
+        if ($imageUrl === '') {
+            continue;
+        }
+
+        $image = '<img class="user-badge-image" src="' . e($imageUrl) . '" alt="' . e($name) . '" loading="lazy">';
+
+        $items[] = '<span class="user-badge" title="' . e($title) . '">' . $image . '</span>';
+    }
+
+    if ($items === []) {
+        return '';
+    }
+
+    $className = trim((string) preg_replace('/[^a-zA-Z0-9 _-]+/', '', $className));
+    $classAttr = 'user-badges' . ($className !== '' ? ' ' . $className : '');
+
+    return '<span class="' . e($classAttr) . '">' . implode('', $items) . '</span>';
 }
 
 function demonlist_list_bucket(int $position, bool $legacy): string
@@ -1025,15 +1674,72 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
         'updated_users' => $updatedUsers,
     ];
 }
+
+function discord_truncate_text(string $text, int $maxLength): string
+{
+    $text = trim($text);
+    if ($maxLength < 1 || $text === '') {
+        return '';
+    }
+
+    return function_exists('mb_substr')
+        ? (string) mb_substr($text, 0, $maxLength, 'UTF-8')
+        : (string) substr($text, 0, $maxLength);
+}
+
+function discord_text_length(string $text): int
+{
+    return function_exists('mb_strlen') ? (int) mb_strlen($text, 'UTF-8') : strlen($text);
+}
+
+function discord_take_text(string $text, int $fieldLimit, int &$remaining): string
+{
+    if ($remaining < 1) {
+        return '';
+    }
+
+    $text = discord_truncate_text($text, min($fieldLimit, $remaining));
+    $remaining -= discord_text_length($text);
+
+    return $text;
+}
+
+function discord_log_delivery_failure(string $target, int $status, string $message = ''): void
+{
+    $target = discord_truncate_text($target, 80);
+    if ($target === '') {
+        $target = 'delivery';
+    }
+
+    $summary = '[Discord] ' . $target . ' failed';
+    if ($status > 0) {
+        $summary .= ' with HTTP ' . $status;
+    }
+
+    $message = discord_truncate_text($message, 500);
+    if ($message !== '') {
+        $summary .= ': ' . $message;
+    }
+
+    error_log($summary);
+}
+
 function discord_normalize_embed(array $embed): array
 {
     $normalized = [];
+    $remaining = 6000;
 
     if (isset($embed['title'])) {
-        $normalized['title'] = mb_substr(trim((string) $embed['title']), 0, 256);
+        $title = discord_take_text((string) $embed['title'], 256, $remaining);
+        if ($title !== '') {
+            $normalized['title'] = $title;
+        }
     }
     if (isset($embed['description'])) {
-        $normalized['description'] = mb_substr(trim((string) $embed['description']), 0, 4096);
+        $description = discord_take_text((string) $embed['description'], 4096, $remaining);
+        if ($description !== '') {
+            $normalized['description'] = $description;
+        }
     }
     if (isset($embed['url']) && filter_var((string) $embed['url'], FILTER_VALIDATE_URL) !== false) {
         $normalized['url'] = (string) $embed['url'];
@@ -1052,11 +1758,13 @@ function discord_normalize_embed(array $embed): array
                 continue;
             }
 
-            $name = mb_substr(trim((string) ($field['name'] ?? '')), 0, 256);
-            $value = mb_substr(trim((string) ($field['value'] ?? '')), 0, 1024);
+            $fieldRemaining = $remaining;
+            $name = discord_take_text((string) ($field['name'] ?? ''), 256, $fieldRemaining);
+            $value = discord_take_text((string) ($field['value'] ?? ''), 1024, $fieldRemaining);
             if ($name === '' || $value === '') {
                 continue;
             }
+            $remaining = $fieldRemaining;
 
             $fields[] = [
                 'name' => $name,
@@ -1075,14 +1783,14 @@ function discord_normalize_embed(array $embed): array
     }
 
     if (isset($embed['footer']) && is_array($embed['footer'])) {
-        $footerText = mb_substr(trim((string) ($embed['footer']['text'] ?? '')), 0, 2048);
+        $footerText = discord_take_text((string) ($embed['footer']['text'] ?? ''), 2048, $remaining);
         if ($footerText !== '') {
             $normalized['footer'] = ['text' => $footerText];
         }
     }
 
     if (isset($embed['author']) && is_array($embed['author'])) {
-        $authorName = mb_substr(trim((string) ($embed['author']['name'] ?? '')), 0, 256);
+        $authorName = discord_take_text((string) ($embed['author']['name'] ?? ''), 256, $remaining);
         if ($authorName !== '') {
             $normalized['author'] = ['name' => $authorName];
         }
@@ -1108,8 +1816,8 @@ function send_discord_webhook(string $content, array $embeds = []): bool
     }
 
     $payload = [
-        'username' => mb_substr($webhookUsername, 0, 80),
-        'content' => mb_substr(trim($content), 0, 1900),
+        'username' => discord_truncate_text($webhookUsername, 80),
+        'content' => discord_truncate_text($content, 1900),
         'allowed_mentions' => ['parse' => []],
     ];
     if ($webhookAvatarUrl !== '') {
@@ -1123,16 +1831,16 @@ function send_discord_webhook(string $content, array $embeds = []): bool
                 continue;
             }
 
+            if (!isset($embed['footer'])) {
+                $embed['footer'] = ['text' => app_name() . ' Admin Event'];
+            }
+            if (!isset($embed['timestamp'])) {
+                $embed['timestamp'] = gmdate('c');
+            }
+
             $normalized = discord_normalize_embed($embed);
             if ($normalized === []) {
                 continue;
-            }
-
-            if (!isset($normalized['footer'])) {
-                $normalized['footer'] = ['text' => app_name() . ' Admin Event'];
-            }
-            if (!isset($normalized['timestamp'])) {
-                $normalized['timestamp'] = gmdate('c');
             }
 
             $normalizedEmbeds[] = $normalized;
@@ -1148,12 +1856,14 @@ function send_discord_webhook(string $content, array $embeds = []): bool
 
     $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($json === false) {
+        discord_log_delivery_failure('webhook json encode', 0, json_last_error_msg());
         return false;
     }
 
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
         if ($ch === false) {
+            discord_log_delivery_failure('webhook curl init', 0);
             return false;
         }
 
@@ -1169,11 +1879,18 @@ function send_discord_webhook(string $content, array $embeds = []): bool
             CURLOPT_TIMEOUT => 8,
         ]);
 
-        curl_exec($ch);
+        $response = curl_exec($ch);
+        $body = is_string($response) ? $response : '';
+        $curlError = $response === false ? curl_error($ch) : '';
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
 
-        return $status >= 200 && $status < 300;
+        $ok = $status >= 200 && $status < 300;
+        if (!$ok) {
+            discord_log_delivery_failure('webhook', $status, $curlError !== '' ? $curlError : $body);
+        }
+
+        return $ok;
     }
 
     $context = stream_context_create([
@@ -1186,18 +1903,233 @@ function send_discord_webhook(string $content, array $embeds = []): bool
         ],
     ]);
 
-    @file_get_contents($url, false, $context);
+    $response = @file_get_contents($url, false, $context);
+    $body = is_string($response) ? $response : '';
 
     if (!isset($http_response_header) || !is_array($http_response_header) || $http_response_header === []) {
+        discord_log_delivery_failure('webhook stream', 0, $body);
         return false;
     }
 
     if (preg_match('/\s(\d{3})\s/', (string) $http_response_header[0], $match) !== 1) {
+        discord_log_delivery_failure('webhook stream', 0, (string) $http_response_header[0]);
         return false;
     }
 
     $status = (int) $match[1];
-    return $status >= 200 && $status < 300;
+    $ok = $status >= 200 && $status < 300;
+    if (!$ok) {
+        discord_log_delivery_failure('webhook', $status, $body);
+    }
+
+    return $ok;
+}
+
+function discord_bot_api_request(string $method, string $endpoint, ?array $payload = null): array
+{
+    $token = discord_bot_token();
+    if ($token === null) {
+        return ['ok' => false, 'status' => 0, 'data' => null];
+    }
+
+    $method = strtoupper(trim($method));
+    if (!in_array($method, ['GET', 'POST', 'PATCH', 'DELETE'], true)) {
+        return ['ok' => false, 'status' => 0, 'data' => null];
+    }
+
+    $endpoint = '/' . ltrim($endpoint, '/');
+    $url = discord_bot_api_base_url() . $endpoint;
+    $json = $payload !== null
+        ? json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+        : '';
+    if ($json === false) {
+        discord_log_delivery_failure('bot api json encode', 0, json_last_error_msg());
+        return ['ok' => false, 'status' => 0, 'data' => null];
+    }
+
+    $headers = [
+        'Authorization: Bot ' . $token,
+        'User-Agent: demonlist-php',
+    ];
+    if ($payload !== null) {
+        $headers[] = 'Content-Type: application/json';
+    }
+
+    $body = '';
+    $status = 0;
+    $transportError = '';
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        if ($ch === false) {
+            discord_log_delivery_failure('bot api curl init', 0);
+            return ['ok' => false, 'status' => 0, 'data' => null];
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_TIMEOUT => 8,
+        ]);
+        if ($payload !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $json);
+        }
+
+        $response = curl_exec($ch);
+        $body = is_string($response) ? $response : '';
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $transportError = $response === false ? curl_error($ch) : '';
+        curl_close($ch);
+    } else {
+        $headerText = implode("\r\n", $headers) . "\r\n";
+        $context = stream_context_create([
+            'http' => [
+                'method' => $method,
+                'header' => $headerText,
+                'content' => $payload !== null ? $json : '',
+                'timeout' => 8,
+                'ignore_errors' => true,
+            ],
+        ]);
+
+        $response = @file_get_contents($url, false, $context);
+        $body = is_string($response) ? $response : '';
+        if (isset($http_response_header) && is_array($http_response_header) && $http_response_header !== []
+            && preg_match('/\s(\d{3})\s/', (string) $http_response_header[0], $match) === 1) {
+            $status = (int) $match[1];
+        }
+    }
+
+    if ($status < 200 || $status >= 300) {
+        discord_log_delivery_failure(
+            'bot api ' . $method . ' ' . $endpoint,
+            $status,
+            $transportError !== '' ? $transportError : $body
+        );
+    }
+
+    $decoded = null;
+    if ($body !== '') {
+        $parsed = json_decode($body, true);
+        if (is_array($parsed)) {
+            $decoded = $parsed;
+        }
+    }
+
+    return [
+        'ok' => $status >= 200 && $status < 300,
+        'status' => $status,
+        'data' => $decoded,
+    ];
+}
+
+function normalize_discord_user_id(string $input): string
+{
+    $input = trim($input);
+    if (preg_match('/<@!?([0-9]{17,22})>/', $input, $match) === 1) {
+        return $match[1];
+    }
+    if (preg_match('/([0-9]{17,22})/', $input, $match) === 1) {
+        return $match[1];
+    }
+
+    return '';
+}
+
+function discord_user_label_from_api(string $discordUserId): string
+{
+    $discordUserId = normalize_discord_user_id($discordUserId);
+    if ($discordUserId === '') {
+        return '';
+    }
+
+    $response = discord_bot_api_request('GET', '/users/' . rawurlencode($discordUserId));
+    if (empty($response['ok']) || !is_array($response['data'])) {
+        return '';
+    }
+
+    $data = $response['data'];
+    $globalName = trim((string) ($data['global_name'] ?? ''));
+    $username = trim((string) ($data['username'] ?? ''));
+    if ($globalName !== '' && $username !== '' && $globalName !== $username) {
+        return $globalName . ' (@' . $username . ')';
+    }
+    if ($globalName !== '') {
+        return $globalName;
+    }
+
+    return $username;
+}
+
+function send_discord_direct_message(string $discordUserId, string $content, array $embeds = []): bool
+{
+    $discordUserId = normalize_discord_user_id($discordUserId);
+    if ($discordUserId === '' || discord_bot_token() === null) {
+        return false;
+    }
+
+    $channelResponse = discord_bot_api_request('POST', '/users/@me/channels', [
+        'recipient_id' => $discordUserId,
+    ]);
+    if (empty($channelResponse['ok']) || !is_array($channelResponse['data'])) {
+        return false;
+    }
+
+    $channelId = trim((string) ($channelResponse['data']['id'] ?? ''));
+    if ($channelId === '') {
+        return false;
+    }
+
+    $payload = [
+        'content' => discord_truncate_text($content, 1900),
+        'allowed_mentions' => ['parse' => []],
+    ];
+
+    if ($embeds !== []) {
+        $normalizedEmbeds = [];
+        foreach ($embeds as $embed) {
+            if (!is_array($embed)) {
+                continue;
+            }
+
+            $normalized = discord_normalize_embed($embed);
+            if ($normalized !== []) {
+                $normalizedEmbeds[] = $normalized;
+            }
+            if (count($normalizedEmbeds) >= 10) {
+                break;
+            }
+        }
+        if ($normalizedEmbeds !== []) {
+            $payload['embeds'] = $normalizedEmbeds;
+        }
+    }
+
+    $messageResponse = discord_bot_api_request('POST', '/channels/' . rawurlencode($channelId) . '/messages', $payload);
+    return !empty($messageResponse['ok']);
+}
+
+function send_discord_user_notification(PDO $pdo, int $userId, string $content, array $embeds = []): bool
+{
+    if ($userId < 1 || !users_has_discord_link_columns($pdo)) {
+        return false;
+    }
+
+    try {
+        $stmt = $pdo->prepare('SELECT discord_user_id FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $userId]);
+        $discordUserId = trim((string) ($stmt->fetchColumn() ?: ''));
+    } catch (Throwable) {
+        return false;
+    }
+
+    if ($discordUserId === '') {
+        return false;
+    }
+
+    return send_discord_direct_message($discordUserId, $content, $embeds);
 }
 
 function current_path(): string
@@ -1205,6 +2137,45 @@ function current_path(): string
     $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
     $path = parse_url($uri, PHP_URL_PATH);
     return is_string($path) && $path !== '' ? $path : '/';
+}
+
+function current_request_path_with_query(): string
+{
+    $uri = trim((string) ($_SERVER['REQUEST_URI'] ?? ''));
+    if ($uri === '') {
+        return current_path();
+    }
+
+    if (preg_match('#^https?://#i', $uri) === 1) {
+        $path = parse_url($uri, PHP_URL_PATH);
+        $query = parse_url($uri, PHP_URL_QUERY);
+        $uri = (is_string($path) && $path !== '') ? $path : '/';
+        if (is_string($query) && $query !== '') {
+            $uri .= '?' . $query;
+        }
+    }
+
+    return str_starts_with($uri, '/') ? $uri : current_path();
+}
+
+function auth_next_path(?string $next, string $default = 'index.php'): string
+{
+    $fallback = base_url($default);
+    $next = trim((string) $next);
+    if ($next === '' || str_starts_with($next, '//') || preg_match('#^https?://#i', $next) === 1) {
+        return $fallback;
+    }
+
+    if (str_starts_with($next, '/')) {
+        return $next;
+    }
+
+    $normalized = normalize_public_path($next);
+    if ($normalized === '' || str_starts_with($normalized, '#')) {
+        return $fallback;
+    }
+
+    return base_url($normalized);
 }
 
 function redirect(string $path): never
@@ -1447,6 +2418,12 @@ function current_user(): ?array
             'youtube_channel',
             'password_hash',
             'role',
+            users_has_comments_disabled_column() ? 'comments_disabled' : '0 AS comments_disabled',
+            users_has_discord_link_columns() ? 'discord_user_id' : 'NULL AS discord_user_id',
+            users_has_discord_link_columns() ? 'discord_username' : 'NULL AS discord_username',
+            users_has_discord_link_columns() ? 'discord_link_pending_user_id' : 'NULL AS discord_link_pending_user_id',
+            users_has_discord_link_columns() ? 'discord_link_code_expires_at' : 'NULL AS discord_link_code_expires_at',
+            users_has_discord_link_columns() ? 'discord_link_requested_at' : 'NULL AS discord_link_requested_at',
             'points',
             'created_at',
         ];
@@ -1539,8 +2516,9 @@ function require_login(?string $next = null): void
 
     $destination = $next;
     if ($destination === null || $destination === '') {
-        $destination = current_path();
+        $destination = current_request_path_with_query();
     }
+    $destination = auth_next_path($destination);
 
     flash('error', 'You need to login before submitting records.');
     redirect('login.php?next=' . rawurlencode($destination));
@@ -1628,7 +2606,13 @@ function admin_permission_definitions(): array
         'manage_levels' => 'Manage Levels',
         'claim_contributors' => 'Claim Contributors',
         'manage_users' => 'Manage Users',
+        'manage_user_roles' => 'Manage User Roles',
         'manage_scoring' => 'Change Score',
+        'manage_list_visibility' => 'Manage List Visibility',
+        'manage_role_permissions' => 'Manage Role Permissions',
+        'manage_badges' => 'Manage Badges',
+        'moderate_comments' => 'Moderate Comments',
+        'reset_passwords' => 'Reset Passwords',
         'review_submissions' => 'Review Submissions',
     ];
 }
@@ -1653,7 +2637,13 @@ function admin_role_permission_default(string $role, string $permission): bool
             'manage_levels' => true,
             'claim_contributors' => true,
             'manage_users' => false,
+            'manage_user_roles' => false,
             'manage_scoring' => true,
+            'manage_list_visibility' => false,
+            'manage_role_permissions' => false,
+            'manage_badges' => false,
+            'moderate_comments' => true,
+            'reset_passwords' => false,
             'review_submissions' => true,
         ],
         'list_helper' => [
@@ -1661,7 +2651,13 @@ function admin_role_permission_default(string $role, string $permission): bool
             'manage_levels' => false,
             'claim_contributors' => false,
             'manage_users' => false,
+            'manage_user_roles' => false,
             'manage_scoring' => false,
+            'manage_list_visibility' => false,
+            'manage_role_permissions' => false,
+            'manage_badges' => false,
+            'moderate_comments' => false,
+            'reset_passwords' => false,
             'review_submissions' => true,
         ],
     ];
@@ -1761,14 +2757,44 @@ function can_manage_users(): bool
     return current_user_has_permission('manage_users');
 }
 
+function can_manage_user_roles(): bool
+{
+    return current_user_has_permission('manage_user_roles');
+}
+
 function can_manage_scoring(): bool
 {
     return current_user_has_permission('manage_scoring');
 }
 
+function can_manage_list_visibility(): bool
+{
+    return current_user_has_permission('manage_list_visibility');
+}
+
+function can_manage_role_permissions(): bool
+{
+    return current_user_has_permission('manage_role_permissions');
+}
+
+function can_manage_badges(): bool
+{
+    return current_user_has_permission('manage_badges');
+}
+
+function can_moderate_level_comments(): bool
+{
+    return current_user_has_permission('moderate_comments');
+}
+
 function can_review_submissions(): bool
 {
     return current_user_has_permission('review_submissions');
+}
+
+function can_reset_passwords(): bool
+{
+    return current_user_has_permission('reset_passwords');
 }
 
 function is_admin(): bool

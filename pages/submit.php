@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/bootstrap.php';
+require dirname(__DIR__) . '/bootstrap.php';
 
 require_login();
 
@@ -145,7 +145,7 @@ if (method_is_post()) {
 
         $submissionId = (int) $pdo->lastInsertId();
         send_discord_webhook('', [[
-            'title' => 'New Pending Submission #' . $submissionId,
+            'title' => 'New submission #' . $submissionId,
             'color' => 3447003,
             'fields' => [
                 ['name' => 'Player', 'value' => (string) $user['username'], 'inline' => true],
@@ -223,11 +223,14 @@ render_header('Submit', 'submit');
             <textarea name="notes" rows="5" placeholder="Attempts, run context, bugs, clicks, etc."><?= e($form['notes']) ?></textarea>
         </label>
 
-        <label class="cb-container" style="text-align: left; margin-top: 5px;">
-            <input type="checkbox" name="agree" value="1" <?= $form['agree'] === '1' ? 'checked' : '' ?>>
-            <span class="checkmark"></span>
-            I have read and agree with the <a class="link" href="<?= e(base_url('guidelines.php')) ?>">submission guidelines</a>.
-        </label>
+        <div class="submit-guidelines-agreement">
+            <label class="cb-container">
+                <input type="checkbox" name="agree" value="1" <?= $form['agree'] === '1' ? 'checked' : '' ?>>
+                <span class="checkmark"></span>
+                <span>I have read and agree with the</span>
+            </label>
+            <a class="link" href="<?= e(base_url('guidelines.php')) ?>">submission guidelines</a><span>.</span>
+        </div>
 
         <button class="button blue hover" type="submit" style="margin-top: 10px;">Send Submission</button>
     </form>

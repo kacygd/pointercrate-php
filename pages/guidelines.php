@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/bootstrap.php';
+require dirname(__DIR__) . '/bootstrap.php';
 
 render_header('Guidelines', 'guidelines');
 ?>

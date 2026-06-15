@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/bootstrap.php';
+require dirname(__DIR__) . '/bootstrap.php';
 
 if (array_key_exists('at', $_GET) || array_key_exists('timemachine', $_GET)) {
     $target = 'time-machine.php';

@@ -121,12 +121,47 @@ function schema_apply_users_role_enum(PDO $pdo): void
 
 function schema_target_version(): string
 {
-    return '2026-05-display-name';
+    return '2026-06-default-badges';
+}
+
+function schema_seed_default_badges(PDO $pdo): int
+{
+    return (int) $pdo->exec(
+        "INSERT IGNORE INTO badges
+            (name, description, image_url, color, text_color, is_active, created_by_user_id, created_at, updated_at)
+         VALUES
+            ('Verified', 'For players who regularly verify high difficulty levels.', 'assets/badges/badge-20260614115745-f51b1e80.png', '#465A7A', '#FFFFFF', 1, NULL, '2026-06-14 04:57:45', '2026-06-14 04:57:45'),
+            ('Moderator', 'This person will monitor the record/verify/comment activities and report any violations to the List Editor.', 'assets/badges/badge-20260614120005-3098aaf8.png', '#465A7A', '#FFFFFF', 1, NULL, '2026-06-14 05:00:05', '2026-06-14 05:00:05'),
+            ('Supporter', 'Supporters of the server', 'assets/badges/badge-20260614120118-e7d3ebe3.png', '#465A7A', '#FFFFFF', 1, NULL, '2026-06-14 05:01:18', '2026-06-14 05:01:18'),
+            ('Developer', 'Server programmer', 'assets/badges/badge-20260614120332-7697311b.png', '#465A7A', '#FFFFFF', 1, NULL, '2026-06-14 05:03:32', '2026-06-14 05:03:32'),
+            ('Owner', 'Owner of server', 'assets/badges/badge-20260614120421-8306852a.png', '#465A7A', '#FFFFFF', 1, NULL, '2026-06-14 05:04:21', '2026-06-14 05:04:21'),
+            ('Special', 'For a special person to the owner', 'assets/badges/badge-20260614120504-1a1b2f62.png', '#465A7A', '#FFFFFF', 1, NULL, '2026-06-14 05:05:04', '2026-06-14 05:05:04'),
+            ('Editor', 'List administrator', 'assets/badges/badge-20260614121159-ed12789d.png', '#465A7A', '#FFFFFF', 1, NULL, '2026-06-14 05:06:32', '2026-06-14 05:11:59'),
+            ('Helper', 'The person who checks the submitted records.', 'assets/badges/badge-20260614121425-3409c439.png', '#465A7A', '#FFFFFF', 1, NULL, '2026-06-14 05:14:25', '2026-06-14 05:14:25')"
+    );
 }
 
 function schema_needs_update(PDO $pdo): bool
 {
     if (!schema_col_exists($pdo, 'users', 'youtube_channel')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'discord_user_id')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'discord_username')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'discord_link_pending_user_id')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'discord_link_code_hash')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'discord_link_code_expires_at')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'discord_link_requested_at')) {
         return true;
     }
     if (!schema_col_exists($pdo, 'users', 'points')) {
@@ -135,10 +170,22 @@ function schema_needs_update(PDO $pdo): bool
     if (!schema_col_exists($pdo, 'users', 'is_banned')) {
         return true;
     }
+    if (!schema_col_exists($pdo, 'users', 'comments_disabled')) {
+        return true;
+    }
     if (!schema_col_exists($pdo, 'users', 'bonus_points')) {
         return true;
     }
     if (!schema_idx_exists($pdo, 'users', 'idx_users_is_banned')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'users', 'idx_users_comments_disabled')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'users', 'uq_users_discord_user_id')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'users', 'idx_users_discord_pending')) {
         return true;
     }
     if (!schema_idx_exists($pdo, 'users', 'idx_users_points')) {
@@ -183,6 +230,60 @@ function schema_needs_update(PDO $pdo): bool
     if (!schema_app_settings_value_text_ready($pdo)) {
         return true;
     }
+    if (app_setting_get('schema.version', '') !== schema_target_version()) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'demons', 'comments_disabled')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'demons', 'idx_demons_comments_disabled')) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'demon_level_info_values')) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'level_comments')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'level_comments', 'parent_comment_id')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'level_comments', 'is_pinned')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'level_comments', 'pinned_by_user_id')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'level_comments', 'pinned_at')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'level_comments', 'idx_level_comments_parent')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'level_comments', 'idx_level_comments_pinned')) {
+        return true;
+    }
+    if (!schema_fk_exists($pdo, 'level_comments', 'fk_level_comments_parent')) {
+        return true;
+    }
+    if (!schema_fk_exists($pdo, 'level_comments', 'fk_level_comments_pinned_by')) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'level_comment_reactions')) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'level_comment_reports')) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'badges')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'badges', 'image_url')) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'user_badges')) {
+        return true;
+    }
 
     return false;
 }
@@ -197,6 +298,42 @@ function run_schema_update(PDO $pdo): array
     }
     $pdo->exec('ALTER TABLE users MODIFY COLUMN youtube_channel VARCHAR(255) NULL');
 
+    if (!schema_col_exists($pdo, 'users', 'discord_user_id')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN discord_user_id VARCHAR(32) NULL AFTER youtube_channel');
+        $logs[] = '[OK] Added users.discord_user_id';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN discord_user_id VARCHAR(32) NULL');
+
+    if (!schema_col_exists($pdo, 'users', 'discord_username')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN discord_username VARCHAR(120) NULL AFTER discord_user_id');
+        $logs[] = '[OK] Added users.discord_username';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN discord_username VARCHAR(120) NULL');
+
+    if (!schema_col_exists($pdo, 'users', 'discord_link_pending_user_id')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN discord_link_pending_user_id VARCHAR(32) NULL AFTER discord_username');
+        $logs[] = '[OK] Added users.discord_link_pending_user_id';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN discord_link_pending_user_id VARCHAR(32) NULL');
+
+    if (!schema_col_exists($pdo, 'users', 'discord_link_code_hash')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN discord_link_code_hash VARCHAR(255) NULL AFTER discord_link_pending_user_id');
+        $logs[] = '[OK] Added users.discord_link_code_hash';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN discord_link_code_hash VARCHAR(255) NULL');
+
+    if (!schema_col_exists($pdo, 'users', 'discord_link_code_expires_at')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN discord_link_code_expires_at TIMESTAMP NULL DEFAULT NULL AFTER discord_link_code_hash');
+        $logs[] = '[OK] Added users.discord_link_code_expires_at';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN discord_link_code_expires_at TIMESTAMP NULL DEFAULT NULL');
+
+    if (!schema_col_exists($pdo, 'users', 'discord_link_requested_at')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN discord_link_requested_at TIMESTAMP NULL DEFAULT NULL AFTER discord_link_code_expires_at');
+        $logs[] = '[OK] Added users.discord_link_requested_at';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN discord_link_requested_at TIMESTAMP NULL DEFAULT NULL');
+
     if (!schema_col_exists($pdo, 'users', 'points')) {
         $pdo->exec('ALTER TABLE users ADD COLUMN points DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER role');
         $logs[] = '[OK] Added users.points';
@@ -209,6 +346,12 @@ function run_schema_update(PDO $pdo): array
     }
     $pdo->exec('ALTER TABLE users MODIFY COLUMN is_banned TINYINT(1) NOT NULL DEFAULT 0');
 
+    if (!schema_col_exists($pdo, 'users', 'comments_disabled')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN comments_disabled TINYINT(1) NOT NULL DEFAULT 0 AFTER is_banned');
+        $logs[] = '[OK] Added users.comments_disabled';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN comments_disabled TINYINT(1) NOT NULL DEFAULT 0');
+
     if (!schema_col_exists($pdo, 'users', 'bonus_points')) {
         $pdo->exec('ALTER TABLE users ADD COLUMN bonus_points DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER points');
         $logs[] = '[OK] Added users.bonus_points';
@@ -218,6 +361,18 @@ function run_schema_update(PDO $pdo): array
     if (!schema_idx_exists($pdo, 'users', 'idx_users_is_banned')) {
         $pdo->exec('ALTER TABLE users ADD INDEX idx_users_is_banned (is_banned)');
         $logs[] = '[OK] Added idx_users_is_banned';
+    }
+    if (!schema_idx_exists($pdo, 'users', 'idx_users_comments_disabled')) {
+        $pdo->exec('ALTER TABLE users ADD INDEX idx_users_comments_disabled (comments_disabled)');
+        $logs[] = '[OK] Added idx_users_comments_disabled';
+    }
+    if (!schema_idx_exists($pdo, 'users', 'uq_users_discord_user_id')) {
+        $pdo->exec('ALTER TABLE users ADD UNIQUE KEY uq_users_discord_user_id (discord_user_id)');
+        $logs[] = '[OK] Added uq_users_discord_user_id';
+    }
+    if (!schema_idx_exists($pdo, 'users', 'idx_users_discord_pending')) {
+        $pdo->exec('ALTER TABLE users ADD INDEX idx_users_discord_pending (discord_link_pending_user_id)');
+        $logs[] = '[OK] Added idx_users_discord_pending';
     }
     if (!schema_idx_exists($pdo, 'users', 'idx_users_points')) {
         $pdo->exec('ALTER TABLE users ADD INDEX idx_users_points (points)');
@@ -297,21 +452,240 @@ function run_schema_update(PDO $pdo): array
         $logs[] = '[OK] Expanded app_settings.setting_value to TEXT';
     }
 
+    if (!schema_col_exists($pdo, 'demons', 'comments_disabled')) {
+        $pdo->exec('ALTER TABLE demons ADD COLUMN comments_disabled TINYINT(1) NOT NULL DEFAULT 0 AFTER legacy');
+        $logs[] = '[OK] Added demons.comments_disabled';
+    }
+    $pdo->exec('ALTER TABLE demons MODIFY COLUMN comments_disabled TINYINT(1) NOT NULL DEFAULT 0');
+
+    if (!schema_idx_exists($pdo, 'demons', 'idx_demons_comments_disabled')) {
+        $pdo->exec('ALTER TABLE demons ADD INDEX idx_demons_comments_disabled (comments_disabled)');
+        $logs[] = '[OK] Added idx_demons_comments_disabled';
+    }
+
+    if (!schema_table_exists($pdo, 'demon_level_info_values')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS demon_level_info_values (
+                demon_id INT UNSIGNED NOT NULL,
+                row_key VARCHAR(64) NOT NULL,
+                row_value TEXT NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (demon_id, row_key),
+                CONSTRAINT fk_level_info_values_demon
+                    FOREIGN KEY (demon_id)
+                    REFERENCES demons (id)
+                    ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $logs[] = '[OK] Added demon_level_info_values table';
+    }
+
+    if (!schema_table_exists($pdo, 'level_comments')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS level_comments (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                demon_id INT UNSIGNED NOT NULL,
+                user_id INT UNSIGNED NOT NULL,
+                parent_comment_id BIGINT UNSIGNED NULL,
+                body TEXT NOT NULL,
+                is_pinned TINYINT(1) NOT NULL DEFAULT 0,
+                pinned_by_user_id INT UNSIGNED NULL,
+                pinned_at TIMESTAMP NULL DEFAULT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NULL DEFAULT NULL,
+                KEY idx_level_comments_demon_created (demon_id, created_at),
+                KEY idx_level_comments_user (user_id),
+                KEY idx_level_comments_parent (parent_comment_id, created_at),
+                KEY idx_level_comments_pinned (demon_id, is_pinned, pinned_at),
+                CONSTRAINT fk_level_comments_demon
+                    FOREIGN KEY (demon_id)
+                    REFERENCES demons (id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_level_comments_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users (id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_level_comments_parent
+                    FOREIGN KEY (parent_comment_id)
+                    REFERENCES level_comments (id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_level_comments_pinned_by
+                    FOREIGN KEY (pinned_by_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $logs[] = '[OK] Added level_comments table';
+    }
+    if (!schema_col_exists($pdo, 'level_comments', 'parent_comment_id')) {
+        $pdo->exec('ALTER TABLE level_comments ADD COLUMN parent_comment_id BIGINT UNSIGNED NULL AFTER user_id');
+        $logs[] = '[OK] Added level_comments.parent_comment_id';
+    }
+    $pdo->exec('ALTER TABLE level_comments MODIFY COLUMN parent_comment_id BIGINT UNSIGNED NULL');
+
+    if (!schema_col_exists($pdo, 'level_comments', 'is_pinned')) {
+        $pdo->exec('ALTER TABLE level_comments ADD COLUMN is_pinned TINYINT(1) NOT NULL DEFAULT 0 AFTER body');
+        $logs[] = '[OK] Added level_comments.is_pinned';
+    }
+    $pdo->exec('ALTER TABLE level_comments MODIFY COLUMN is_pinned TINYINT(1) NOT NULL DEFAULT 0');
+
+    if (!schema_col_exists($pdo, 'level_comments', 'pinned_by_user_id')) {
+        $pdo->exec('ALTER TABLE level_comments ADD COLUMN pinned_by_user_id INT UNSIGNED NULL AFTER is_pinned');
+        $logs[] = '[OK] Added level_comments.pinned_by_user_id';
+    }
+    $pdo->exec('ALTER TABLE level_comments MODIFY COLUMN pinned_by_user_id INT UNSIGNED NULL');
+
+    if (!schema_col_exists($pdo, 'level_comments', 'pinned_at')) {
+        $pdo->exec('ALTER TABLE level_comments ADD COLUMN pinned_at TIMESTAMP NULL DEFAULT NULL AFTER pinned_by_user_id');
+        $logs[] = '[OK] Added level_comments.pinned_at';
+    }
+    $pdo->exec('ALTER TABLE level_comments MODIFY COLUMN pinned_at TIMESTAMP NULL DEFAULT NULL');
+
+    if (!schema_idx_exists($pdo, 'level_comments', 'idx_level_comments_parent')) {
+        $pdo->exec('ALTER TABLE level_comments ADD INDEX idx_level_comments_parent (parent_comment_id, created_at)');
+        $logs[] = '[OK] Added idx_level_comments_parent';
+    }
+    if (!schema_idx_exists($pdo, 'level_comments', 'idx_level_comments_pinned')) {
+        $pdo->exec('ALTER TABLE level_comments ADD INDEX idx_level_comments_pinned (demon_id, is_pinned, pinned_at)');
+        $logs[] = '[OK] Added idx_level_comments_pinned';
+    }
+    if (!schema_fk_exists($pdo, 'level_comments', 'fk_level_comments_parent')) {
+        $pdo->exec('ALTER TABLE level_comments
+                    ADD CONSTRAINT fk_level_comments_parent
+                    FOREIGN KEY (parent_comment_id)
+                    REFERENCES level_comments (id)
+                    ON DELETE CASCADE');
+        $logs[] = '[OK] Added fk_level_comments_parent';
+    }
+    if (!schema_fk_exists($pdo, 'level_comments', 'fk_level_comments_pinned_by')) {
+        $pdo->exec('ALTER TABLE level_comments
+                    ADD CONSTRAINT fk_level_comments_pinned_by
+                    FOREIGN KEY (pinned_by_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL');
+        $logs[] = '[OK] Added fk_level_comments_pinned_by';
+    }
+
+    if (!schema_table_exists($pdo, 'level_comment_reactions')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS level_comment_reactions (
+                comment_id BIGINT UNSIGNED NOT NULL,
+                user_id INT UNSIGNED NOT NULL,
+                reaction TINYINT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (comment_id, user_id),
+                KEY idx_level_comment_reactions_user (user_id),
+                KEY idx_level_comment_reactions_reaction (reaction),
+                CONSTRAINT fk_level_comment_reactions_comment
+                    FOREIGN KEY (comment_id)
+                    REFERENCES level_comments (id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_level_comment_reactions_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users (id)
+                    ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $logs[] = '[OK] Added level_comment_reactions table';
+    }
+
+    if (!schema_table_exists($pdo, 'level_comment_reports')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS level_comment_reports (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                comment_id BIGINT UNSIGNED NOT NULL,
+                user_id INT UNSIGNED NOT NULL,
+                reason VARCHAR(255) NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_level_comment_reports_user (comment_id, user_id),
+                KEY idx_level_comment_reports_comment_created (comment_id, created_at),
+                KEY idx_level_comment_reports_user (user_id),
+                CONSTRAINT fk_level_comment_reports_comment
+                    FOREIGN KEY (comment_id)
+                    REFERENCES level_comments (id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_level_comment_reports_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users (id)
+                    ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $logs[] = '[OK] Added level_comment_reports table';
+    }
+
+    if (!schema_table_exists($pdo, 'badges')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS badges (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(36) NOT NULL,
+                description VARCHAR(140) NULL,
+                image_url VARCHAR(255) NULL,
+                color CHAR(7) NOT NULL DEFAULT '#465A7A',
+                text_color CHAR(7) NOT NULL DEFAULT '#FFFFFF',
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_by_user_id INT UNSIGNED NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_badges_name (name),
+                KEY idx_badges_active (is_active),
+                KEY idx_badges_created_by (created_by_user_id),
+                CONSTRAINT fk_badges_created_by
+                    FOREIGN KEY (created_by_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $logs[] = '[OK] Added badges table';
+    }
+    if (!schema_col_exists($pdo, 'badges', 'image_url')) {
+        $pdo->exec('ALTER TABLE badges ADD COLUMN image_url VARCHAR(255) NULL AFTER description');
+        $logs[] = '[OK] Added badges.image_url';
+    }
+    $pdo->exec('ALTER TABLE badges MODIFY COLUMN image_url VARCHAR(255) NULL');
+
+    $seededDefaultBadges = schema_seed_default_badges($pdo);
+    $logs[] = '[OK] Ensured default badges: ' . $seededDefaultBadges . ' inserted badge(s)';
+
+    if (!schema_table_exists($pdo, 'user_badges')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS user_badges (
+                user_id INT UNSIGNED NOT NULL,
+                badge_id INT UNSIGNED NOT NULL,
+                assigned_by_user_id INT UNSIGNED NULL,
+                assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, badge_id),
+                KEY idx_user_badges_badge (badge_id),
+                KEY idx_user_badges_assigned_by (assigned_by_user_id),
+                CONSTRAINT fk_user_badges_user
+                    FOREIGN KEY (user_id)
+                    REFERENCES users (id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_user_badges_badge
+                    FOREIGN KEY (badge_id)
+                    REFERENCES badges (id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_user_badges_assigned_by
+                    FOREIGN KEY (assigned_by_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $logs[] = '[OK] Added user_badges table';
+    }
+
     $seededListSettings = (int) $pdo->exec(
         "INSERT IGNORE INTO app_settings (setting_key, setting_value)
          VALUES
             ('list.show_extended', '1'),
             ('list.show_legacy', '1'),
             ('list.main_max_rank', '75'),
-            ('list.extended_max_rank', '150')"
+            ('list.extended_max_rank', '150'),
+            ('level_comments.enabled', '1')"
     );
     $logs[] = '[OK] Ensured default list settings (Main 1-75, Extended 76-150, Legacy remaining): '
         . $seededListSettings
         . ' inserted key(s)';
-
-    if (app_setting_set('schema.version', schema_target_version())) {
-        $logs[] = '[OK] Updated schema.version to ' . schema_target_version();
-    }
 
     $publisherBackfilled = $pdo->exec(
         "UPDATE demons d
@@ -377,6 +751,39 @@ function run_schema_update(PDO $pdo): array
            AND TRIM(publisher) <> ''"
     );
     $logs[] = '[OK] Backfilled demons.creator: ' . (int) $backfilledCreator . ' row(s)';
+
+    $optimizeTables = [
+        'app_settings',
+        'users',
+        'demons',
+        'completions',
+        'submissions',
+        'demon_position_history',
+        'demon_level_info_values',
+        'level_comments',
+        'level_comment_reactions',
+        'level_comment_reports',
+        'badges',
+        'user_badges',
+    ];
+    $optimizedTables = 0;
+    foreach ($optimizeTables as $tableName) {
+        if (!schema_table_exists($pdo, $tableName)) {
+            continue;
+        }
+
+        try {
+            $pdo->query('OPTIMIZE TABLE `' . str_replace('`', '``', $tableName) . '`')->fetchAll();
+            $optimizedTables++;
+        } catch (Throwable $throwable) {
+            $logs[] = '[WARN] Could not optimize ' . $tableName . ': ' . $throwable->getMessage();
+        }
+    }
+    $logs[] = '[OK] Optimized existing database tables: ' . $optimizedTables . ' table(s)';
+
+    if (app_setting_set('schema.version', schema_target_version())) {
+        $logs[] = '[OK] Updated schema.version to ' . schema_target_version();
+    }
 
     $logs[] = '[DONE] Schema update completed.';
 
@@ -450,6 +857,11 @@ function schema_set_updated_flag(int $value): bool
     return file_put_contents($path, $updatedRaw, LOCK_EX) !== false;
 }
 
+function schema_config_needs_update(): bool
+{
+    return !app_setting_truthy((string) config('app.updated', '0'), false);
+}
+
 function ensure_schema_updated_on_bootstrap(): void
 {
     static $checked = false;
@@ -469,12 +881,14 @@ function ensure_schema_updated_on_bootstrap(): void
 
     try {
         $pdo = db();
+        $configNeedsUpdate = schema_config_needs_update();
+        $schemaVersionReady = app_setting_get('schema.version', '') === schema_target_version();
 
-        if (app_setting_get('schema.version', '') === schema_target_version()) {
+        if ($schemaVersionReady && !$configNeedsUpdate) {
             return;
         }
 
-        if (schema_needs_update($pdo)) {
+        if ($configNeedsUpdate || schema_needs_update($pdo)) {
             run_schema_update($pdo);
         }
 

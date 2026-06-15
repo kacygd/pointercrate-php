@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/bootstrap.php';
+require dirname(__DIR__) . '/bootstrap.php';
 
 function pointercrate_beaten_score(int $position): float
 {
@@ -511,6 +511,16 @@ foreach ($players as &$player) {
 }
 unset($player);
 
+$playerBadgesByUser = user_badges_by_user_ids(
+    $pdo,
+    array_map(static fn(array $player): int => (int) ($player['user_id'] ?? 0), $players)
+);
+foreach ($players as &$player) {
+    $userId = (int) ($player['user_id'] ?? 0);
+    $player['badges'] = $userId > 0 ? ($playerBadgesByUser[$userId] ?? []) : [];
+}
+unset($player);
+
 $countriesWithPlayers = [];
 foreach ($players as $player) {
     $countryCode = normalize_country_code((string) ($player['country_code'] ?? ''));
@@ -602,6 +612,8 @@ foreach ($players as $player) {
     }
 
     $points = round((float) $player['points'], 2);
+    $badgePayload = user_badges_payload((array) ($player['badges'] ?? []));
+    $badgeSearch = implode(' ', array_map(static fn(array $badge): string => (string) ($badge['name'] ?? ''), $badgePayload));
     $playersPayload[] = [
         'key' => (string) $player['key'],
         'user_id' => $player['user_id'] !== null ? (int) $player['user_id'] : null,
@@ -629,12 +641,14 @@ foreach ($players as $player) {
         'demons_published' => $serializeDemonItems((array) $player['demons_published']),
         'demons_verified' => $serializeDemonItems((array) $player['demons_verified']),
         'progress_on' => $serializeDemonItems((array) $player['progress_on'], true),
+        'badges' => $badgePayload,
         'flag_url' => country_flag_asset_url($countryCode),
         'search' => strtolower((string) ($player['display_name'] ?? $player['username'])) . ' '
             . strtolower((string) $player['username']) . ' '
             . (($player['rank'] !== null) ? ('#' . (int) $player['rank']) : '') . ' '
             . number_format($points, 2) . ' '
-            . (int) $player['total_completions'],
+            . (int) $player['total_completions'] . ' '
+            . strtolower($badgeSearch),
     ];
 }
 
@@ -710,6 +724,7 @@ render_header('Stats Viewer', 'players');
                     <h2 class="stats-viewer-player-title">
                         <span id="stats-player-flag"><?= $selectedFlag ?></span>
                         <span id="stats-player-name" class="stats-viewer-player-name"><?= e((string) ($selectedPlayer['display_name'] ?? $selectedPlayer['username'])) ?></span>
+                        <span id="stats-player-badges" class="stats-viewer-badges"><?= render_user_badges((array) ($selectedPlayer['badges'] ?? []), 'stats-viewer-badge-list') ?></span>
                     </h2>
                 </div>
 
@@ -786,6 +801,7 @@ render_header('Stats Viewer', 'players');
 
             const flagEl = document.getElementById('stats-player-flag');
             const nameEl = document.getElementById('stats-player-name');
+            const badgesEl = document.getElementById('stats-player-badges');
             const rankEl = document.getElementById('stats-rank');
             const scoreEl = document.getElementById('stats-score');
             const breakdownEl = document.getElementById('stats-breakdown');
@@ -882,6 +898,49 @@ render_header('Stats Viewer', 'players');
                 flagEl.appendChild(flag);
             };
 
+            const renderBadges = (badges) => {
+                if (!(badgesEl instanceof HTMLElement)) {
+                    return;
+                }
+
+                badgesEl.textContent = '';
+                if (!Array.isArray(badges) || badges.length === 0) {
+                    return;
+                }
+
+                const wrap = document.createElement('span');
+                wrap.className = 'user-badges stats-viewer-badge-list';
+
+                badges.forEach((badge) => {
+                    const name = String(badge?.name || '').trim();
+                    if (name === '') {
+                        return;
+                    }
+
+                    const item = document.createElement('span');
+                    const description = String(badge?.description || '').trim();
+                    item.className = 'user-badge';
+                    item.title = description !== '' ? `${name} - ${description}` : name;
+
+                    const imageUrl = String(badge?.image_url || '').trim();
+                    if (imageUrl === '') {
+                        return;
+                    }
+
+                    const image = document.createElement('img');
+                    image.className = 'user-badge-image';
+                    image.src = imageUrl;
+                    image.alt = name;
+                    image.loading = 'lazy';
+                    item.appendChild(image);
+                    wrap.appendChild(item);
+                });
+
+                if (wrap.children.length > 0) {
+                    badgesEl.appendChild(wrap);
+                }
+            };
+
             const updateQueryString = (username, userId = null) => {
                 try {
                     const url = new URL(window.location.href);
@@ -927,6 +986,7 @@ render_header('Stats Viewer', 'players');
                 if (nameEl instanceof HTMLElement) {
                     nameEl.textContent = player.display_name || player.username;
                 }
+                renderBadges(player.badges || []);
 
                 if (rankEl instanceof HTMLElement) {
                     rankEl.textContent = player.rank !== null ? `#${player.rank}` : '-';

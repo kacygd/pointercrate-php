@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/bootstrap.php';
-require __DIR__ . '/includes/list_page_helpers.php';
+require dirname(__DIR__) . '/bootstrap.php';
+require dirname(__DIR__) . '/includes/list_page_helpers.php';
 
 $pdo = db();
 $allDemons = demonlist_fetch_all_demons($pdo);
@@ -13,6 +13,7 @@ $extended = $parts['extended'];
 $legacy = $parts['legacy'];
 $showExtendedList = demonlist_show_extended_list();
 $showLegacyList = demonlist_show_legacy_list();
+$rouletteStorageScope = is_logged_in() ? ('user:' . (int) current_user_id()) : 'guest';
 
 $rouletteItems = [];
 foreach ($main as $demon) {
@@ -37,7 +38,7 @@ render_header('Roulette', 'roulette', [
     <p>The Extreme Demon Roulette is a challenge where you must go through as many demons as possible, with the challenge ending when you get 100% or give up.</p>
 </section>
 
-<section class="panel fade m-center roulette-panel" id="roulette-panel">
+<section class="panel fade m-center roulette-panel" id="roulette-panel" data-roulette-storage-scope="<?= e($rouletteStorageScope) ?>">
     <div class="panel-head split roulette-panel-head">
         <div>
             <h2>Roulette</h2>
@@ -77,6 +78,7 @@ render_header('Roulette', 'roulette', [
 
         <div class="homepage-tool-actions roulette-start-actions">
             <button class="button blue hover" type="button" data-roulette-start>Start</button>
+            <button class="button white hover" type="button" data-roulette-reset disabled>Reset</button>
         </div>
     </div>
 

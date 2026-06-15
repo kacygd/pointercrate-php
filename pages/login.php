@@ -1,14 +1,16 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/bootstrap.php';
+require dirname(__DIR__) . '/bootstrap.php';
+
+$nextRaw = trim((string) ($_GET['next'] ?? $_POST['next'] ?? ''));
+$hasNext = $nextRaw !== '';
+$nextPath = auth_next_path($nextRaw, 'index.php');
 
 if (is_logged_in()) {
-    redirect('index.php');
+    redirect($hasNext ? $nextPath : 'index.php');
 }
 
-$next = trim((string) ($_GET['next'] ?? $_POST['next'] ?? ''));
-$nextPath = (str_starts_with($next, '/') && !str_starts_with($next, '//')) ? $next : base_url('index.php');
 $username = '';
 $errors = [];
 
@@ -58,7 +60,7 @@ render_header('Login', 'login');
         <div class="info-red"><?= e(implode(' ', $errors)) ?></div>
     <?php endif; ?>
 
-    <form class="stack-form" method="post" action="<?= e(base_url('login.php')) ?>">
+    <form class="stack-form" method="post" action="<?= e($hasNext ? base_url('login.php?next=' . rawurlencode($nextPath)) : base_url('login.php')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="next" value="<?= e($nextPath) ?>">
 
@@ -76,7 +78,7 @@ render_header('Login', 'login');
     </form>
 
     <p class="muted" style="margin-top: 12px;">
-        New player? <a class="link" href="<?= e(base_url('register.php')) ?>">Create account</a>
+        New player? <a class="link" href="<?= e($hasNext ? base_url('register.php?next=' . rawurlencode($nextPath)) : base_url('register.php')) ?>">Create account</a>
     </p>
 </section>
 <?php render_footer(); ?>

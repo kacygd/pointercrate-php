@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/bootstrap.php';
-require __DIR__ . '/includes/list_page_helpers.php';
+require dirname(__DIR__) . '/bootstrap.php';
+require dirname(__DIR__) . '/includes/list_page_helpers.php';
 
 $pdo = db();
 $allDemons = demonlist_fetch_all_demons($pdo);

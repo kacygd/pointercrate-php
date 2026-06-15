@@ -1,5 +1,5 @@
 (() => {
-  console.info('list v1.01');
+  console.info('list v2.0');
 
   const closeAllDropdowns = () => {
     document.querySelectorAll('.dropdown').forEach((dropdown) => {
@@ -612,6 +612,7 @@
     const bucketInputs = Array.from(panel.querySelectorAll('[data-roulette-bucket]'))
       .filter((input) => input instanceof HTMLInputElement);
     const startButton = panel.querySelector('[data-roulette-start]');
+    const resetButton = panel.querySelector('[data-roulette-reset]');
     const saveButton = panel.querySelector('[data-roulette-save]');
     const loadInput = panel.querySelector('[data-roulette-load]');
     const stackEl = panel.querySelector('[data-roulette-stack]');
@@ -622,6 +623,7 @@
 
     if (
       !(startButton instanceof HTMLButtonElement) ||
+      !(resetButton instanceof HTMLButtonElement) ||
       !(saveButton instanceof HTMLButtonElement) ||
       !(loadInput instanceof HTMLInputElement) ||
       !(stackEl instanceof HTMLElement) ||
@@ -651,6 +653,55 @@
     });
 
     let state = newState();
+    const storageScope = String(panel.getAttribute('data-roulette-storage-scope') || 'guest')
+      .replace(/[^a-zA-Z0-9:_-]/g, '_');
+    const storageKey = `demonlist:roulette-progress:v1:${storageScope}`;
+
+    const rouletteStorage = () => {
+      try {
+        return window.localStorage || null;
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const persistState = () => {
+      const storage = rouletteStorage();
+      if (storage === null) {
+        return;
+      }
+
+      try {
+        if (state.demons.length === 0) {
+          storage.removeItem(storageKey);
+          return;
+        }
+
+        storage.setItem(
+          storageKey,
+          JSON.stringify({
+            version: 3,
+            savedAt: new Date().toISOString(),
+            state,
+          })
+        );
+      } catch (error) {
+        // Storage can fail in private browsing or full quota; the roulette still works without it.
+      }
+    };
+
+    const clearPersistedState = () => {
+      const storage = rouletteStorage();
+      if (storage === null) {
+        return;
+      }
+
+      try {
+        storage.removeItem(storageKey);
+      } catch (error) {
+        // Ignore storage cleanup failures.
+      }
+    };
 
     const syncListFocus = () => {
       document.querySelectorAll('[data-roulette-target].roulette-focus').forEach((card) => {
@@ -841,6 +892,7 @@
       });
 
       startButton.textContent = state.playing ? 'Restart' : 'Start';
+      resetButton.disabled = !hasRun;
       saveButton.disabled = !hasRun;
       resultsEl.hidden = state.playing || !hasRun;
 
@@ -894,6 +946,7 @@
         selectedBuckets: buckets,
         showRemaining: false,
       };
+      persistState();
       render();
     }
 
@@ -915,6 +968,7 @@
 
       state.percent = percent + 1;
       state.showRemaining = false;
+      persistState();
       render();
 
       const activeCard = panel.querySelector('.roulette-demon-card.is-active');
@@ -930,6 +984,7 @@
 
       state.playing = false;
       state.showRemaining = false;
+      persistState();
       render();
     }
 
@@ -994,10 +1049,41 @@
       }
     }
 
+    function restorePersistedState() {
+      const storage = rouletteStorage();
+      if (storage === null) {
+        return;
+      }
+
+      try {
+        const raw = storage.getItem(storageKey);
+        if (!raw) {
+          return;
+        }
+
+        const payload = JSON.parse(raw);
+        applyLoadedState(payload && payload.state ? payload.state : payload);
+      } catch (error) {
+        clearPersistedState();
+      }
+    }
+
+    function resetRoulette() {
+      if (state.demons.length > 0 && !window.confirm('Reset saved roulette progress?')) {
+        return;
+      }
+
+      state = newState();
+      clearPersistedState();
+      render();
+    }
+
     startButton.addEventListener('click', start);
+    resetButton.addEventListener('click', resetRoulette);
     saveButton.addEventListener('click', exportSave);
     showRemainingButton.addEventListener('click', () => {
       state.showRemaining = !state.showRemaining;
+      persistState();
       render();
       if (state.showRemaining) {
         remainingEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1014,6 +1100,8 @@
         .then((text) => {
           const payload = JSON.parse(text);
           applyLoadedState(payload && payload.state ? payload.state : payload);
+          persistState();
+          render();
           window.alert('Roulette save loaded.');
         })
         .catch(() => {
@@ -1024,6 +1112,7 @@
         });
     });
 
+    restorePersistedState();
     render();
   };
 
@@ -1041,6 +1130,57 @@
       if (!(rows instanceof HTMLElement) || !(template instanceof HTMLTemplateElement) || !(addButton instanceof HTMLButtonElement)) {
         return;
       }
+
+      const ensureCustomKey = (row) => {
+        const keyInput = row.querySelector('[data-level-info-custom-key]');
+        if (!(keyInput instanceof HTMLInputElement) || keyInput.value.trim() !== '') {
+          return;
+        }
+
+        const suffix = Math.random().toString(36).slice(2, 8);
+        keyInput.value = `custom-${Date.now().toString(36)}-${suffix}`;
+      };
+
+      const syncRowType = (row) => {
+        const typeSelect = row.querySelector('[data-level-info-type]');
+        if (!(typeSelect instanceof HTMLSelectElement)) {
+          return;
+        }
+
+        const isCustom = typeSelect.value === 'custom';
+        row.querySelectorAll('[data-level-info-field-wrap]').forEach((fieldWrap) => {
+          if (fieldWrap instanceof HTMLElement) {
+            fieldWrap.hidden = isCustom;
+          }
+        });
+        row.querySelectorAll('[data-level-info-custom-wrap]').forEach((customWrap) => {
+          if (customWrap instanceof HTMLElement) {
+            customWrap.hidden = !isCustom;
+          }
+        });
+
+        if (isCustom) {
+          ensureCustomKey(row);
+        }
+      };
+
+      const bindRows = (scope) => {
+        scope.querySelectorAll('[data-level-info-row]').forEach((row) => {
+          if (!(row instanceof HTMLElement)) {
+            return;
+          }
+
+          const typeSelect = row.querySelector('[data-level-info-type]');
+          if (typeSelect instanceof HTMLSelectElement && typeSelect.dataset.bound !== '1') {
+            typeSelect.dataset.bound = '1';
+            typeSelect.addEventListener('change', () => {
+              syncRowType(row);
+            });
+          }
+
+          syncRowType(row);
+        });
+      };
 
       const bindRemove = (scope) => {
         scope.querySelectorAll('[data-level-info-remove]').forEach((button) => {
@@ -1061,9 +1201,11 @@
       addButton.addEventListener('click', () => {
         const fragment = template.content.cloneNode(true);
         rows.appendChild(fragment);
+        bindRows(rows);
         bindRemove(rows);
       });
 
+      bindRows(builder);
       bindRemove(builder);
     });
   };
