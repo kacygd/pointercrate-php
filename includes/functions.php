@@ -2185,29 +2185,74 @@ function redirect(string $path): never
     exit;
 }
 
+function app_session_scope_seed(): string
+{
+    $namespace = trim((string) config('app.session_namespace', ''));
+    if ($namespace !== '') {
+        return 'namespace:' . $namespace;
+    }
+
+    $rootPath = str_replace('\\', '/', (string) (realpath(dirname(__DIR__)) ?: dirname(__DIR__)));
+    $baseUrl = strtolower(trim((string) config('app.base_url', ''), '/'));
+    $publicUrl = strtolower(trim((string) config('app.public_url', '')));
+    $dbHost = strtolower(trim((string) config('db.host', '127.0.0.1')));
+    $dbPort = (int) config('db.port', 3306);
+    $dbName = strtolower(trim((string) config('db.database', 'demonlist')));
+
+    return implode('|', [
+        'base:' . $baseUrl,
+        'public:' . $publicUrl,
+        'db:' . $dbHost . ':' . $dbPort . '/' . $dbName,
+        'path:' . strtolower($rootPath),
+    ]);
+}
+
+function app_session_scope(): string
+{
+    static $cache = [];
+
+    $seed = app_session_scope_seed();
+    if (!isset($cache[$seed])) {
+        $cache[$seed] = substr(hash('sha256', $seed), 0, 32);
+    }
+
+    return $cache[$seed];
+}
+
+function app_session_key(string $key): string
+{
+    $safeKey = preg_replace('/[^a-zA-Z0-9_]/', '_', trim($key));
+    $safeKey = is_string($safeKey) && $safeKey !== '' ? $safeKey : 'value';
+
+    return '_dl_' . app_session_scope() . '_' . $safeKey;
+}
+
 function flash(string $key, ?string $message = null): ?string
 {
+    $sessionKey = app_session_key('flash');
+
     if ($message !== null) {
-        $_SESSION['_flash'][$key] = $message;
+        $_SESSION[$sessionKey][$key] = $message;
         return null;
     }
 
-    if (!isset($_SESSION['_flash'][$key])) {
+    if (!isset($_SESSION[$sessionKey][$key])) {
         return null;
     }
 
-    $output = (string) $_SESSION['_flash'][$key];
-    unset($_SESSION['_flash'][$key]);
+    $output = (string) $_SESSION[$sessionKey][$key];
+    unset($_SESSION[$sessionKey][$key]);
     return $output;
 }
 
 function csrf_token(): string
 {
-    if (empty($_SESSION['_csrf_token'])) {
-        $_SESSION['_csrf_token'] = bin2hex(random_bytes(32));
+    $sessionKey = app_session_key('csrf_token');
+    if (empty($_SESSION[$sessionKey])) {
+        $_SESSION[$sessionKey] = bin2hex(random_bytes(32));
     }
 
-    return (string) $_SESSION['_csrf_token'];
+    return (string) $_SESSION[$sessionKey];
 }
 
 function validate_csrf(?string $token): bool
@@ -2403,8 +2448,20 @@ function current_user(): ?array
     }
 
     $cached = true;
-    $userId = (int) ($_SESSION['user_id'] ?? 0);
+    unset($_SESSION['user_id']);
+
+    $userIdKey = app_session_key('user_id');
+    $contextKey = app_session_key('auth_context');
+    $expectedContext = app_session_scope();
+    $storedContext = (string) ($_SESSION[$contextKey] ?? '');
+    if ($storedContext === '' || !hash_equals($expectedContext, $storedContext)) {
+        unset($_SESSION[$userIdKey], $_SESSION[$contextKey]);
+        return null;
+    }
+
+    $userId = (int) ($_SESSION[$userIdKey] ?? 0);
     if ($userId < 1) {
+        unset($_SESSION[$userIdKey], $_SESSION[$contextKey]);
         return null;
     }
 
@@ -2435,7 +2492,7 @@ function current_user(): ?array
         $row = $stmt->fetch();
 
         if ($row === false) {
-            unset($_SESSION['user_id']);
+            unset($_SESSION[$userIdKey], $_SESSION[$contextKey], $_SESSION['user_id']);
             return null;
         }
 
@@ -2499,13 +2556,22 @@ function user_public_name_by_id(?int $userId, ?string $fallback = null): ?string
 
 function login_user(array $user): void
 {
-    session_regenerate_id(true);
-    $_SESSION['user_id'] = (int) $user['id'];
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_regenerate_id(true);
+    }
+
+    unset($_SESSION['user_id']);
+    $_SESSION[app_session_key('auth_context')] = app_session_scope();
+    $_SESSION[app_session_key('user_id')] = (int) $user['id'];
 }
 
 function logout_user(): void
 {
-    unset($_SESSION['user_id']);
+    unset(
+        $_SESSION[app_session_key('user_id')],
+        $_SESSION[app_session_key('auth_context')],
+        $_SESSION['user_id']
+    );
 }
 
 function require_login(?string $next = null): void
