@@ -19,6 +19,59 @@ function config(string $key, mixed $default = null): mixed
     return $value;
 }
 
+function db_connection_settings(): array
+{
+    $host = trim((string) config('db.host', ''));
+    $port = config('db.port', null);
+    $port = is_numeric($port) ? (int) $port : 0;
+
+    return [
+        'host' => $host,
+        'port' => $port > 0 ? $port : null,
+        'database' => trim((string) config('db.database', 'demonlist')),
+        'charset' => trim((string) config('db.charset', 'utf8mb4')) ?: 'utf8mb4',
+        'username' => (string) config('db.username', ''),
+        'password' => (string) config('db.password', ''),
+    ];
+}
+
+function db_connection_dsn(array $settings): string
+{
+    $charset = (string) ($settings['charset'] ?? 'utf8mb4');
+    $database = (string) ($settings['database'] ?? 'demonlist');
+    $host = trim((string) ($settings['host'] ?? ''));
+    if ($host === '') {
+        throw new RuntimeException('Database host is not configured.');
+    }
+
+    $parts = [
+        'mysql:host=' . $host,
+    ];
+    if (!empty($settings['port'])) {
+        $parts[] = 'port=' . (int) $settings['port'];
+    }
+    $parts[] = 'dbname=' . $database;
+    $parts[] = 'charset=' . $charset;
+
+    return implode(';', $parts);
+}
+
+function db_create_pdo_from_config(): PDO
+{
+    $settings = db_connection_settings();
+
+    return new PDO(
+        db_connection_dsn($settings),
+        (string) $settings['username'],
+        (string) $settings['password'],
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]
+    );
+}
+
 function app_name(): string
 {
     $name = trim((string) config('app.name', 'DemonList PHP'));
@@ -113,6 +166,17 @@ function demon_extra_creator_names(array $demon): array
     }
 
     return array_slice($names, 1);
+}
+
+function normalize_demon_description(string $description): string
+{
+    $description = str_replace(["\r\n", "\r"], "\n", trim($description));
+    $description = (string) preg_replace("/[ \t]+/u", ' ', $description);
+    $description = (string) preg_replace("/\n{3,}/u", "\n\n", $description);
+
+    return function_exists('mb_substr')
+        ? (string) mb_substr($description, 0, 1000, 'UTF-8')
+        : (string) substr($description, 0, 1000);
 }
 
 function normalize_public_path(string $path): string
@@ -2195,14 +2259,10 @@ function app_session_scope_seed(): string
     $rootPath = str_replace('\\', '/', (string) (realpath(dirname(__DIR__)) ?: dirname(__DIR__)));
     $baseUrl = strtolower(trim((string) config('app.base_url', ''), '/'));
     $publicUrl = strtolower(trim((string) config('app.public_url', '')));
-    $dbHost = strtolower(trim((string) config('db.host', '127.0.0.1')));
-    $dbPort = (int) config('db.port', 3306);
-    $dbName = strtolower(trim((string) config('db.database', 'demonlist')));
 
     return implode('|', [
         'base:' . $baseUrl,
         'public:' . $publicUrl,
-        'db:' . $dbHost . ':' . $dbPort . '/' . $dbName,
         'path:' . strtolower($rootPath),
     ]);
 }
@@ -2877,5 +2937,3 @@ function require_admin(): void
     flash('error', 'Admin permission required.');
     redirect('admin.php');
 }
-
-

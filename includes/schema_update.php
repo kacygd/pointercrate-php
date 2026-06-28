@@ -212,6 +212,9 @@ function schema_needs_update(PDO $pdo): bool
     if (!schema_col_exists($pdo, 'demons', 'verifier_user_id')) {
         return true;
     }
+    if (!schema_col_exists($pdo, 'demons', 'description')) {
+        return true;
+    }
     if (!schema_idx_exists($pdo, 'demons', 'idx_demons_publisher_user_id')) {
         return true;
     }
@@ -403,7 +406,10 @@ function run_schema_update(PDO $pdo): array
     if ($clearedDisplayNames > 0) {
         $logs[] = '[OK] Cleared blank users.display_name values: ' . $clearedDisplayNames . ' row(s)';
     }
-
+    if (schema_col_exists($pdo, 'users', 'display_name')) {
+        $pdo->exec('ALTER TABLE users DROP COLUMN display_name');
+        $logs[] = '[OK] Removed users.display_name';
+    }
     if (!schema_col_exists($pdo, 'demons', 'creator')) {
         $pdo->exec('ALTER TABLE demons ADD COLUMN creator VARCHAR(160) NULL AFTER requirement');
         $logs[] = '[OK] Added demons.creator';
@@ -427,6 +433,12 @@ function run_schema_update(PDO $pdo): array
         $logs[] = '[OK] Added demons.verifier_user_id';
     }
     $pdo->exec('ALTER TABLE demons MODIFY COLUMN verifier_user_id INT UNSIGNED NULL');
+
+    if (!schema_col_exists($pdo, 'demons', 'description')) {
+        $pdo->exec('ALTER TABLE demons ADD COLUMN description TEXT NULL AFTER verifier_user_id');
+        $logs[] = '[OK] Added demons.description';
+    }
+    $pdo->exec('ALTER TABLE demons MODIFY COLUMN description TEXT NULL');
 
     if (!schema_idx_exists($pdo, 'demons', 'idx_demons_publisher_user_id')) {
         $pdo->exec('ALTER TABLE demons ADD INDEX idx_demons_publisher_user_id (publisher_user_id)');
@@ -876,6 +888,10 @@ function ensure_schema_updated_on_bootstrap(): void
 
     $scriptName = strtolower((string) basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')));
     if ($scriptName === 'update_db_schema.php') {
+        return;
+    }
+
+    if ((int) config('app.updated', 0) === 1) {
         return;
     }
 

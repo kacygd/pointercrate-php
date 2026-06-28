@@ -20,6 +20,25 @@ function record_position_event(PDO $pdo, int $demonId, ?int $oldPosition, int $n
     ]);
 }
 
+function admin_safe_transaction_commit(PDO $pdo, bool $transactionStarted, bool $success): void
+{
+    if (!$transactionStarted || !$pdo->inTransaction()) {
+        return;
+    }
+
+    try {
+        if ($success) {
+            $pdo->commit();
+        } else {
+            $pdo->rollBack();
+        }
+    } catch (Throwable $exception) {
+        if (stripos($exception->getMessage(), 'There is no active transaction') === false) {
+            throw $exception;
+        }
+    }
+}
+
 function admin_column_exists(PDO $pdo, string $table, string $column): bool
 {
     $stmt = $pdo->prepare(
@@ -377,6 +396,7 @@ function admin_notify_level_updated(array $before, array $after, string $moveNot
     admin_webhook_add_change($changes, 'Creator(s)', admin_webhook_text($before['creator_display'] ?? null), admin_webhook_text($after['creator_display'] ?? null));
     admin_webhook_add_change($changes, 'Publisher', admin_webhook_text($before['publisher'] ?? null), admin_webhook_text($after['publisher'] ?? null), true);
     admin_webhook_add_change($changes, 'Verifier', admin_webhook_text($before['verifier'] ?? null), admin_webhook_text($after['verifier'] ?? null), true);
+    admin_webhook_add_change($changes, 'Description', admin_webhook_text($before['description'] ?? null), admin_webhook_text($after['description'] ?? null));
     admin_webhook_add_change($changes, 'Video URL', admin_webhook_text($before['video_url'] ?? null), admin_webhook_text($after['video_url'] ?? null));
     admin_webhook_add_change($changes, 'Thumbnail URL', admin_webhook_text($before['thumbnail_url'] ?? null), admin_webhook_text($after['thumbnail_url'] ?? null));
     admin_webhook_add_change($changes, 'Level ID', admin_webhook_text($before['level_id'] ?? null), admin_webhook_text($after['level_id'] ?? null), true);
@@ -1284,6 +1304,7 @@ if (method_is_post()) {
         $creatorParts = admin_creator_parts_from_input($creatorsInput);
         $publisher = trim((string) ($_POST['publisher'] ?? ''));
         $verifier = trim((string) ($_POST['verifier'] ?? ''));
+        $description = normalize_demon_description((string) ($_POST['description'] ?? ''));
         $videoUrl = trim((string) ($_POST['video_url'] ?? ''));
         $thumbnail = trim((string) ($_POST['thumbnail_url'] ?? ''));
         $levelId = trim((string) ($_POST['level_id'] ?? ''));
@@ -1379,9 +1400,9 @@ if (method_is_post()) {
             $verifierUserId = admin_user_id_by_username($pdo, $verifier);
 
             $insert = $pdo->prepare('INSERT INTO demons
-                (position, name, difficulty, requirement, creator, creator_more, publisher, publisher_user_id, verifier, verifier_user_id, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy, comments_disabled)
+                (position, name, difficulty, requirement, creator, creator_more, publisher, publisher_user_id, verifier, verifier_user_id, description, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy, comments_disabled)
                 VALUES
-                (:position, :name, :difficulty, :requirement, :creator, :creator_more, :publisher, :publisher_user_id, :verifier, :verifier_user_id, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy, :comments_disabled)');
+                (:position, :name, :difficulty, :requirement, :creator, :creator_more, :publisher, :publisher_user_id, :verifier, :verifier_user_id, :description, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy, :comments_disabled)');
 
             $insert->execute([
                 ':position' => $position,
@@ -1394,6 +1415,7 @@ if (method_is_post()) {
                 ':publisher_user_id' => $publisherUserId,
                 ':verifier' => $verifier !== '' ? $verifier : null,
                 ':verifier_user_id' => $verifierUserId,
+                ':description' => $description !== '' ? $description : null,
                 ':video_url' => $videoUrl,
                 ':thumbnail_url' => $thumbnail !== '' ? $thumbnail : null,
                 ':level_id' => $levelId !== '' ? $levelId : null,
@@ -1429,6 +1451,7 @@ if (method_is_post()) {
                 'publisher_user_id' => $publisherUserId,
                 'verifier' => $verifier,
                 'verifier_user_id' => $verifierUserId,
+                'description' => $description,
                 'video_url' => $videoUrl,
                 'thumbnail_url' => $thumbnail,
                 'level_id' => $levelId,
@@ -1466,6 +1489,8 @@ if (method_is_post()) {
         $creatorPartsInput = admin_creator_parts_from_input($creatorsInput);
         $publisherInput = trim((string) ($_POST['publisher'] ?? ''));
         $verifierInput = trim((string) ($_POST['verifier'] ?? ''));
+        $descriptionInput = normalize_demon_description((string) ($_POST['description'] ?? ''));
+        $clearDescription = !empty($_POST['clear_description']);
         $videoUrlInput = trim((string) ($_POST['video_url'] ?? ''));
         $thumbnailInput = trim((string) ($_POST['thumbnail_url'] ?? ''));
         $levelIdInput = trim((string) ($_POST['level_id'] ?? ''));
@@ -1515,10 +1540,14 @@ if (method_is_post()) {
         }
 
         $pdo = db();
+        $transactionStarted = false;
 
         try {
             ensure_demon_claim_columns($pdo);
-            $pdo->beginTransaction();
+            if (!$pdo->inTransaction()) {
+                $pdo->beginTransaction();
+                $transactionStarted = true;
+            }
 
             $targetStmt = $pdo->prepare('SELECT * FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1 FOR UPDATE');
             $targetStmt->execute([':name' => $targetNameInput]);
@@ -1560,6 +1589,7 @@ if (method_is_post()) {
                 'creator_display' => implode(', ', demon_creator_names($target)),
                 'publisher' => (string) $target['publisher'],
                 'verifier' => (string) ($target['verifier'] ?? ''),
+                'description' => (string) ($target['description'] ?? ''),
                 'video_url' => (string) $target['video_url'],
                 'thumbnail_url' => (string) ($target['thumbnail_url'] ?? ''),
                 'level_id' => (string) ($target['level_id'] ?? ''),
@@ -1587,6 +1617,9 @@ if (method_is_post()) {
                 $finalCreatorDisplay = $finalPublisher;
             }
             $finalVerifier = $verifierInput !== '' ? $verifierInput : (string) ($target['verifier'] ?? '');
+            $finalDescription = $clearDescription
+                ? ''
+                : ($descriptionInput !== '' ? $descriptionInput : (string) ($target['description'] ?? ''));
             $finalPublisherUserId = $publisherInput !== ''
                 ? admin_user_id_by_username($pdo, $finalPublisher)
                 : ($currentPublisherUserId > 0 ? $currentPublisherUserId : null);
@@ -1726,6 +1759,7 @@ if (method_is_post()) {
                     publisher_user_id = :publisher_user_id,
                     verifier = :verifier,
                     verifier_user_id = :verifier_user_id,
+                    description = :description,
                     video_url = :video_url,
                     thumbnail_url = :thumbnail_url,
                     level_id = :level_id,
@@ -1747,6 +1781,7 @@ if (method_is_post()) {
                 ':publisher_user_id' => $finalPublisherUserId,
                 ':verifier' => $finalVerifier !== '' ? $finalVerifier : null,
                 ':verifier_user_id' => $finalVerifierUserId,
+                ':description' => $finalDescription !== '' ? $finalDescription : null,
                 ':video_url' => $finalVideoUrl,
                 ':thumbnail_url' => $finalThumbnail !== '' ? $finalThumbnail : null,
                 ':level_id' => $finalLevelId !== '' ? $finalLevelId : null,
@@ -1778,6 +1813,7 @@ if (method_is_post()) {
                 'creator_display' => $finalCreatorDisplay,
                 'publisher' => $finalPublisher,
                 'verifier' => $finalVerifier,
+                'description' => $finalDescription,
                 'video_url' => $finalVideoUrl,
                 'thumbnail_url' => $finalThumbnail,
                 'level_id' => $finalLevelId,
@@ -1788,14 +1824,12 @@ if (method_is_post()) {
                 'comments_disabled' => $finalCommentsDisabled,
             ];
 
-            $pdo->commit();
+            admin_safe_transaction_commit($pdo, $transactionStarted, true);
             admin_notify_level_updated($beforeLevelData, $afterLevelData, $moveNote);
 
             flash('success', 'Updated level #' . $newPosition . ' - ' . $finalName . '.');
         } catch (Throwable $throwable) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
+            admin_safe_transaction_commit($pdo, $transactionStarted, false);
             flash('error', $throwable->getMessage());
         }
 
@@ -3330,6 +3364,11 @@ render_header('Admin', 'admin');
             <input type="url" name="thumbnail_url">
         </label>
 
+        <label class="field">
+            <span>Level Description (optional)</span>
+            <textarea name="description" maxlength="1000" placeholder="Short description shown above Level Info and Scoring"></textarea>
+        </label>
+
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
                 <span>Level ID (optional)</span>
@@ -3444,6 +3483,17 @@ render_header('Admin', 'admin');
                 <input type="url" name="thumbnail_url" placeholder="Keep current">
             </label>
         </div>
+
+        <label class="field">
+            <span>Level Description (optional)</span>
+            <textarea name="description" maxlength="1000" placeholder="Leave blank to keep current"></textarea>
+        </label>
+
+        <label class="cb-container" style="text-align: left; margin-top: 6px;">
+            <input type="checkbox" name="clear_description" value="1">
+            <span class="checkmark"></span>
+            Clear current level description
+        </label>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">

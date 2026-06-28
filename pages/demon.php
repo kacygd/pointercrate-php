@@ -993,6 +993,7 @@ $category = match ($currentBucket) {
 $creator = demon_creator_name($demon);
 $publisher = trim((string) ($demon['publisher'] ?? ''));
 $verifier = trim((string) ($demon['verifier'] ?? ''));
+$levelDescription = normalize_demon_description((string) ($demon['description'] ?? ''));
 $publisherUserId = isset($demon['publisher_user_id']) ? (int) $demon['publisher_user_id'] : 0;
 $verifierUserId = isset($demon['verifier_user_id']) ? (int) $demon['verifier_user_id'] : 0;
 $verifiedMetaSuffix = $verifier !== '' ? ', verified by ' . $verifier : '';
@@ -1103,7 +1104,13 @@ render_header((string) $demon['name'], 'list', [
                 </div>
             </div>
 
-            <div class="detail-grid demon-detail-grid" style="margin-top: 12px;">
+            <?php if ($levelDescription !== ''): ?>
+                <blockquote class="demon-description-quote">
+                    &ldquo;<?= nl2br(e($levelDescription)) ?>&rdquo;
+                </blockquote>
+            <?php endif; ?>
+
+            <div class="detail-grid demon-detail-grid">
                 <div class="panel subtle">
                     <h3>Level Info</h3>
                     <?php if ($levelInfoRows === []): ?>
@@ -1374,7 +1381,3 @@ render_header((string) $demon['name'], 'list', [
 </div>
 
 <?php render_footer(); ?>
-
-
-
-

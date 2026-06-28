@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 $configPath = __DIR__ . '/config.php';
 if (!is_file($configPath)) {
-    $configPath = __DIR__ . '/config.example.php';
+    throw new RuntimeException('Missing config.php. Please create config.php before running the app.');
 }
 
 $GLOBALS['app_config_path'] = $configPath;
@@ -21,9 +21,6 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
         : implode('|', [
             'base:' . strtolower($sessionBaseUrl),
             'public:' . strtolower(trim((string) ($sessionConfig['app']['public_url'] ?? ''))),
-            'db:' . strtolower(trim((string) ($sessionConfig['db']['host'] ?? '127.0.0.1')))
-                . ':' . (int) ($sessionConfig['db']['port'] ?? 3306)
-                . '/' . strtolower(trim((string) ($sessionConfig['db']['database'] ?? 'demonlist'))),
             'path:' . strtolower($sessionInstallPath),
         ]);
 
