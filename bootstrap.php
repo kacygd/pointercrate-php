@@ -26,7 +26,11 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
     session_name('DLSESSID' . substr(hash('sha256', $sessionSeed), 0, 16));
 
+    $sessionLifetimeSeconds = 60 * 60 * 24 * 365;
+    ini_set('session.gc_maxlifetime', (string) $sessionLifetimeSeconds);
+
     $cookieParams = session_get_cookie_params();
+    $cookieParams['lifetime'] = $sessionLifetimeSeconds;
     $cookieParams['path'] = $sessionBaseUrl === '' ? '/' : '/' . $sessionBaseUrl;
     $cookieParams['httponly'] = true;
     $cookieParams['samesite'] = 'Lax';

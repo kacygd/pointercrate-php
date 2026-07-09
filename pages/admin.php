@@ -669,13 +669,13 @@ if (method_is_post()) {
     if ($action === 'update_scoring' && can_manage_scoring()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-scoring');
+            redirect(admin_section_url('admin-scoring'));
         }
 
         $topOneInput = trim((string) ($_POST['top1_points'] ?? ''));
         if ($topOneInput === '' || !is_numeric($topOneInput)) {
             flash('error', 'Top #1 points must be a valid number.');
-            redirect('admin.php#admin-scoring');
+            redirect(admin_section_url('admin-scoring'));
         }
 
         $topOnePoints = round((float) $topOneInput, 2);
@@ -688,7 +688,7 @@ if (method_is_post()) {
                 . number_format(demonlist_top1_points_max(), 2)
                 . '.'
             );
-            redirect('admin.php#admin-scoring');
+            redirect(admin_section_url('admin-scoring'));
         }
 
         $syncMessage = '. Demon score values are now scaled proportionally.';
@@ -709,13 +709,13 @@ if (method_is_post()) {
             . number_format($topOnePoints, 2)
             . $syncMessage
         );
-        redirect('admin.php#admin-scoring');
+        redirect(admin_section_url('admin-scoring'));
     }
 
     if ($action === 'update_list_visibility' && can_manage_list_visibility()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-list-visibility');
+            redirect(admin_section_url('admin-list-visibility'));
         }
 
         $showExtendedList = isset($_POST['show_extended_list']);
@@ -730,7 +730,7 @@ if (method_is_post()) {
             || preg_match('/^\d+$/', $extendedListLimitInput) !== 1
         ) {
             flash('error', 'Main/Extended max rank must be whole numbers.');
-            redirect('admin.php#admin-list-visibility');
+            redirect(admin_section_url('admin-list-visibility'));
         }
 
         $mainListLimit = (int) $mainListLimitInput;
@@ -746,7 +746,7 @@ if (method_is_post()) {
                 . demonlist_list_limit_max()
                 . '.'
             );
-            redirect('admin.php#admin-list-visibility');
+            redirect(admin_section_url('admin-list-visibility'));
         }
 
         if (
@@ -755,7 +755,7 @@ if (method_is_post()) {
             || !demonlist_set_list_limits($mainListLimit, $extendedListLimit)
         ) {
             flash('error', 'Could not save list settings. Please try again.');
-            redirect('admin.php#admin-list-visibility');
+            redirect(admin_section_url('admin-list-visibility'));
         }
 
         $syncMessage = '';
@@ -785,13 +785,13 @@ if (method_is_post()) {
             . '.'
             . $syncMessage
         );
-        redirect('admin.php#admin-list-visibility');
+        redirect(admin_section_url('admin-list-visibility'));
     }
 
     if ($action === 'update_level_info_rows' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-level-info-rows');
+            redirect(admin_section_url('admin-level-info-rows'));
         }
 
         $mode = strtolower(trim((string) ($_POST['mode'] ?? 'save')));
@@ -801,7 +801,7 @@ if (method_is_post()) {
             } else {
                 flash('error', 'Could not restore Level Info rows.');
             }
-            redirect('admin.php#admin-level-info-rows');
+            redirect(admin_section_url('admin-level-info-rows'));
         }
 
         $types = $_POST['level_info_type'] ?? [];
@@ -817,7 +817,7 @@ if (method_is_post()) {
             || !is_array($defaultValues)
         ) {
             flash('error', 'Invalid Level Info rows payload.');
-            redirect('admin.php#admin-level-info-rows');
+            redirect(admin_section_url('admin-level-info-rows'));
         }
 
         $types = array_values($types);
@@ -839,17 +839,17 @@ if (method_is_post()) {
 
         if (!demon_level_info_set_rows($rows)) {
             flash('error', 'Could not save Level Info rows.');
-            redirect('admin.php#admin-level-info-rows');
+            redirect(admin_section_url('admin-level-info-rows'));
         }
 
         flash('success', 'Saved Level Info rows.');
-        redirect('admin.php#admin-level-info-rows');
+        redirect(admin_section_url('admin-level-info-rows'));
     }
 
     if ($action === 'update_comment_settings' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-level-comments');
+            redirect(admin_section_url('admin-level-comments'));
         }
 
         $commentsEnabled = isset($_POST['comments_enabled']);
@@ -857,7 +857,7 @@ if (method_is_post()) {
         $levelCommentStatus = strtolower(trim((string) ($_POST['level_comment_status'] ?? 'keep')));
         if (!in_array($levelCommentStatus, ['keep', 'enabled', 'disabled'], true)) {
             flash('error', 'Invalid level comment status.');
-            redirect('admin.php#admin-level-comments');
+            redirect(admin_section_url('admin-level-comments'));
         }
 
         $pdo = db();
@@ -914,19 +914,19 @@ if (method_is_post()) {
             flash('error', $throwable->getMessage());
         }
 
-        redirect('admin.php#admin-level-comments');
+        redirect(admin_section_url('admin-level-comments'));
     }
 
     if ($action === 'delete_reported_level_comment' && can_moderate_level_comments()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-level-comments');
+            redirect(admin_section_url('admin-level-comments'));
         }
 
         $commentId = (int) ($_POST['comment_id'] ?? 0);
         if ($commentId < 1) {
             flash('error', 'Choose a reported comment to delete.');
-            redirect('admin.php#admin-level-comments');
+            redirect(admin_section_url('admin-level-comments'));
         }
 
         try {
@@ -951,19 +951,19 @@ if (method_is_post()) {
             flash('error', $throwable->getMessage());
         }
 
-        redirect('admin.php#admin-level-comments');
+        redirect(admin_section_url('admin-level-comments'));
     }
 
     if ($action === 'update_role_permissions' && can_manage_role_permissions()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-role-permissions');
+            redirect(admin_section_url('admin-role-permissions'));
         }
 
         $postedPermissions = $_POST['permissions'] ?? [];
         if (!is_array($postedPermissions)) {
             flash('error', 'Invalid permission payload.');
-            redirect('admin.php#admin-role-permissions');
+            redirect(admin_section_url('admin-role-permissions'));
         }
 
         try {
@@ -993,13 +993,13 @@ if (method_is_post()) {
             flash('error', $throwable->getMessage());
         }
 
-        redirect('admin.php#admin-role-permissions');
+        redirect(admin_section_url('admin-role-permissions'));
     }
 
     if ($action === 'create_badge' && can_manage_badges()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-badges');
+            redirect(admin_section_url('admin-badges'));
         }
 
         $badgeName = normalize_badge_name((string) ($_POST['badge_name'] ?? ''));
@@ -1008,15 +1008,15 @@ if (method_is_post()) {
             $badgeImageUrl = admin_badge_uploaded_image_url($_FILES['badge_image_file'] ?? null);
         } catch (Throwable $throwable) {
             flash('error', $throwable->getMessage());
-            redirect('admin.php#admin-badges');
+            redirect(admin_section_url('admin-badges'));
         }
         if ($badgeName === '') {
             flash('error', 'Badge name is required.');
-            redirect('admin.php#admin-badges');
+            redirect(admin_section_url('admin-badges'));
         }
         if ($badgeImageUrl === null || $badgeImageUrl === '') {
             flash('error', 'Badge image is required. Please upload a PNG, JPG, GIF, or WEBP image.');
-            redirect('admin.php#admin-badges');
+            redirect(admin_section_url('admin-badges'));
         }
 
         try {
@@ -1039,13 +1039,13 @@ if (method_is_post()) {
             flash('error', $message);
         }
 
-        redirect('admin.php#admin-badges');
+        redirect(admin_section_url('admin-badges'));
     }
 
     if ($action === 'update_badge' && can_manage_badges()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-badges');
+            redirect(admin_section_url('admin-badges'));
         }
 
         $badgeId = (int) ($_POST['badge_id'] ?? 0);
@@ -1054,7 +1054,7 @@ if (method_is_post()) {
 
         if ($badgeId < 1 || $badgeName === '') {
             flash('error', 'Choose a badge and enter a badge name.');
-            redirect('admin.php#admin-badges');
+            redirect(admin_section_url('admin-badges'));
         }
 
         try {
@@ -1098,19 +1098,19 @@ if (method_is_post()) {
             flash('error', $message);
         }
 
-        redirect('admin.php#admin-badges');
+        redirect(admin_section_url('admin-badges'));
     }
 
     if ($action === 'delete_badge' && can_manage_badges()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-badges');
+            redirect(admin_section_url('admin-badges'));
         }
 
         $badgeId = (int) ($_POST['badge_id'] ?? 0);
         if ($badgeId < 1) {
             flash('error', 'Choose a badge to delete.');
-            redirect('admin.php#admin-badges');
+            redirect(admin_section_url('admin-badges'));
         }
 
         try {
@@ -1139,13 +1139,13 @@ if (method_is_post()) {
             flash('error', 'Could not delete badge: ' . $throwable->getMessage());
         }
 
-        redirect('admin.php#admin-badges');
+        redirect(admin_section_url('admin-badges'));
     }
 
     if ($action === 'assign_badge' && can_manage_badges()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-badges');
+            redirect(admin_section_url('admin-badges'));
         }
 
         $badgeId = (int) ($_POST['badge_id'] ?? 0);
@@ -1154,7 +1154,7 @@ if (method_is_post()) {
 
         if ($badgeId < 1 || $targetUsername === '' || !in_array($mode, ['assign', 'remove'], true)) {
             flash('error', 'Choose a badge, user, and valid action.');
-            redirect('admin.php#admin-badges');
+            redirect(admin_section_url('admin-badges'));
         }
 
         try {
@@ -1194,13 +1194,13 @@ if (method_is_post()) {
             flash('error', $throwable->getMessage());
         }
 
-        redirect('admin.php#admin-badges');
+        redirect(admin_section_url('admin-badges'));
     }
 
     if ($action === 'claim_contributor' && can_claim_contributors()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-claims');
+            redirect(admin_section_url('admin-claims'));
         }
 
         $demonNameInput = trim((string) ($_POST['demon_name'] ?? ''));
@@ -1209,11 +1209,11 @@ if (method_is_post()) {
 
         if ($demonNameInput === '') {
             flash('error', 'Please enter a level name to claim.');
-            redirect('admin.php#admin-claims');
+            redirect(admin_section_url('admin-claims'));
         }
         if (!in_array($claimRole, ['publisher', 'verifier'], true)) {
             flash('error', 'Invalid claim role.');
-            redirect('admin.php#admin-claims');
+            redirect(admin_section_url('admin-claims'));
         }
 
         $column = $claimRole === 'publisher' ? 'publisher_user_id' : 'verifier_user_id';
@@ -1287,13 +1287,13 @@ if (method_is_post()) {
             flash('error', $throwable->getMessage());
         }
 
-        redirect('admin.php#admin-claims');
+        redirect(admin_section_url('admin-claims'));
     }
 
     if ($action === 'add_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php');
+            redirect(admin_section_url('admin-add-level'));
         }
 
         $name = trim((string) ($_POST['name'] ?? ''));
@@ -1349,7 +1349,7 @@ if (method_is_post()) {
 
         if ($errors !== []) {
             flash('error', implode(' ', $errors));
-            redirect('admin.php');
+            redirect(admin_section_url('admin-add-level'));
         }
 
         $pdo = db();
@@ -1473,12 +1473,12 @@ if (method_is_post()) {
             flash('error', $throwable->getMessage());
         }
 
-        redirect('admin.php');
+        redirect(admin_section_url('admin-add-level'));
     }
     if ($action === 'edit_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php');
+            redirect(admin_section_url('admin-edit-level'));
         }
 
         $targetNameInput = trim((string) ($_POST['demon_name'] ?? ''));
@@ -1508,7 +1508,7 @@ if (method_is_post()) {
 
         if ($targetNameInput === '') {
             flash('error', 'Level name is required for editing.');
-            redirect('admin.php');
+            redirect(admin_section_url('admin-edit-level'));
         }
 
         $errors = [];
@@ -1536,7 +1536,7 @@ if (method_is_post()) {
 
         if ($errors !== []) {
             flash('error', implode(' ', $errors));
-            redirect('admin.php');
+            redirect(admin_section_url('admin-edit-level'));
         }
 
         $pdo = db();
@@ -1833,13 +1833,13 @@ if (method_is_post()) {
             flash('error', $throwable->getMessage());
         }
 
-        redirect('admin.php');
+        redirect(admin_section_url('admin-edit-level'));
     }
 
     if ($action === 'delete_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php#admin-delete-level');
+            redirect(admin_section_url('admin-delete-level'));
         }
 
         $targetNameInput = trim((string) ($_POST['demon_name'] ?? ''));
@@ -1847,7 +1847,7 @@ if (method_is_post()) {
 
         if ($targetNameInput === '' || $confirmNameInput === '') {
             flash('error', 'Level name and confirmation are required for deletion.');
-            redirect('admin.php#admin-delete-level');
+            redirect(admin_section_url('admin-delete-level'));
         }
 
         $pdo = db();
@@ -1940,13 +1940,13 @@ if (method_is_post()) {
             flash('error', $throwable->getMessage());
         }
 
-        redirect('admin.php#admin-delete-level');
+        redirect(admin_section_url('admin-delete-level'));
     }
 
     if ($action === 'move_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php');
+            redirect(admin_section_url('admin-edit-level'));
         }
 
         $demonId = (int) ($_POST['demon_id'] ?? 0);
@@ -1956,7 +1956,7 @@ if (method_is_post()) {
 
         if ($newPosition < 1 || ($demonId < 1 && $demonNameInput === '')) {
             flash('error', 'Invalid level move request.');
-            redirect('admin.php');
+            redirect(admin_section_url('admin-edit-level'));
         }
 
         $pdo = db();
@@ -2087,14 +2087,15 @@ if (method_is_post()) {
             flash('error', $throwable->getMessage());
         }
 
-        redirect('admin.php');
+        redirect(admin_section_url('admin-edit-level'));
     }
 
     if ($action === 'update_user' && can_manage_users()) {
         $usersQueryRedirect = trim((string) ($_POST['users_q'] ?? ''));
-        $redirectTarget = $usersQueryRedirect !== ''
-            ? ('admin.php?users_q=' . rawurlencode($usersQueryRedirect) . '#admin-user-management')
-            : 'admin.php#admin-user-management';
+        $redirectTarget = admin_section_url(
+            'admin-user-management',
+            $usersQueryRedirect !== '' ? ['users_q' => $usersQueryRedirect] : []
+        );
 
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
@@ -2135,15 +2136,15 @@ if (method_is_post()) {
         }
 
         $pdo = db();
+        ensure_bonus_points_column($pdo);
+        ensure_user_banned_column($pdo);
+        ensure_user_comments_disabled_column($pdo);
+        if (!schema_users_role_enum_ready($pdo)) {
+            schema_apply_users_role_enum($pdo);
+        }
 
         try {
             $pdo->beginTransaction();
-            ensure_bonus_points_column($pdo);
-            ensure_user_banned_column($pdo);
-            ensure_user_comments_disabled_column($pdo);
-            if (!schema_users_role_enum_ready($pdo)) {
-                schema_apply_users_role_enum($pdo);
-            }
 
             $userStmt = $pdo->prepare('SELECT id, username, role, is_banned, comments_disabled, bonus_points, points FROM users WHERE id = :id LIMIT 1 FOR UPDATE');
             $userStmt->execute([':id' => $userId]);
@@ -2231,9 +2232,10 @@ if (method_is_post()) {
     }
     if ($action === 'reset_password' && can_reset_passwords()) {
         $usersQueryRedirect = trim((string) ($_POST['users_q'] ?? ''));
-        $redirectTarget = $usersQueryRedirect !== ''
-            ? ('admin.php?users_q=' . rawurlencode($usersQueryRedirect) . '#admin-user-management')
-            : 'admin.php#admin-user-management';
+        $redirectTarget = admin_section_url(
+            'admin-user-management',
+            $usersQueryRedirect !== '' ? ['users_q' => $usersQueryRedirect] : []
+        );
 
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
@@ -2266,6 +2268,10 @@ if (method_is_post()) {
                 ':id' => $userId,
             ]);
 
+            if (users_has_login_lockout_columns()) {
+                login_clear_failed_attempts($userId);
+            }
+
             flash('success', 'Password reset for ' . (string) $user['username'] . '. New password: ' . $tempPassword);
         } catch (Throwable $throwable) {
             flash('error', 'Failed to reset password: ' . $throwable->getMessage());
@@ -2276,7 +2282,7 @@ if (method_is_post()) {
     if ($action === 'review' && can_review_submissions()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', 'Invalid session token.');
-            redirect('admin.php');
+            redirect(admin_section_url('admin-pending-submissions'));
         }
 
         $submissionId = (int) ($_POST['submission_id'] ?? 0);
@@ -2285,7 +2291,7 @@ if (method_is_post()) {
 
         if ($submissionId < 1 || !in_array($decision, ['approved', 'rejected'], true)) {
             flash('error', 'Invalid review request.');
-            redirect('admin.php');
+            redirect(admin_section_url('admin-pending-submissions'));
         }
 
         $pdo = db();
@@ -2470,10 +2476,10 @@ if (method_is_post()) {
             flash('error', $throwable->getMessage());
         }
 
-        redirect('admin.php');
+        redirect(admin_section_url('admin-pending-submissions'));
     }
     flash('error', 'You do not have permission to access this page.');
-    redirect('admin.php');
+    redirect(admin_section_url('overview'));
 
 }
 if (!is_admin()) {
@@ -2490,19 +2496,6 @@ if (!is_admin()) {
     render_footer();
     exit;
 }
-
-$pending = db()->query('SELECT s.*, u.username AS submitter_username
-                        FROM submissions s
-                        LEFT JOIN users u ON u.id = s.submitted_by_user_id
-                        WHERE s.status = "pending"
-                        ORDER BY s.created_at ASC')->fetchAll();
-
-$reviewed = db()->query('SELECT s.*, u.username AS submitter_username
-                         FROM submissions s
-                         LEFT JOIN users u ON u.id = s.submitted_by_user_id
-                         WHERE s.status <> "pending"
-                         ORDER BY s.reviewed_at DESC
-                         LIMIT 30')->fetchAll();
 
 $adminPdo = db();
 $hasBonusPoints = admin_column_exists($adminPdo, 'users', 'bonus_points');
@@ -2522,68 +2515,6 @@ $stats['banned'] = $hasUserBanned
     ? (int) $adminPdo->query('SELECT COUNT(*) FROM users WHERE COALESCE(is_banned, 0) = 1')->fetchColumn()
     : 0;
 
-
-
-$topOnePoints = demonlist_top1_points();
-$topOnePointsInput = number_format($topOnePoints, 2, '.', '');
-$topOnePointsMinInput = number_format(demonlist_top1_points_min(), 2, '.', '');
-$topOnePointsMaxInput = number_format(demonlist_top1_points_max(), 2, '.', '');
-$showExtendedList = demonlist_show_extended_list();
-$showLegacyList = demonlist_show_legacy_list();
-$mainListLimit = demonlist_main_list_limit();
-$extendedListLimit = demonlist_extended_list_limit();
-$listLimitMinInput = (string) demonlist_list_limit_min();
-$listLimitMaxInput = (string) demonlist_list_limit_max();
-
-$hasPublisherClaimColumn = admin_column_exists($adminPdo, 'demons', 'publisher_user_id');
-$hasVerifierClaimColumn = admin_column_exists($adminPdo, 'demons', 'verifier_user_id');
-$claimColumnsReady = $hasPublisherClaimColumn && $hasVerifierClaimColumn;
-$claimUsers = $adminPdo->query('SELECT username FROM users ORDER BY username ASC LIMIT 500')->fetchAll();
-
-$usersSelectFields = [
-    'id',
-    'username',
-    'email',
-    'country_code',
-    'role',
-    'points',
-    $hasBonusPoints ? 'bonus_points' : '0.00 AS bonus_points',
-    $hasUserBanned ? 'is_banned' : '0 AS is_banned',
-    $hasUserCommentsDisabled ? 'comments_disabled' : '0 AS comments_disabled',
-    'created_at',
-];
-$usersQuery = trim((string) ($_GET['users_q'] ?? ''));
-$usersQuery = function_exists('mb_substr')
-    ? (string) mb_substr($usersQuery, 0, 80)
-    : (string) substr($usersQuery, 0, 80);
-
-$users = [];
-if ($usersQuery !== '') {
-    $usersSql = 'SELECT ' . implode(', ', $usersSelectFields) . '
-                 FROM users
-                 WHERE username LIKE :users_query
-                 ORDER BY created_at DESC
-                 LIMIT 20';
-    $usersStmt = $adminPdo->prepare($usersSql);
-    $usersStmt->execute([':users_query' => '%' . $usersQuery . '%']);
-    $users = $usersStmt->fetchAll();
-}
-
-$maxPosition = (int) $adminPdo->query('SELECT COALESCE(MAX(position), 1) FROM demons')->fetchColumn();
-$editableDemonFields = [
-    'id',
-    'name',
-    'position',
-    'requirement',
-    'publisher',
-    'verifier',
-    $claimColumnsReady ? 'publisher_user_id' : 'NULL AS publisher_user_id',
-    $claimColumnsReady ? 'verifier_user_id' : 'NULL AS verifier_user_id',
-];
-$editableDemons = $adminPdo->query('SELECT ' . implode(', ', $editableDemonFields) . '
-                               FROM demons
-                               ORDER BY position ASC, name ASC')->fetchAll();
-
 $adminRoleLabel = role_label(current_user_role());
 $canManageLevels = can_manage_levels();
 $canManageUsers = can_manage_users();
@@ -2596,63 +2527,7 @@ $canManageUserRoles = can_manage_user_roles();
 $canManageBadges = can_manage_badges();
 $canModerateLevelComments = can_moderate_level_comments();
 $canResetPasswords = can_reset_passwords();
-$levelInfoFieldDefinitions = demon_level_info_field_definitions();
-$levelInfoRows = demon_level_info_rows();
-$levelInfoCustomRows = demon_level_info_custom_rows($levelInfoRows);
-$levelCommentsEnabled = level_comments_enabled();
-$hasCommentsDisabledColumn = admin_column_exists($adminPdo, 'demons', 'comments_disabled');
-$levelCommentsDisabledCount = $hasCommentsDisabledColumn
-    ? (int) $adminPdo->query('SELECT COUNT(*) FROM demons WHERE COALESCE(comments_disabled, 0) = 1')->fetchColumn()
-    : 0;
-$reportedLevelComments = [];
-$reportedLevelCommentsError = '';
-if ($canModerateLevelComments && schema_table_exists($adminPdo, 'level_comment_reports')) {
-    try {
-        $reportedCommentsSql = 'SELECT lc.id,
-                   lc.parent_comment_id,
-                   lc.body,
-                   lc.created_at,
-                   lc.updated_at,
-                   d.position AS demon_position,
-                   d.name AS demon_name,
-                   u.id AS user_id,
-                   u.username,
-                   u.country_code,
-                   ' . user_select_display_name_expression('u', 'username', 'display_name') . ',
-                   reports.report_count,
-                   reports.latest_reported_at,
-                   reports.report_summary
-            FROM (
-                SELECT lcr.comment_id,
-                       COUNT(*) AS report_count,
-                       MAX(lcr.created_at) AS latest_reported_at,
-                       GROUP_CONCAT(
-                           CONCAT(
-                               COALESCE(ru.username, CONCAT(\'User #\', lcr.user_id)),
-                               CASE
-                                   WHEN lcr.reason IS NULL OR TRIM(lcr.reason) = \'\' THEN \'\'
-                                   ELSE CONCAT(\': \', lcr.reason)
-                               END
-                           )
-                           ORDER BY lcr.created_at DESC
-                           SEPARATOR \'\\n\'
-                       ) AS report_summary
-                FROM level_comment_reports lcr
-                LEFT JOIN users ru ON ru.id = lcr.user_id
-                GROUP BY lcr.comment_id
-            ) reports
-            INNER JOIN level_comments lc ON lc.id = reports.comment_id
-            INNER JOIN demons d ON d.id = lc.demon_id
-            INNER JOIN users u ON u.id = lc.user_id
-            ORDER BY reports.latest_reported_at DESC
-            LIMIT 50';
-        $reportedLevelComments = $adminPdo->query($reportedCommentsSql)->fetchAll();
-    } catch (Throwable $throwable) {
-        $reportedLevelComments = [];
-        $reportedLevelCommentsError = $throwable->getMessage();
-    }
-}
-$badgeList = $canManageBadges ? badge_fetch_all($adminPdo) : [];
+
 $hasGeneralQuickActions = $canManageLevels
     || $canManageUsers
     || $canManageScoring
@@ -2661,128 +2536,334 @@ $hasGeneralQuickActions = $canManageLevels
     || $canManageBadges
     || $canModerateLevelComments;
 $hasOwnerOnlyQuickActions = $canManageRolePermissions || $canManageListVisibility;
-$editableStaffRoles = ['list_editor', 'list_helper'];
-$permissionDefinitions = admin_permission_definitions();
-$rolePermissionMatrix = [];
-foreach ($editableStaffRoles as $staffRole) {
-    $rolePermissionMatrix[$staffRole] = admin_role_permissions($staffRole);
+
+$sectionCapability = [
+    'admin-role-permissions'     => $canManageRolePermissions,
+    'admin-list-visibility'      => $canManageListVisibility,
+    'admin-scoring'              => $canManageScoring,
+    'admin-level-info-rows'      => $canManageLevels,
+    'admin-level-comments'       => $canManageLevels || $canModerateLevelComments,
+    'admin-claims'               => $canClaimContributors,
+    'admin-add-level'            => $canManageLevels,
+    'admin-edit-level'           => $canManageLevels,
+    'admin-delete-level'         => $canManageLevels,
+    'admin-user-management'      => $canManageUsers,
+    'admin-pending-submissions'  => $canReviewSubmissions,
+    'admin-reviewed-submissions' => $canReviewSubmissions,
+    'admin-badges'               => $canManageBadges,
+];
+$requestedSection = (string) ($_GET['section'] ?? 'overview');
+$activeSection = ($requestedSection !== 'overview'
+    && array_key_exists($requestedSection, $sectionCapability)
+    && $sectionCapability[$requestedSection])
+    ? $requestedSection
+    : 'overview';
+$needsDemonList = in_array($activeSection, ['admin-edit-level', 'admin-claims', 'admin-level-comments', 'admin-delete-level'], true);
+$needsLevelInfoCustomRows = in_array($activeSection, ['admin-add-level', 'admin-edit-level', 'admin-level-info-rows'], true);
+
+$openCommentReportCount = 0;
+if ($canModerateLevelComments && schema_table_exists($adminPdo, 'level_comment_reports')) {
+    $openCommentReportCount = (int) $adminPdo->query('SELECT COUNT(DISTINCT comment_id) FROM level_comment_reports')->fetchColumn();
 }
 
+$pending = [];
+if ($activeSection === 'admin-pending-submissions') {
+    $pending = db()->query('SELECT s.*, u.username AS submitter_username
+                            FROM submissions s
+                            LEFT JOIN users u ON u.id = s.submitted_by_user_id
+                            WHERE s.status = "pending"
+                            ORDER BY s.created_at ASC')->fetchAll();
+}
+
+$reviewed = [];
+if ($activeSection === 'admin-reviewed-submissions') {
+    $reviewed = db()->query('SELECT s.*, u.username AS submitter_username
+                             FROM submissions s
+                             LEFT JOIN users u ON u.id = s.submitted_by_user_id
+                             WHERE s.status <> "pending"
+                             ORDER BY s.reviewed_at DESC
+                             LIMIT 30')->fetchAll();
+}
+
+$topOnePoints = 0.0;
+$topOnePointsInput = '';
+$topOnePointsMinInput = '';
+$topOnePointsMaxInput = '';
+if ($activeSection === 'admin-scoring') {
+    $topOnePoints = demonlist_top1_points();
+    $topOnePointsInput = number_format($topOnePoints, 2, '.', '');
+    $topOnePointsMinInput = number_format(demonlist_top1_points_min(), 2, '.', '');
+    $topOnePointsMaxInput = number_format(demonlist_top1_points_max(), 2, '.', '');
+}
+
+$showExtendedList = false;
+$showLegacyList = false;
+$mainListLimit = 0;
+$extendedListLimit = 0;
+$listLimitMinInput = '';
+$listLimitMaxInput = '';
+if ($activeSection === 'admin-list-visibility') {
+    $showExtendedList = demonlist_show_extended_list();
+    $showLegacyList = demonlist_show_legacy_list();
+    $mainListLimit = demonlist_main_list_limit();
+    $extendedListLimit = demonlist_extended_list_limit();
+    $listLimitMinInput = (string) demonlist_list_limit_min();
+    $listLimitMaxInput = (string) demonlist_list_limit_max();
+}
+
+$hasPublisherClaimColumn = false;
+$hasVerifierClaimColumn = false;
+$claimColumnsReady = false;
+$maxPosition = 1;
+$editableDemons = [];
+if ($needsDemonList) {
+    $hasPublisherClaimColumn = admin_column_exists($adminPdo, 'demons', 'publisher_user_id');
+    $hasVerifierClaimColumn = admin_column_exists($adminPdo, 'demons', 'verifier_user_id');
+    $claimColumnsReady = $hasPublisherClaimColumn && $hasVerifierClaimColumn;
+    $maxPosition = (int) $adminPdo->query('SELECT COALESCE(MAX(position), 1) FROM demons')->fetchColumn();
+    $editableDemonFields = [
+        'id',
+        'name',
+        'position',
+        'requirement',
+        'publisher',
+        'verifier',
+        $claimColumnsReady ? 'publisher_user_id' : 'NULL AS publisher_user_id',
+        $claimColumnsReady ? 'verifier_user_id' : 'NULL AS verifier_user_id',
+    ];
+    $editableDemons = $adminPdo->query('SELECT ' . implode(', ', $editableDemonFields) . '
+                                   FROM demons
+                                   ORDER BY position ASC, name ASC')->fetchAll();
+}
+
+$claimUsers = $adminPdo->query('SELECT username FROM users ORDER BY username ASC LIMIT 500')->fetchAll();
+
+$usersQuery = trim((string) ($_GET['users_q'] ?? ''));
+$usersQuery = function_exists('mb_substr')
+    ? (string) mb_substr($usersQuery, 0, 80)
+    : (string) substr($usersQuery, 0, 80);
+
+$users = [];
+if ($activeSection === 'admin-user-management' && $usersQuery !== '') {
+    $usersSelectFields = [
+        'id',
+        'username',
+        'email',
+        'country_code',
+        'role',
+        'points',
+        $hasBonusPoints ? 'bonus_points' : '0.00 AS bonus_points',
+        $hasUserBanned ? 'is_banned' : '0 AS is_banned',
+        $hasUserCommentsDisabled ? 'comments_disabled' : '0 AS comments_disabled',
+        'created_at',
+    ];
+    $usersSql = 'SELECT ' . implode(', ', $usersSelectFields) . '
+                 FROM users
+                 WHERE username LIKE :users_query
+                 ORDER BY created_at DESC
+                 LIMIT 20';
+    $usersStmt = $adminPdo->prepare($usersSql);
+    $usersStmt->execute([':users_query' => '%' . $usersQuery . '%']);
+    $users = $usersStmt->fetchAll();
+}
+
+$levelInfoFieldDefinitions = [];
+$levelInfoRows = [];
+$levelInfoCustomRows = [];
+if ($needsLevelInfoCustomRows) {
+    $levelInfoFieldDefinitions = demon_level_info_field_definitions();
+    $levelInfoRows = demon_level_info_rows();
+    $levelInfoCustomRows = demon_level_info_custom_rows($levelInfoRows);
+}
+
+$levelCommentsEnabled = false;
+$hasCommentsDisabledColumn = false;
+$levelCommentsDisabledCount = 0;
+$reportedLevelComments = [];
+$reportedLevelCommentsError = '';
+if ($activeSection === 'admin-level-comments') {
+    $levelCommentsEnabled = level_comments_enabled();
+    $hasCommentsDisabledColumn = admin_column_exists($adminPdo, 'demons', 'comments_disabled');
+    $levelCommentsDisabledCount = $hasCommentsDisabledColumn
+        ? (int) $adminPdo->query('SELECT COUNT(*) FROM demons WHERE COALESCE(comments_disabled, 0) = 1')->fetchColumn()
+        : 0;
+
+    if ($canModerateLevelComments && schema_table_exists($adminPdo, 'level_comment_reports')) {
+        try {
+            $reportedCommentsSql = 'SELECT lc.id,
+                       lc.parent_comment_id,
+                       lc.body,
+                       lc.created_at,
+                       lc.updated_at,
+                       d.position AS demon_position,
+                       d.name AS demon_name,
+                       u.id AS user_id,
+                       u.username,
+                       u.country_code,
+                       ' . user_select_display_name_expression('u', 'username', 'display_name') . ',
+                       reports.report_count,
+                       reports.latest_reported_at,
+                       reports.report_summary
+                FROM (
+                    SELECT lcr.comment_id,
+                           COUNT(*) AS report_count,
+                           MAX(lcr.created_at) AS latest_reported_at,
+                           GROUP_CONCAT(
+                               CONCAT(
+                                   COALESCE(ru.username, CONCAT(\'User #\', lcr.user_id)),
+                                   CASE
+                                       WHEN lcr.reason IS NULL OR TRIM(lcr.reason) = \'\' THEN \'\'
+                                       ELSE CONCAT(\': \', lcr.reason)
+                                   END
+                               )
+                               ORDER BY lcr.created_at DESC
+                               SEPARATOR \'\\n\'
+                           ) AS report_summary
+                    FROM level_comment_reports lcr
+                    LEFT JOIN users ru ON ru.id = lcr.user_id
+                    GROUP BY lcr.comment_id
+                ) reports
+                INNER JOIN level_comments lc ON lc.id = reports.comment_id
+                INNER JOIN demons d ON d.id = lc.demon_id
+                INNER JOIN users u ON u.id = lc.user_id
+                ORDER BY reports.latest_reported_at DESC
+                LIMIT 50';
+            $reportedLevelComments = $adminPdo->query($reportedCommentsSql)->fetchAll();
+        } catch (Throwable $throwable) {
+            $reportedLevelComments = [];
+            $reportedLevelCommentsError = $throwable->getMessage();
+        }
+    }
+}
+
+$badgeList = [];
+if ($activeSection === 'admin-badges' && $canManageBadges) {
+    $badgeList = badge_fetch_all($adminPdo);
+}
+
+$editableStaffRoles = ['list_editor', 'list_helper'];
+$permissionDefinitions = [];
+$rolePermissionMatrix = [];
+if ($activeSection === 'admin-role-permissions') {
+    $permissionDefinitions = admin_permission_definitions();
+    foreach ($editableStaffRoles as $staffRole) {
+        $rolePermissionMatrix[$staffRole] = admin_role_permissions($staffRole);
+    }
+}
 
 render_header('Admin', 'admin');
 ?>
-<section class="panel fade">
-    <div class="panel-head">
-        <div>
-            <h1>Admin Dashboard</h1>
-            <p>Moderation center for records and level management.</p>
+<div class="admin-dashboard-layout">
+    <aside class="admin-sidebar">
+        <div class="admin-sidebar-role">
+            <span class="muted">Signed in as</span>
+            <strong><?= e($adminRoleLabel) ?></strong>
         </div>
-    </div>
 
-    <p class="muted" style="margin: 0 0 8px 0;">Current role: <b><?= e($adminRoleLabel) ?></b></p>
-    <div class="detail-grid" style="grid-template-columns: repeat(5, 1fr); gap: 10px;">
-        <div class="panel subtle"><h3><?= $stats['pending'] ?></h3><p>Pending</p></div>
-        <div class="panel subtle"><h3><?= $stats['approved'] ?></h3><p>Approved</p></div>
-        <div class="panel subtle"><h3><?= $stats['rejected'] ?></h3><p>Rejected</p></div>
-        <div class="panel subtle"><h3><?= $stats['players'] ?></h3><p>Players</p></div>
-        <div class="panel subtle"><h3><?= $stats['banned'] ?></h3><p>Banned</p></div>
-    </div>
-</section>
-
-
-<section class="panel fade">
-    <div class="panel-head">
-        <h2>Quick Actions</h2>
-        <p>Choose one tool and only that section will be displayed below.</p>
-    </div>
-    <div class="admin-quick-action-groups">
         <div class="admin-action-group">
-            <h3 class="admin-action-group-title">Admin Tools</h3>
             <div class="admin-quick-actions">
-                <?php if ($canManageLevels): ?>
-                    <a class="admin-action-tile" href="#admin-add-level" data-open-admin-section="admin-add-level">
-                        <span class="admin-action-title">Add Level</span>
-                        <small>Create a new demon entry.</small>
-                    </a>
-                    <a class="admin-action-tile" href="#admin-edit-level" data-open-admin-section="admin-edit-level">
-                        <span class="admin-action-title">Edit Level</span>
-                        <small>Update level info and ranking.</small>
-                    </a>
-                    <a class="admin-action-tile" href="#admin-delete-level" data-open-admin-section="admin-delete-level">
-                        <span class="admin-action-title">Delete Level</span>
-                        <small>Remove a level and close the rank gap.</small>
-                    </a>
-                    <a class="admin-action-tile" href="#admin-level-info-rows" data-open-admin-section="admin-level-info-rows">
-                        <span class="admin-action-title">Level Info Rows</span>
-                        <small>Control rows shown on level pages.</small>
-                    </a>
-                    <a class="admin-action-tile" href="#admin-level-comments" data-open-admin-section="admin-level-comments">
-                        <span class="admin-action-title">Level Comments</span>
-                        <small>Open or close comments globally and per level.</small>
-                    </a>
-                <?php endif; ?>
-                <?php if (!$canManageLevels && $canModerateLevelComments): ?>
-                    <a class="admin-action-tile" href="#admin-level-comments" data-open-admin-section="admin-level-comments">
-                        <span class="admin-action-title">Level Comments</span>
-                        <small>Review reported comments and delete abusive threads.</small>
-                    </a>
-                <?php endif; ?>
-                <?php if ($canManageUsers): ?>
-                    <a class="admin-action-tile" href="#admin-user-management" data-open-admin-section="admin-user-management">
-                        <span class="admin-action-title">User Management</span>
-                        <small>Adjust role, ban status, comment access, and bonus points.</small>
-                    </a>
-                <?php endif; ?>
-                <?php if ($canManageScoring): ?>
-                    <a class="admin-action-tile" href="#admin-scoring" data-open-admin-section="admin-scoring">
-                        <span class="admin-action-title">Change Score</span>
-                        <small>Adjust the highest score on the list.</small>
-                    </a>
-                <?php endif; ?>
-                <?php if ($canClaimContributors): ?>
-                    <a class="admin-action-tile" href="#admin-claims" data-open-admin-section="admin-claims">
-                        <span class="admin-action-title">Claim Contributors</span>
-                        <small>Bind publisher/verifier to real accounts via user ID.</small>
-                    </a>
-                <?php endif; ?>
-                <?php if ($canReviewSubmissions): ?>
-                    <a class="admin-action-tile" href="#admin-pending-submissions" data-open-admin-section="admin-pending-submissions">
-                        <span class="admin-action-title">Pending Submissions</span>
-                        <small>Review new records in queue.</small>
-                    </a>
-                    <a class="admin-action-tile" href="#admin-reviewed-submissions" data-open-admin-section="admin-reviewed-submissions">
-                        <span class="admin-action-title">Recently Reviewed</span>
-                        <small>Check moderation history.</small>
-                    </a>
-                <?php endif; ?>
-                <?php if ($canManageBadges): ?>
-                    <a class="admin-action-tile" href="#admin-badges" data-open-admin-section="admin-badges">
-                        <span class="admin-action-title">Badges</span>
-                        <small>Upload badge icons and assign them to accounts.</small>
-                    </a>
-                <?php endif; ?>
-                <?php if (!$hasGeneralQuickActions): ?>
-                    <div class="muted">No admin tools assigned for your current role.</div>
-                <?php endif; ?>
+                <a class="admin-action-tile<?= $activeSection === 'overview' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('overview')) ?>">
+                    <span class="admin-action-title">Overview</span>
+                    <small>Dashboard summary.</small>
+                </a>
             </div>
         </div>
 
-        <?php if ($hasOwnerOnlyQuickActions): ?>
+        <?php if ($canManageLevels || $canModerateLevelComments): ?>
+            <div class="admin-action-group">
+                <h3 class="admin-action-group-title">Content</h3>
+                <div class="admin-quick-actions">
+                    <?php if ($canManageLevels): ?>
+                        <a class="admin-action-tile<?= $activeSection === 'admin-add-level' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-add-level')) ?>">
+                            <span class="admin-action-title">Add Level</span>
+                            <small>Create a new demon entry.</small>
+                        </a>
+                        <a class="admin-action-tile<?= $activeSection === 'admin-edit-level' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-edit-level')) ?>">
+                            <span class="admin-action-title">Edit Level</span>
+                            <small>Update level info and ranking.</small>
+                        </a>
+                        <a class="admin-action-tile<?= $activeSection === 'admin-delete-level' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-delete-level')) ?>">
+                            <span class="admin-action-title">Delete Level</span>
+                            <small>Remove a level and close the rank gap.</small>
+                        </a>
+                        <a class="admin-action-tile<?= $activeSection === 'admin-level-info-rows' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-level-info-rows')) ?>">
+                            <span class="admin-action-title">Level Info Rows</span>
+                            <small>Control rows shown on level pages.</small>
+                        </a>
+                    <?php endif; ?>
+                    <a class="admin-action-tile<?= $activeSection === 'admin-level-comments' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-level-comments')) ?>">
+                        <span class="admin-action-title">Level Comments<?php if ($openCommentReportCount > 0): ?> <span class="admin-action-badge"><?= (int) $openCommentReportCount ?></span><?php endif; ?></span>
+                        <small><?= $canManageLevels ? 'Open or close comments globally and per level.' : 'Review reported comments and delete abusive threads.' ?></small>
+                    </a>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($canReviewSubmissions): ?>
+            <div class="admin-action-group">
+                <h3 class="admin-action-group-title">Moderation</h3>
+                <div class="admin-quick-actions">
+                    <a class="admin-action-tile<?= $activeSection === 'admin-pending-submissions' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-pending-submissions')) ?>">
+                        <span class="admin-action-title">Pending Submissions<?php if ($stats['pending'] > 0): ?> <span class="admin-action-badge"><?= (int) $stats['pending'] ?></span><?php endif; ?></span>
+                        <small>Review new records in queue.</small>
+                    </a>
+                    <a class="admin-action-tile<?= $activeSection === 'admin-reviewed-submissions' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-reviewed-submissions')) ?>">
+                        <span class="admin-action-title">Recently Reviewed</span>
+                        <small>Check moderation history.</small>
+                    </a>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($canManageUsers || $canClaimContributors || $canManageBadges): ?>
+            <div class="admin-action-group">
+                <h3 class="admin-action-group-title">People</h3>
+                <div class="admin-quick-actions">
+                    <?php if ($canManageUsers): ?>
+                        <a class="admin-action-tile<?= $activeSection === 'admin-user-management' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-user-management')) ?>">
+                            <span class="admin-action-title">User Management<?php if ($stats['banned'] > 0): ?> <span class="admin-action-badge"><?= (int) $stats['banned'] ?></span><?php endif; ?></span>
+                            <small>Adjust role, ban status, comment access, and bonus points.</small>
+                        </a>
+                    <?php endif; ?>
+                    <?php if ($canClaimContributors): ?>
+                        <a class="admin-action-tile<?= $activeSection === 'admin-claims' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-claims')) ?>">
+                            <span class="admin-action-title">Claim Contributors</span>
+                            <small>Bind publisher/verifier to real accounts via user ID.</small>
+                        </a>
+                    <?php endif; ?>
+                    <?php if ($canManageBadges): ?>
+                        <a class="admin-action-tile<?= $activeSection === 'admin-badges' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-badges')) ?>">
+                            <span class="admin-action-title">Badges</span>
+                            <small>Upload badge icons and assign them to accounts.</small>
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($hasOwnerOnlyQuickActions || $canManageScoring): ?>
             <div class="admin-action-group admin-action-group-owner">
-                <h3 class="admin-action-group-title">Restricted Tools</h3>
-                <p class="admin-action-group-note">These settings are available to roles with the matching permission.</p>
+                <h3 class="admin-action-group-title">Restricted</h3>
+                <p class="admin-action-group-note">Available to roles with the matching permission.</p>
                 <div class="admin-quick-actions admin-quick-actions-owner">
                     <?php if ($canManageRolePermissions): ?>
-                        <a class="admin-action-tile is-owner" href="#admin-role-permissions" data-open-admin-section="admin-role-permissions">
+                        <a class="admin-action-tile is-owner<?= $activeSection === 'admin-role-permissions' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-role-permissions')) ?>">
                             <span class="admin-action-title">Role Permissions</span>
                             <small>Customize List Editor and List Helper rights in database.</small>
                             <span class="admin-action-meta">Restricted</span>
                         </a>
                     <?php endif; ?>
                     <?php if ($canManageListVisibility): ?>
-                        <a class="admin-action-tile is-owner" href="#admin-list-visibility" data-open-admin-section="admin-list-visibility">
+                        <a class="admin-action-tile is-owner<?= $activeSection === 'admin-list-visibility' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-list-visibility')) ?>">
                             <span class="admin-action-title">List Visibility</span>
                             <small>Choose section visibility and rank ranges for Main/Extended.</small>
+                            <span class="admin-action-meta">Restricted</span>
+                        </a>
+                    <?php endif; ?>
+                    <?php if ($canManageScoring): ?>
+                        <a class="admin-action-tile is-owner<?= $activeSection === 'admin-scoring' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-scoring')) ?>">
+                            <span class="admin-action-title">Change Score</span>
+                            <small>Adjust the highest score on the list.</small>
                             <span class="admin-action-meta">Restricted</span>
                         </a>
                     <?php endif; ?>
@@ -2791,19 +2872,38 @@ render_header('Admin', 'admin');
         <?php endif; ?>
 
         <?php if (!$hasGeneralQuickActions && !$hasOwnerOnlyQuickActions): ?>
-            <div class="muted">Your role currently has no admin actions assigned.</div>
+            <div class="muted admin-sidebar-empty">Your role currently has no admin actions assigned.</div>
         <?php endif; ?>
-    </div>
-</section>
+    </aside>
 
-<?php if ($canManageRolePermissions): ?>
+    <div class="admin-content">
+    <?php if ($activeSection === 'overview'): ?>
+        <section class="panel fade">
+            <div class="panel-head">
+                <div>
+                    <h1>Admin Dashboard</h1>
+                    <p>Moderation center for records and level management.</p>
+                </div>
+            </div>
+
+            <div class="detail-grid" style="grid-template-columns: repeat(5, 1fr); gap: 10px;">
+                <div class="panel subtle"><h3><?= $stats['pending'] ?></h3><p>Pending</p></div>
+                <div class="panel subtle"><h3><?= $stats['approved'] ?></h3><p>Approved</p></div>
+                <div class="panel subtle"><h3><?= $stats['rejected'] ?></h3><p>Rejected</p></div>
+                <div class="panel subtle"><h3><?= $stats['players'] ?></h3><p>Players</p></div>
+                <div class="panel subtle"><h3><?= $stats['banned'] ?></h3><p>Banned</p></div>
+            </div>
+        </section>
+    <?php endif; ?>
+
+<?php if ($activeSection === 'admin-role-permissions'): ?>
 <section class="panel fade admin-tool-section admin-role-permissions-section" id="admin-role-permissions">
     <div class="panel-head">
         <h2>Role Permissions</h2>
         <p>Customize List Editor and List Helper permissions stored in database. Owner always keeps full permissions.</p>
     </div>
 
-    <form class="stack-form" method="post" action="<?= e(base_url('admin.php#admin-role-permissions')) ?>">
+    <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-role-permissions')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="update_role_permissions">
 
@@ -2846,19 +2946,20 @@ render_header('Admin', 'admin');
 </section>
 <?php endif; ?>
 
-<?php if ($canManageBadges): ?>
+<?php if ($activeSection === 'admin-badges'): ?>
 <section class="panel fade admin-tool-section admin-badges-section" id="admin-badges">
     <div class="panel-head">
         <h2>Badges</h2>
         <p>Uploaded badge images shown beside comments and on Stats Viewer profiles.</p>
     </div>
 
-    <div class="admin-badge-layout">
-        <form class="stack-form admin-badge-form" method="post" action="<?= e(base_url('admin.php#admin-badges')) ?>" enctype="multipart/form-data">
-            <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-            <input type="hidden" name="action" value="create_badge">
+    <div class="admin-badge-toolbox">
+        <div class="admin-badge-card">
+            <h3 class="admin-badge-card-title">Create Badge</h3>
+            <form class="admin-badge-form" method="post" action="<?= e(admin_section_url('admin-badges')) ?>" enctype="multipart/form-data">
+                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="create_badge">
 
-            <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
                 <label class="field">
                     <span>Badge Label</span>
                     <input type="text" name="badge_name" maxlength="<?= (int) badge_name_max_length() ?>" placeholder="Mythic Badge" required>
@@ -2867,42 +2968,44 @@ render_header('Admin', 'admin');
                     <span>Description</span>
                     <input type="text" name="badge_description" maxlength="<?= (int) badge_description_max_length() ?>" placeholder="Optional hover text">
                 </label>
-            </div>
+                <label class="field">
+                    <span>Upload Badge Image</span>
+                    <input type="file" name="badge_image_file" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp" required>
+                </label>
 
-            <label class="field">
-                <span>Upload Badge Image</span>
-                <input type="file" name="badge_image_file" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp" required>
-            </label>
+                <button class="button blue hover" type="submit">Create Badge</button>
+            </form>
+        </div>
 
-            <button class="button blue hover" type="submit">Create Badge</button>
-        </form>
+        <div class="admin-badge-card">
+            <h3 class="admin-badge-card-title">Assign to Player</h3>
+            <form class="admin-badge-form" method="post" action="<?= e(admin_section_url('admin-badges')) ?>">
+                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="assign_badge">
 
-        <form class="stack-form admin-badge-form" method="post" action="<?= e(base_url('admin.php#admin-badges')) ?>">
-            <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-            <input type="hidden" name="action" value="assign_badge">
+                <label class="field">
+                    <span>Badge</span>
+                    <select name="badge_id" <?= $badgeList === [] ? 'disabled' : '' ?> required>
+                        <?php if ($badgeList === []): ?>
+                            <option value="">Create a badge first</option>
+                        <?php endif; ?>
+                        <?php foreach ($badgeList as $badge): ?>
+                            <option value="<?= (int) $badge['id'] ?>"><?= e((string) $badge['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
 
-            <label class="field">
-                <span>Badge</span>
-                <select name="badge_id" <?= $badgeList === [] ? 'disabled' : '' ?> required>
-                    <?php if ($badgeList === []): ?>
-                        <option value="">Create a badge first</option>
-                    <?php endif; ?>
-                    <?php foreach ($badgeList as $badge): ?>
-                        <option value="<?= (int) $badge['id'] ?>"><?= e((string) $badge['name']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
+                <label class="field">
+                    <span>Username</span>
+                    <input type="text" name="badge_username" data-suggest-list="admin-badge-user-list" placeholder="Exact username" autocomplete="off" required>
+                </label>
 
-            <label class="field">
-                <span>Username</span>
-                <input type="text" name="badge_username" data-suggest-list="admin-badge-user-list" placeholder="Exact username" autocomplete="off" required>
-            </label>
-
-            <div class="admin-badge-actions">
-                <button class="button blue hover" type="submit" name="badge_mode" value="assign" <?= $badgeList === [] ? 'disabled' : '' ?>>Assign</button>
-                <button class="button ghost hover" type="submit" name="badge_mode" value="remove" <?= $badgeList === [] ? 'disabled' : '' ?>>Remove</button>
-            </div>
-        </form>
+                <div class="admin-badge-actions">
+                    <button class="button blue hover" type="submit" name="badge_mode" value="assign" <?= $badgeList === [] ? 'disabled' : '' ?>>Assign</button>
+                    <button class="button ghost hover" type="submit" name="badge_mode" value="remove" <?= $badgeList === [] ? 'disabled' : '' ?>>Remove</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <datalist id="admin-badge-user-list">
@@ -2911,79 +3014,69 @@ render_header('Admin', 'admin');
         <?php endforeach; ?>
     </datalist>
 
-    <div class="table-wrap admin-badge-table-wrap">
-        <table class="data-table admin-badge-table">
-            <thead>
-                <tr>
-                    <th>Badge</th>
-                    <th>Assigned</th>
-                    <th>Edit</th>
-                    <th>Delete</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if ($badgeList === []): ?>
-                    <tr><td colspan="4" class="muted">No badges created yet.</td></tr>
-                <?php endif; ?>
-                <?php foreach ($badgeList as $badge): ?>
-                    <?php $badgePreviewHtml = render_user_badges([$badge], 'admin-badge-preview'); ?>
-                    <tr>
-                        <td>
-                            <div class="admin-badge-preview-cell">
-                                <?= $badgePreviewHtml !== '' ? $badgePreviewHtml : '<span class="muted">No image</span>' ?>
-                                <div>
-                                    <strong><?= e((string) $badge['name']) ?></strong>
-                                    <small><?= e((string) ($badge['description'] !== '' ? $badge['description'] : 'No description')) ?></small>
-                                </div>
-                            </div>
-                        </td>
-                        <td><?= (int) ($badge['assigned_count'] ?? 0) ?></td>
-                        <td>
-                            <form class="admin-badge-edit-form" method="post" action="<?= e(base_url('admin.php#admin-badges')) ?>" enctype="multipart/form-data">
-                                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-                                <input type="hidden" name="action" value="update_badge">
-                                <input type="hidden" name="badge_id" value="<?= (int) $badge['id'] ?>">
+    <div class="admin-badge-grid">
+        <?php if ($badgeList === []): ?>
+            <p class="muted">No badges created yet.</p>
+        <?php endif; ?>
+        <?php foreach ($badgeList as $badge): ?>
+            <?php $badgePreviewHtml = render_user_badges([$badge], 'admin-badge-card-preview'); ?>
+            <article class="admin-badge-item">
+                <div class="admin-badge-item-head">
+                    <?= $badgePreviewHtml !== '' ? $badgePreviewHtml : '<span class="admin-badge-item-noimage muted">No image</span>' ?>
+                    <div class="admin-badge-item-info">
+                        <strong><?= e((string) $badge['name']) ?></strong>
+                        <small><?= e((string) ($badge['description'] !== '' ? $badge['description'] : 'No description')) ?></small>
+                    </div>
+                </div>
 
-                                <label class="field">
-                                    <span>Label</span>
-                                    <input type="text" name="badge_name" maxlength="<?= (int) badge_name_max_length() ?>" value="<?= e((string) $badge['name']) ?>" required>
-                                </label>
-                                <label class="field">
-                                    <span>Description</span>
-                                    <input type="text" name="badge_description" maxlength="<?= (int) badge_description_max_length() ?>" value="<?= e((string) $badge['description']) ?>">
-                                </label>
-                                <label class="field">
-                                    <span>Replace Image</span>
-                                    <input type="file" name="badge_image_file" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp">
-                                </label>
+                <div class="admin-badge-item-meta">
+                    <span class="badge"><?= (int) ($badge['assigned_count'] ?? 0) ?> assigned</span>
+                </div>
 
-                                <button class="button blue hover small" type="submit">Save Badge</button>
-                            </form>
-                        </td>
-                        <td>
-                            <form method="post" action="<?= e(base_url('admin.php#admin-badges')) ?>">
-                                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-                                <input type="hidden" name="action" value="delete_badge">
-                                <input type="hidden" name="badge_id" value="<?= (int) $badge['id'] ?>">
-                                <button class="button danger hover small" type="submit" data-confirm="Delete this badge and remove it from every user?">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
+                <details class="admin-badge-edit-details">
+                    <summary class="button white hover small">Edit badge</summary>
+                    <form class="admin-badge-edit-form" method="post" action="<?= e(admin_section_url('admin-badges')) ?>" enctype="multipart/form-data">
+                        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="update_badge">
+                        <input type="hidden" name="badge_id" value="<?= (int) $badge['id'] ?>">
+
+                        <label class="field">
+                            <span>Label</span>
+                            <input type="text" name="badge_name" maxlength="<?= (int) badge_name_max_length() ?>" value="<?= e((string) $badge['name']) ?>" required>
+                        </label>
+                        <label class="field">
+                            <span>Description</span>
+                            <input type="text" name="badge_description" maxlength="<?= (int) badge_description_max_length() ?>" value="<?= e((string) $badge['description']) ?>">
+                        </label>
+                        <label class="field">
+                            <span>Replace Image</span>
+                            <input type="file" name="badge_image_file" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp">
+                        </label>
+
+                        <button class="button blue hover small" type="submit">Save Badge</button>
+                    </form>
+                </details>
+
+                <form class="admin-badge-delete-form" method="post" action="<?= e(admin_section_url('admin-badges')) ?>">
+                    <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="action" value="delete_badge">
+                    <input type="hidden" name="badge_id" value="<?= (int) $badge['id'] ?>">
+                    <button class="button danger hover small" type="submit" data-confirm="Delete this badge and remove it from every user?">Delete</button>
+                </form>
+            </article>
+        <?php endforeach; ?>
     </div>
 </section>
 <?php endif; ?>
 
-<?php if ($canManageListVisibility): ?>
+<?php if ($activeSection === 'admin-list-visibility'): ?>
 <section class="panel fade admin-tool-section" id="admin-list-visibility">
     <div class="panel-head">
         <h2>List Visibility</h2>
         <p>Owner-only setting for section visibility and rank ranges on the site.</p>
     </div>
 
-    <form class="stack-form panel-narrow" method="post" action="<?= e(base_url('admin.php#admin-list-visibility')) ?>">
+    <form class="stack-form panel-narrow" method="post" action="<?= e(admin_section_url('admin-list-visibility')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="update_list_visibility">
 
@@ -3038,14 +3131,14 @@ render_header('Admin', 'admin');
 </section>
 <?php endif; ?>
 
-<?php if ($canManageScoring): ?>
+<?php if ($activeSection === 'admin-scoring'): ?>
 <section class="panel fade admin-tool-section" id="admin-scoring">
     <div class="panel-head">
         <h2>Change score list</h2>
         <p>Set the maximum score for the list.</p>
     </div>
 
-    <form class="stack-form panel-narrow" method="post" action="<?= e(base_url('admin.php#admin-scoring')) ?>">
+    <form class="stack-form panel-narrow" method="post" action="<?= e(admin_section_url('admin-scoring')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="update_scoring">
 
@@ -3071,14 +3164,14 @@ render_header('Admin', 'admin');
 </section>
 <?php endif; ?>
 
-<?php if ($canManageLevels): ?>
+<?php if ($activeSection === 'admin-level-info-rows'): ?>
 <section class="panel fade admin-tool-section" id="admin-level-info-rows">
     <div class="panel-head">
         <h2>Level Info Rows</h2>
         <p>Choose built-in rows or add custom rows for the Level Info box on each level page.</p>
     </div>
 
-    <form class="stack-form" method="post" action="<?= e(base_url('admin.php#admin-level-info-rows')) ?>" data-level-info-builder>
+    <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-level-info-rows')) ?>" data-level-info-builder>
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="update_level_info_rows">
 
@@ -3165,7 +3258,7 @@ render_header('Admin', 'admin');
 </section>
 <?php endif; ?>
 
-<?php if ($canManageLevels || $canModerateLevelComments): ?>
+<?php if ($activeSection === 'admin-level-comments'): ?>
 <section class="panel fade admin-tool-section" id="admin-level-comments">
     <div class="panel-head">
         <h2>Level Comments</h2>
@@ -3173,7 +3266,7 @@ render_header('Admin', 'admin');
     </div>
 
     <?php if ($canManageLevels): ?>
-    <form class="stack-form panel-narrow" method="post" action="<?= e(base_url('admin.php#admin-level-comments')) ?>">
+    <form class="stack-form panel-narrow" method="post" action="<?= e(admin_section_url('admin-level-comments')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="update_comment_settings">
 
@@ -3248,7 +3341,7 @@ render_header('Admin', 'admin');
                         <div><dt>Comment</dt><dd><?= e($reportedBody !== '' ? $reportedBody : '-') ?></dd></div>
                         <div><dt>Reports</dt><dd><?= nl2br(e($reportedSummary !== '' ? $reportedSummary : '-')) ?></dd></div>
                     </dl>
-                    <form method="post" action="<?= e(base_url('admin.php#admin-level-comments')) ?>">
+                    <form method="post" action="<?= e(admin_section_url('admin-level-comments')) ?>">
                         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                         <input type="hidden" name="action" value="delete_reported_level_comment">
                         <input type="hidden" name="comment_id" value="<?= $reportedCommentId ?>">
@@ -3261,7 +3354,7 @@ render_header('Admin', 'admin');
 </section>
 <?php endif; ?>
 
-<?php if ($canClaimContributors): ?>
+<?php if ($activeSection === 'admin-claims'): ?>
 <section class="panel fade admin-tool-section" id="admin-claims">
     <div class="panel-head">
         <h2>Claim Contributors</h2>
@@ -3272,7 +3365,7 @@ render_header('Admin', 'admin');
         <div class="info-red">Claim columns are missing in this database. Open <code>update_db_schema.php</code> once, then reload this page.</div>
     <?php endif; ?>
 
-    <form class="stack-form panel-narrow" method="post" action="<?= e(base_url('admin.php#admin-claims')) ?>">
+    <form class="stack-form panel-narrow" method="post" action="<?= e(admin_section_url('admin-claims')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="claim_contributor">
 
@@ -3306,14 +3399,22 @@ render_header('Admin', 'admin');
 </section>
 <?php endif; ?>
 
-<?php if ($canManageLevels): ?>
+<?php if ($needsDemonList): ?>
+    <datalist id="admin-demon-list">
+        <?php foreach ($editableDemons as $demon): ?>
+            <option value="<?= e((string) $demon['name']) ?>" label="#<?= (int) $demon['position'] ?> (Req <?= (int) $demon['requirement'] ?>%)"></option>
+        <?php endforeach; ?>
+    </datalist>
+<?php endif; ?>
+
+<?php if ($activeSection === 'admin-add-level'): ?>
 <section class="panel fade admin-tool-section" id="admin-add-level">
     <div class="panel-head">
         <h2>Add Level</h2>
         <p>Owners and List Editors can add demons to the list. Extra level metadata is optional.</p>
     </div>
 
-    <form class="stack-form" method="post" action="<?= e(base_url('admin.php')) ?>">
+    <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-add-level')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="add_level">
 
@@ -3424,14 +3525,16 @@ render_header('Admin', 'admin');
         <button class="button blue hover" type="submit">Add Level</button>
     </form>
 </section>
+<?php endif; ?>
 
+<?php if ($activeSection === 'admin-edit-level'): ?>
 <section class="panel fade admin-tool-section" id="admin-edit-level">
     <div class="panel-head">
         <h2>Edit Level</h2>
         <p>Update level information and ranking in one place.</p>
     </div>
 
-    <form class="stack-form" method="post" action="<?= e(base_url('admin.php')) ?>">
+    <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-edit-level')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="edit_level">
 
@@ -3571,21 +3674,17 @@ render_header('Admin', 'admin');
 
         <button class="button blue hover" type="submit">Save Level Changes</button>
     </form>
-
-    <datalist id="admin-demon-list">
-        <?php foreach ($editableDemons as $demon): ?>
-            <option value="<?= e((string) $demon['name']) ?>" label="#<?= (int) $demon['position'] ?> (Req <?= (int) $demon['requirement'] ?>%)"></option>
-        <?php endforeach; ?>
-    </datalist>
 </section>
+<?php endif; ?>
 
+<?php if ($activeSection === 'admin-delete-level'): ?>
 <section class="panel fade admin-tool-section" id="admin-delete-level">
     <div class="panel-head">
         <h2>Delete Level</h2>
         <p>Remove a level from the list. Records for that level are deleted and later positions are shifted down.</p>
     </div>
 
-    <form class="stack-form panel-narrow" method="post" action="<?= e(base_url('admin.php#admin-delete-level')) ?>">
+    <form class="stack-form panel-narrow" method="post" action="<?= e(admin_section_url('admin-delete-level')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="delete_level">
 
@@ -3608,7 +3707,7 @@ render_header('Admin', 'admin');
 </section>
 <?php endif; ?>
 
-<?php if ($canManageUsers): ?>
+<?php if ($activeSection === 'admin-user-management'): ?>
 <section class="panel fade admin-tool-section admin-list-section" id="admin-user-management">
     <div class="panel-head">
         <h2>User Management</h2>
@@ -3620,7 +3719,8 @@ render_header('Admin', 'admin');
         </p>
     </div>
 
-    <form class="admin-user-toolbar" method="get" action="<?= e(base_url('admin.php#admin-user-management')) ?>">
+    <form class="admin-user-toolbar" method="get" action="<?= e(base_url('admin.php')) ?>">
+        <input type="hidden" name="section" value="admin-user-management">
         <div class="admin-user-search-grid">
             <label class="field">
                 <span>Search Username</span>
@@ -3629,7 +3729,7 @@ render_header('Admin', 'admin');
             <div class="admin-user-search-actions">
                 <button class="button white hover" type="submit">Search</button>
                 <?php if ($usersQuery !== ''): ?>
-                    <a class="button ghost hover" href="<?= e(base_url('admin.php#admin-user-management')) ?>">Clear</a>
+                    <a class="button ghost hover" href="<?= e(admin_section_url('admin-user-management')) ?>">Clear</a>
                 <?php endif; ?>
             </div>
         </div>
@@ -3687,7 +3787,7 @@ render_header('Admin', 'admin');
                         <td><?= e(number_format((float) ($member['bonus_points'] ?? 0.0), 2)) ?></td>
                         <td><?= e(date('Y-m-d', strtotime((string) $member['created_at']))) ?></td>
                         <td class="admin-user-action-cell">
-                            <form class="admin-user-edit-form" method="post" action="<?= e(base_url('admin.php')) ?>">
+                            <form class="admin-user-edit-form" method="post" action="<?= e(admin_section_url('admin-user-management', $usersQuery !== '' ? ['users_q' => $usersQuery] : [])) ?>">
                                 <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                                 <input type="hidden" name="action" value="update_user">
                                 <input type="hidden" name="user_id" value="<?= (int) $member['id'] ?>">
@@ -3731,7 +3831,7 @@ render_header('Admin', 'admin');
                                 <button class="button blue hover small" type="submit">Save</button>
                             </form>
                             <?php if ($canResetPasswords): ?>
-                                <form class="admin-user-reset-form" method="post" action="<?= e(base_url('admin.php')) ?>" style="display: inline;">
+                                <form class="admin-user-reset-form" method="post" action="<?= e(admin_section_url('admin-user-management', $usersQuery !== '' ? ['users_q' => $usersQuery] : [])) ?>" style="display: inline;">
                                     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                                     <input type="hidden" name="action" value="reset_password">
                                     <input type="hidden" name="user_id" value="<?= (int) $member['id'] ?>">
@@ -3754,7 +3854,7 @@ render_header('Admin', 'admin');
 </section>
 <?php endif; ?>
 
-<?php if ($canReviewSubmissions): ?>
+<?php if ($activeSection === 'admin-pending-submissions'): ?>
 <section class="panel fade admin-tool-section admin-list-section" id="admin-pending-submissions">
     <div class="panel-head">
         <h2>Pending Submissions</h2>
@@ -3786,7 +3886,7 @@ render_header('Admin', 'admin');
                 <p><strong>Notes:</strong> <?= e((string) $item['notes']) ?></p>
             <?php endif; ?>
 
-            <form class="moderation-actions" method="post" action="<?= e(base_url('admin.php')) ?>">
+            <form class="moderation-actions" method="post" action="<?= e(admin_section_url('admin-pending-submissions')) ?>">
                 <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="action" value="review">
                 <input type="hidden" name="submission_id" value="<?= (int) $item['id'] ?>">
@@ -3800,7 +3900,9 @@ render_header('Admin', 'admin');
         </article>
     <?php endforeach; ?>
 </section>
+<?php endif; ?>
 
+<?php if ($activeSection === 'admin-reviewed-submissions'): ?>
 <section class="panel fade admin-tool-section admin-list-section" id="admin-reviewed-submissions">
     <div class="panel-head">
         <h2>Recently Reviewed</h2>
@@ -3836,84 +3938,8 @@ render_header('Admin', 'admin');
     </div>
 </section>
 <?php endif; ?>
-<script>
-(() => {
-    const links = Array.from(document.querySelectorAll('[data-open-admin-section]'));
-    const sections = Array.from(document.querySelectorAll('.admin-tool-section'));
-    const params = new URLSearchParams(window.location.search);
-    const preferredSectionId = params.get('users_q') ? 'admin-user-management' : '';
-
-    const setActiveLink = (sectionId) => {
-        links.forEach((link) => {
-            if (!(link instanceof HTMLElement)) {
-                return;
-            }
-            const linkSection = link.getAttribute('data-open-admin-section') || '';
-            link.classList.toggle('is-active', sectionId !== '' && linkSection === sectionId);
-        });
-    };
-
-    const showSection = (sectionId, updateHash = true) => {
-        sections.forEach((section) => {
-            if (!(section instanceof HTMLElement)) {
-                return;
-            }
-            section.classList.remove('admin-tool-section-visible');
-            section.style.display = 'none';
-        });
-
-        let target = null;
-        if (sectionId !== '') {
-            const candidate = document.getElementById(sectionId);
-            if (candidate instanceof HTMLElement && candidate.classList.contains('admin-tool-section')) {
-                target = candidate;
-            }
-        }
-        if (!(target instanceof HTMLElement) && preferredSectionId !== '') {
-            const preferred = document.getElementById(preferredSectionId);
-            if (preferred instanceof HTMLElement && preferred.classList.contains('admin-tool-section')) {
-                target = preferred;
-            }
-        }
-
-        if (target instanceof HTMLElement) {
-            target.classList.add('admin-tool-section-visible');
-            target.style.display = '';
-            setActiveLink(target.id || '');
-            if (updateHash) {
-                window.history.replaceState(null, '', `#${target.id}`);
-            }
-            return;
-        }
-
-        setActiveLink('');
-        if (updateHash) {
-            window.history.replaceState(null, '', window.location.pathname + window.location.search);
-        }
-    };
-
-    links.forEach((link) => {
-        if (!(link instanceof HTMLElement)) {
-            return;
-        }
-        link.addEventListener('click', (event) => {
-            event.preventDefault();
-            const sectionId = link.getAttribute('data-open-admin-section') || '';
-            showSection(sectionId, true);
-            const target = document.getElementById(sectionId);
-            if (target instanceof HTMLElement) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        });
-    });
-
-    window.addEventListener('hashchange', () => {
-        showSection(window.location.hash.replace(/^#/, ''), false);
-    });
-
-    showSection(window.location.hash.replace(/^#/, ''), false);
-})();
-</script>
+    </div>
+</div>
 <?php render_footer(); ?>
 
 

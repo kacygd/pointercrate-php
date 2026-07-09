@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
     discord_link_code_expires_at TIMESTAMP NULL DEFAULT NULL,
     discord_link_requested_at TIMESTAMP NULL DEFAULT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    failed_login_attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    login_locked_until TIMESTAMP NULL DEFAULT NULL,
     role ENUM('player', 'list_helper', 'list_editor', 'owner') NOT NULL DEFAULT 'player',
     is_banned TINYINT(1) NOT NULL DEFAULT 0,
     comments_disabled TINYINT(1) NOT NULL DEFAULT 0,

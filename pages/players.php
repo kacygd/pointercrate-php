@@ -541,6 +541,97 @@ if ($requestedCountry === 'WORLD') {
 if ($requestedCountry !== '' && !isset($countriesWithPlayers[$requestedCountry])) {
     $requestedCountry = '';
 }
+
+$view = (($_GET['view'] ?? '') === 'countries') ? 'countries' : 'players';
+
+$countryStats = [];
+foreach ($players as $player) {
+    $countryCode = normalize_country_code((string) ($player['country_code'] ?? ''));
+    if ($countryCode === null || !empty($player['is_banned'])) {
+        continue;
+    }
+
+    if (!isset($countryStats[$countryCode])) {
+        $countryStats[$countryCode] = [
+            'country_code' => $countryCode,
+            'country_name' => country_name($countryCode) ?? $countryCode,
+            'player_count' => 0,
+            'total_points' => 0.0,
+            'main_records' => 0,
+            'extended_records' => 0,
+            'legacy_records' => 0,
+            'total_completions' => 0,
+            'best_player' => null,
+            'best_points' => 0.0,
+            'hardest_demon' => null,
+            'hardest_position' => null,
+            'hardest_score' => 0.0,
+        ];
+    }
+
+    $points = (float) $player['points'];
+    $countryStats[$countryCode]['player_count']++;
+    $countryStats[$countryCode]['total_points'] += $points;
+    $countryStats[$countryCode]['main_records'] += (int) $player['main_records'];
+    $countryStats[$countryCode]['extended_records'] += (int) $player['extended_records'];
+    $countryStats[$countryCode]['legacy_records'] += (int) $player['legacy_records'];
+    $countryStats[$countryCode]['total_completions'] += (int) $player['total_completions'];
+
+    if ($points > $countryStats[$countryCode]['best_points']) {
+        $countryStats[$countryCode]['best_points'] = $points;
+        $countryStats[$countryCode]['best_player'] = (string) ($player['display_name'] ?? $player['username']);
+    }
+
+    if ($player['hardest_demon'] !== null) {
+        $hardestScore = (float) $player['hardest_score'];
+        $hardestPosition = $player['hardest_position'] !== null ? (int) $player['hardest_position'] : null;
+        $currentHardestScore = $countryStats[$countryCode]['hardest_score'];
+        $currentHardestPosition = $countryStats[$countryCode]['hardest_position'];
+
+        $isBetter = $hardestScore > $currentHardestScore;
+        if (!$isBetter && abs($hardestScore - $currentHardestScore) < 0.00001) {
+            $isBetter = $currentHardestPosition === null || ($hardestPosition !== null && $hardestPosition < $currentHardestPosition);
+        }
+
+        if ($isBetter) {
+            $countryStats[$countryCode]['hardest_score'] = $hardestScore;
+            $countryStats[$countryCode]['hardest_position'] = $hardestPosition;
+            $countryStats[$countryCode]['hardest_demon'] = (string) $player['hardest_demon'];
+        }
+    }
+}
+
+$countryStatsList = array_values($countryStats);
+usort($countryStatsList, static function (array $a, array $b): int {
+    if (abs($a['total_points'] - $b['total_points']) > 0.00001) {
+        return $b['total_points'] <=> $a['total_points'];
+    }
+
+    return $a['country_name'] <=> $b['country_name'];
+});
+
+$countryRankCounter = 0;
+foreach ($countryStatsList as &$countryEntry) {
+    if ($countryEntry['total_points'] > 0.00001) {
+        $countryRankCounter++;
+        $countryEntry['rank'] = $countryRankCounter;
+    } else {
+        $countryEntry['rank'] = null;
+    }
+}
+unset($countryEntry);
+
+$selectedCountryIndex = 0;
+if ($requestedCountry !== '') {
+    foreach ($countryStatsList as $index => $countryEntry) {
+        if ($countryEntry['country_code'] === $requestedCountry) {
+            $selectedCountryIndex = $index;
+            break;
+        }
+    }
+}
+$selectedCountry = $countryStatsList[$selectedCountryIndex] ?? null;
+
 $selectedIndex = 0;
 
 if ($players !== []) {
@@ -660,7 +751,77 @@ render_header('Stats Viewer', 'players');
         <p>Compare players by points, completions, hardest demons, and contributions</p>
     </div>
 
-    <?php if ($players === [] || $selectedPlayer === null): ?>
+    <div class="stats-viewer-tabs">
+        <a class="button <?= $view === 'players' ? 'blue' : 'white' ?> hover small" href="<?= e(base_url('players.php')) ?>">Players</a>
+        <a class="button <?= $view === 'countries' ? 'blue' : 'white' ?> hover small" href="<?= e(base_url('players.php?view=countries')) ?>">Countries</a>
+    </div>
+
+    <?php if ($view === 'countries'): ?>
+        <?php if ($countryStatsList === [] || $selectedCountry === null): ?>
+            <p class="muted">No country data available yet.</p>
+        <?php else: ?>
+            <?php
+            $countryHardestLabel = 'None';
+            if ($selectedCountry['hardest_demon'] !== null) {
+                $countryHardestLabel = $selectedCountry['hardest_position'] !== null
+                    ? ('#' . (int) $selectedCountry['hardest_position'] . ' ' . (string) $selectedCountry['hardest_demon'])
+                    : (string) $selectedCountry['hardest_demon'];
+            }
+            ?>
+            <div class="stats-viewer-grid">
+                <aside class="stats-viewer-sidebar">
+                    <ul class="stats-player-list">
+                        <?php foreach ($countryStatsList as $index => $countryEntry): ?>
+                            <?php $countryRankLabel = $countryEntry['rank'] !== null ? '#' . (int) $countryEntry['rank'] : '-'; ?>
+                            <li class="stats-player-item <?= $index === $selectedCountryIndex ? 'active' : '' ?>">
+                                <a class="stats-player-button" href="<?= e(base_url('players.php?view=countries&country=' . rawurlencode((string) $countryEntry['country_code']))) ?>">
+                                    <span class="stats-player-rank"><?= e($countryRankLabel) ?></span>
+                                    <span class="stats-player-name"><?= country_flag_html((string) $countryEntry['country_code'], true) ?><span><?= e((string) $countryEntry['country_name']) ?></span></span>
+                                    <span class="stats-player-score"><?= e(number_format((float) $countryEntry['total_points'], 2)) ?></span>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </aside>
+
+                <section class="stats-viewer-detail">
+                    <div class="stats-viewer-player-head">
+                        <h2 class="stats-viewer-player-title">
+                            <span><?= country_flag_html((string) $selectedCountry['country_code'], true) ?></span>
+                            <span class="stats-viewer-player-name"><?= e((string) $selectedCountry['country_name']) ?></span>
+                        </h2>
+                    </div>
+
+                    <div class="stats-viewer-summary">
+                        <article class="stats-viewer-summary-card">
+                            <h3>Nation rank</h3>
+                            <p><?= $selectedCountry['rank'] !== null ? '#' . (int) $selectedCountry['rank'] : '-' ?></p>
+                        </article>
+                        <article class="stats-viewer-summary-card">
+                            <h3>Total points</h3>
+                            <p><?= e(number_format((float) $selectedCountry['total_points'], 2)) ?></p>
+                        </article>
+                        <article class="stats-viewer-summary-card">
+                            <h3>Players</h3>
+                            <p><?= (int) $selectedCountry['player_count'] ?></p>
+                        </article>
+                        <article class="stats-viewer-summary-card">
+                            <h3>Best player</h3>
+                            <p><?= $selectedCountry['best_player'] !== null ? e((string) $selectedCountry['best_player']) : 'None' ?></p>
+                        </article>
+                        <article class="stats-viewer-summary-card stats-viewer-summary-card-contrib">
+                            <h3>Hardest demon</h3>
+                            <p><?= e($countryHardestLabel) ?></p>
+                        </article>
+                        <article class="stats-viewer-summary-card stats-viewer-summary-card-breakdown">
+                            <h3>Demonlist stats</h3>
+                            <p><?= (int) $selectedCountry['main_records'] ?> Main, <?= (int) $selectedCountry['extended_records'] ?> Extended, <?= (int) $selectedCountry['legacy_records'] ?> Legacy</p>
+                        </article>
+                    </div>
+                </section>
+            </div>
+        <?php endif; ?>
+    <?php elseif ($players === [] || $selectedPlayer === null): ?>
         <p class="muted">No player data available yet.</p>
     <?php else: ?>
         <?php

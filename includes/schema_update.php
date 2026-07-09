@@ -200,6 +200,12 @@ function schema_needs_update(PDO $pdo): bool
     if (!schema_col_exists($pdo, 'users', 'display_name')) {
         return true;
     }
+    if (!schema_col_exists($pdo, 'users', 'failed_login_attempts')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'login_locked_until')) {
+        return true;
+    }
     if (!schema_col_exists($pdo, 'demons', 'creator')) {
         return true;
     }
@@ -406,10 +412,19 @@ function run_schema_update(PDO $pdo): array
     if ($clearedDisplayNames > 0) {
         $logs[] = '[OK] Cleared blank users.display_name values: ' . $clearedDisplayNames . ' row(s)';
     }
-    if (schema_col_exists($pdo, 'users', 'display_name')) {
-        $pdo->exec('ALTER TABLE users DROP COLUMN display_name');
-        $logs[] = '[OK] Removed users.display_name';
+
+    if (!schema_col_exists($pdo, 'users', 'failed_login_attempts')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN failed_login_attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER password_hash');
+        $logs[] = '[OK] Added users.failed_login_attempts';
     }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN failed_login_attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0');
+
+    if (!schema_col_exists($pdo, 'users', 'login_locked_until')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN login_locked_until TIMESTAMP NULL DEFAULT NULL AFTER failed_login_attempts');
+        $logs[] = '[OK] Added users.login_locked_until';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN login_locked_until TIMESTAMP NULL DEFAULT NULL');
+
     if (!schema_col_exists($pdo, 'demons', 'creator')) {
         $pdo->exec('ALTER TABLE demons ADD COLUMN creator VARCHAR(160) NULL AFTER requirement');
         $logs[] = '[OK] Added demons.creator';

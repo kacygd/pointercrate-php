@@ -1224,4 +1224,13 @@
       }
     });
   });
+
+  const activeAdminTile = document.querySelector('.admin-sidebar .admin-action-tile.is-active');
+  if (activeAdminTile instanceof HTMLElement) {
+    activeAdminTile.scrollIntoView({ block: 'center' });
+    activeAdminTile.classList.add('admin-section-focus');
+    activeAdminTile.addEventListener('animationend', () => {
+      activeAdminTile.classList.remove('admin-section-focus');
+    }, { once: true });
+  }
 })();

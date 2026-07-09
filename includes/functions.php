@@ -418,6 +418,105 @@ function users_has_is_banned_column(?PDO $pdo = null): bool
     return $result;
 }
 
+function users_has_login_lockout_columns(?PDO $pdo = null): bool
+{
+    static $checked = false;
+    static $result = false;
+
+    if ($checked) {
+        return $result;
+    }
+
+    $checked = true;
+
+    try {
+        $pdo = $pdo instanceof PDO ? $pdo : db();
+        $stmt = $pdo->query(
+            "SELECT COUNT(*)
+             FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND table_name = 'users'
+               AND column_name IN ('failed_login_attempts', 'login_locked_until')"
+        );
+        $result = (int) $stmt->fetchColumn() === 2;
+    } catch (Throwable) {
+        $result = false;
+    }
+
+    return $result;
+}
+
+function login_max_failed_attempts(): int
+{
+    return 5;
+}
+
+function login_lockout_seconds(): int
+{
+    return 5 * 60;
+}
+
+function login_lock_seconds_remaining(?string $lockedUntil): int
+{
+    if ($lockedUntil === null || $lockedUntil === '') {
+        return 0;
+    }
+
+    $lockedTimestamp = strtotime($lockedUntil);
+    if ($lockedTimestamp === false) {
+        return 0;
+    }
+
+    $remaining = $lockedTimestamp - time();
+
+    return $remaining > 0 ? $remaining : 0;
+}
+
+function login_register_failed_attempt(int $userId, int $currentAttempts): void
+{
+    if (!users_has_login_lockout_columns()) {
+        return;
+    }
+
+    $newAttempts = $currentAttempts + 1;
+
+    if ($newAttempts >= login_max_failed_attempts()) {
+        $stmt = db()->prepare(
+            'UPDATE users
+             SET failed_login_attempts = 0,
+                 login_locked_until = DATE_ADD(NOW(), INTERVAL :seconds SECOND)
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            ':seconds' => login_lockout_seconds(),
+            ':id' => $userId,
+        ]);
+
+        return;
+    }
+
+    $stmt = db()->prepare('UPDATE users SET failed_login_attempts = :attempts WHERE id = :id');
+    $stmt->execute([
+        ':attempts' => $newAttempts,
+        ':id' => $userId,
+    ]);
+}
+
+function login_clear_failed_attempts(int $userId): void
+{
+    if (!users_has_login_lockout_columns()) {
+        return;
+    }
+
+    $stmt = db()->prepare(
+        'UPDATE users
+         SET failed_login_attempts = 0,
+             login_locked_until = NULL
+         WHERE id = :id'
+    );
+    $stmt->execute([':id' => $userId]);
+}
+
 function users_has_comments_disabled_column(?PDO $pdo = null): bool
 {
     static $checked = false;
@@ -2247,6 +2346,14 @@ function redirect(string $path): never
     $target = str_starts_with($path, '/') ? $path : base_url($path);
     header('Location: ' . $target);
     exit;
+}
+
+function admin_section_url(string $sectionId, array $extraParams = []): string
+{
+    $params = $sectionId === 'overview' ? [] : ['section' => $sectionId];
+    $params = array_merge($params, $extraParams);
+
+    return base_url('admin.php') . ($params !== [] ? '?' . http_build_query($params) : '');
 }
 
 function app_session_scope_seed(): string
