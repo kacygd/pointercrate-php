@@ -66,12 +66,12 @@ function render_list_dropdown(string $id, string $title, string $description, ar
 
         <div class="see-through fade dropdown" id="<?= e($id) ?>">
             <div class="search js-search seperated" style="margin: 10px;">
-                <input placeholder="Filter..." type="text">
+                <input placeholder="<?= e(t('list.filter')) ?>" type="text">
             </div>
             <p style="margin: 10px;"><?= e($description) ?></p>
             <ul class="flex wrap space">
                 <?php if ($demons === []): ?>
-                    <li class="white" style="min-width: 100%; width: 100%;">No entries in this list.</li>
+                    <li class="white" style="min-width: 100%; width: 100%;"><?= e(t('list.no_entries')) ?></li>
                 <?php endif; ?>
 
                 <?php foreach ($demons as $demon): ?>
@@ -85,7 +85,7 @@ function render_list_dropdown(string $id, string $title, string $description, ar
                         <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
                             #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
                             <br>
-                            <i>published by <?= e($dropdownPublisherLabel) ?><?php if ($dropdownVerifier !== ''): ?>, verified by <?= e($dropdownVerifierLabel) ?><?php endif; ?></i>
+                            <i><?= e(t('list.published_by')) ?> <?= e($dropdownPublisherLabel) ?><?php if ($dropdownVerifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= e($dropdownVerifierLabel) ?><?php endif; ?></i>
                         </a>
                     </li>
                 <?php endforeach; ?>
@@ -403,8 +403,8 @@ function roulette_item_from_demon(array $demon, string $bucket, bool $shown): ar
         'videoUrl' => (string) ($demon['video_url'] ?? ''),
         'thumb' => card_thumbnail_url($demon),
         'levelId' => $levelId,
-        'byline' => 'published by ' . $publisherLabel . ($verifierLabel !== '' ? ', verified by ' . $verifierLabel : ''),
+        'byline' => t('list.published_by') . ' ' . $publisherLabel . ($verifierLabel !== '' ? ', ' . t('list.verified_by') . ' ' . $verifierLabel : ''),
         'score' => number_format(pointercrate_score($position, $requirement, $requirement), 2) . ' (' . $requirement . '%) - '
-            . number_format(pointercrate_score($position, $requirement, 100), 2) . ' (100%) points',
+            . number_format(pointercrate_score($position, $requirement, 100), 2) . ' (100%) ' . t('list.points'),
     ];
 }

@@ -16,7 +16,7 @@ function pointercrate_score(int $position, int $requirement, int $progress): flo
 function format_stats_items(array $items): string
 {
     if ($items === []) {
-        return 'None';
+        return t('common.none');
     }
 
     return implode(' - ', $items);
@@ -25,7 +25,7 @@ function format_stats_items(array $items): string
 function render_stats_demon_links(array $demons, bool $useLabel = false): string
 {
     if ($demons === []) {
-        return 'None';
+        return e(t('common.none'));
     }
 
     $parts = [];
@@ -57,7 +57,7 @@ function render_stats_demon_links(array $demons, bool $useLabel = false): string
     }
 
     if ($parts === []) {
-        return 'None';
+        return e(t('common.none'));
     }
 
     return implode(' - ', $parts);
@@ -695,7 +695,7 @@ $serializeDemonItems = static function (array $items, bool $useLabel = false): a
 $playersPayload = [];
 foreach ($players as $player) {
     $countryCode = normalize_country_code((string) ($player['country_code'] ?? ''));
-    $hardestLabel = 'None';
+    $hardestLabel = t('common.none');
     if ($player['hardest_demon'] !== null) {
         $hardestLabel = $player['hardest_position'] !== null
             ? ('#' . (int) $player['hardest_position'] . ' ' . (string) $player['hardest_demon'])
@@ -721,7 +721,7 @@ foreach ($players as $player) {
         'created_count' => count((array) $player['demons_created']),
         'published_count' => count((array) $player['demons_published']),
         'verified_count' => count((array) $player['demons_verified']),
-        'hardest_demon' => $player['hardest_demon'] !== null ? (string) $player['hardest_demon'] : 'None',
+        'hardest_demon' => $player['hardest_demon'] !== null ? (string) $player['hardest_demon'] : t('common.none'),
         'hardest_position' => $player['hardest_position'] !== null ? (int) $player['hardest_position'] : null,
         'hardest_label' => $hardestLabel,
         'completed' => $serializeDemonItems((array) $player['completed']),
@@ -743,25 +743,25 @@ foreach ($players as $player) {
     ];
 }
 
-render_header('Stats Viewer', 'players');
+render_header(t('stats.title'), 'players');
 ?>
 <section class="panel fade stats-viewer-panel">
     <div class="panel-head">
-        <h1>Stats Viewer</h1>
-        <p>Compare players by points, completions, hardest demons, and contributions</p>
+        <h1><?= e(t('stats.title')) ?></h1>
+        <p><?= e(t('stats.intro')) ?></p>
     </div>
 
     <div class="stats-viewer-tabs">
-        <a class="button <?= $view === 'players' ? 'blue' : 'white' ?> hover small" href="<?= e(base_url('players.php')) ?>">Players</a>
-        <a class="button <?= $view === 'countries' ? 'blue' : 'white' ?> hover small" href="<?= e(base_url('players.php?view=countries')) ?>">Countries</a>
+        <a class="button <?= $view === 'players' ? 'blue' : 'white' ?> hover small" href="<?= e(base_url('players.php')) ?>"><?= e(t('stats.players_tab')) ?></a>
+        <a class="button <?= $view === 'countries' ? 'blue' : 'white' ?> hover small" href="<?= e(base_url('players.php?view=countries')) ?>"><?= e(t('stats.countries_tab')) ?></a>
     </div>
 
     <?php if ($view === 'countries'): ?>
         <?php if ($countryStatsList === [] || $selectedCountry === null): ?>
-            <p class="muted">No country data available yet.</p>
+            <p class="muted"><?= e(t('stats.no_country')) ?></p>
         <?php else: ?>
             <?php
-            $countryHardestLabel = 'None';
+            $countryHardestLabel = t('common.none');
             if ($selectedCountry['hardest_demon'] !== null) {
                 $countryHardestLabel = $selectedCountry['hardest_position'] !== null
                     ? ('#' . (int) $selectedCountry['hardest_position'] . ' ' . (string) $selectedCountry['hardest_demon'])
@@ -794,40 +794,40 @@ render_header('Stats Viewer', 'players');
 
                     <div class="stats-viewer-summary">
                         <article class="stats-viewer-summary-card">
-                            <h3>Nation rank</h3>
+                            <h3><?= e(t('stats.nation_rank')) ?></h3>
                             <p><?= $selectedCountry['rank'] !== null ? '#' . (int) $selectedCountry['rank'] : '-' ?></p>
                         </article>
                         <article class="stats-viewer-summary-card">
-                            <h3>Total points</h3>
+                            <h3><?= e(t('stats.total_points')) ?></h3>
                             <p><?= e(number_format((float) $selectedCountry['total_points'], 2)) ?></p>
                         </article>
                         <article class="stats-viewer-summary-card">
-                            <h3>Players</h3>
+                            <h3><?= e(t('stats.players')) ?></h3>
                             <p><?= (int) $selectedCountry['player_count'] ?></p>
                         </article>
                         <article class="stats-viewer-summary-card">
-                            <h3>Best player</h3>
-                            <p><?= $selectedCountry['best_player'] !== null ? e((string) $selectedCountry['best_player']) : 'None' ?></p>
+                            <h3><?= e(t('stats.best_player')) ?></h3>
+                            <p><?= $selectedCountry['best_player'] !== null ? e((string) $selectedCountry['best_player']) : e(t('common.none')) ?></p>
                         </article>
                         <article class="stats-viewer-summary-card stats-viewer-summary-card-contrib">
-                            <h3>Hardest demon</h3>
+                            <h3><?= e(t('stats.hardest_demon')) ?></h3>
                             <p><?= e($countryHardestLabel) ?></p>
                         </article>
                         <article class="stats-viewer-summary-card stats-viewer-summary-card-breakdown">
-                            <h3>Demonlist stats</h3>
-                            <p><?= (int) $selectedCountry['main_records'] ?> Main, <?= (int) $selectedCountry['extended_records'] ?> Extended, <?= (int) $selectedCountry['legacy_records'] ?> Legacy</p>
+                            <h3><?= e(t('stats.demonlist_stats')) ?></h3>
+                            <p><?= e(t('stats.breakdown', ['main' => (int) $selectedCountry['main_records'], 'extended' => (int) $selectedCountry['extended_records'], 'legacy' => (int) $selectedCountry['legacy_records']])) ?></p>
                         </article>
                     </div>
                 </section>
             </div>
         <?php endif; ?>
     <?php elseif ($players === [] || $selectedPlayer === null): ?>
-        <p class="muted">No player data available yet.</p>
+        <p class="muted"><?= e(t('stats.no_player')) ?></p>
     <?php else: ?>
         <?php
         $selectedCountryCode = normalize_country_code((string) ($selectedPlayer['country_code'] ?? ''));
         $selectedFlag = country_flag_html($selectedCountryCode, true);
-        $selectedHardestLabel = 'None';
+        $selectedHardestLabel = t('common.none');
         if ($selectedPlayer['hardest_demon'] !== null) {
             $selectedHardestLabel = $selectedPlayer['hardest_position'] !== null
                 ? ('#' . (int) $selectedPlayer['hardest_position'] . ' ' . (string) $selectedPlayer['hardest_demon'])
@@ -837,9 +837,9 @@ render_header('Stats Viewer', 'players');
         <div class="stats-viewer-grid">
             <aside class="stats-viewer-sidebar">
                 <label class="stats-viewer-country" for="stats-country-filter">
-                    <span>International</span>
+                    <span><?= e(t('stats.international')) ?></span>
                     <select id="stats-country-filter">
-                        <option value="" <?= $requestedCountry === '' ? 'selected' : '' ?>>WORLD - International</option>
+                        <option value="" <?= $requestedCountry === '' ? 'selected' : '' ?>><?= e(t('stats.world')) ?></option>
                         <?php foreach ($countriesWithPlayers as $countryCode => $countryName): ?>
                             <option value="<?= e($countryCode) ?>" <?= $requestedCountry === $countryCode ? 'selected' : '' ?>><?= e($countryCode . ' - ' . $countryName) ?></option>
                         <?php endforeach; ?>
@@ -848,8 +848,8 @@ render_header('Stats Viewer', 'players');
 
                 <label class="stats-viewer-search" for="stats-player-search">
                     <i class="fa fa-search" aria-hidden="true"></i>
-                    <input id="stats-player-search" type="text" placeholder="Enter to search..." autocomplete="off">
-                    <button id="stats-player-search-clear" type="button" aria-label="Clear search">&times;</button>
+                    <input id="stats-player-search" type="text" placeholder="<?= e(t('stats.search_placeholder')) ?>" autocomplete="off">
+                    <button id="stats-player-search-clear" type="button" aria-label="<?= e(t('stats.clear_search')) ?>">&times;</button>
                 </label>
 
                 <ul id="stats-player-list" class="stats-player-list">
@@ -875,8 +875,8 @@ render_header('Stats Viewer', 'players');
                 </ul>
 
                 <div class="stats-viewer-pagination">
-                    <button id="stats-viewer-prev" type="button" class="button white hover small">Previous</button>
-                    <button id="stats-viewer-next" type="button" class="button white hover small">Next</button>
+                    <button id="stats-viewer-prev" type="button" class="button white hover small"><?= e(t('stats.previous')) ?></button>
+                    <button id="stats-viewer-next" type="button" class="button white hover small"><?= e(t('stats.next')) ?></button>
                 </div>
             </aside>
 
@@ -891,54 +891,54 @@ render_header('Stats Viewer', 'players');
 
                 <div class="stats-viewer-summary">
                     <article class="stats-viewer-summary-card">
-                        <h3>Demonlist rank</h3>
+                        <h3><?= e(t('stats.demonlist_rank')) ?></h3>
                         <p id="stats-rank"><?= $selectedPlayer['rank'] !== null ? '#' . (int) $selectedPlayer['rank'] : '-' ?></p>
                     </article>
                     <article class="stats-viewer-summary-card">
-                        <h3>Total points</h3>
+                        <h3><?= e(t('stats.total_points')) ?></h3>
                         <p id="stats-score"><?= e(number_format((float) $selectedPlayer['points'], 2)) ?></p>
                     </article>
                     <article class="stats-viewer-summary-card">
-                        <h3>Hardest demon</h3>
+                        <h3><?= e(t('stats.hardest_demon')) ?></h3>
                         <p id="stats-hardest"><?= e($selectedHardestLabel) ?></p>
                     </article>
                     <article class="stats-viewer-summary-card stats-viewer-summary-card-contrib">
-                        <h3>Contributions</h3>
-                        <p id="stats-contrib"><?= count((array) $selectedPlayer['demons_created']) ?> Created, <?= count((array) $selectedPlayer['demons_published']) ?> Published, <?= count((array) $selectedPlayer['demons_verified']) ?> Verified</p>
+                        <h3><?= e(t('stats.contributions')) ?></h3>
+                        <p id="stats-contrib"><?= e(t('stats.contrib_counts', ['created' => count((array) $selectedPlayer['demons_created']), 'published' => count((array) $selectedPlayer['demons_published']), 'verified' => count((array) $selectedPlayer['demons_verified'])])) ?></p>
                     </article>
                     <article class="stats-viewer-summary-card stats-viewer-summary-card-breakdown">
-                        <h3>Demonlist stats</h3>
-                        <p id="stats-breakdown"><?= (int) $selectedPlayer['main_records'] ?> Main, <?= (int) $selectedPlayer['extended_records'] ?> Extended, <?= (int) $selectedPlayer['legacy_records'] ?> Legacy</p>
+                        <h3><?= e(t('stats.demonlist_stats')) ?></h3>
+                        <p id="stats-breakdown"><?= e(t('stats.breakdown', ['main' => (int) $selectedPlayer['main_records'], 'extended' => (int) $selectedPlayer['extended_records'], 'legacy' => (int) $selectedPlayer['legacy_records']])) ?></p>
                     </article>
                 </div>
 
                 <div class="stats-viewer-lines">
                     <article>
-                        <h3>Main list completed</h3>
+                        <h3><?= e(t('stats.main_completed')) ?></h3>
                         <p id="stats-main-completed"><?= render_stats_demon_links((array) $selectedPlayer['main_completed']) ?></p>
                     </article>
                     <article>
-                        <h3>Extended list completed</h3>
+                        <h3><?= e(t('stats.extended_completed')) ?></h3>
                         <p id="stats-extended-completed"><?= render_stats_demon_links((array) $selectedPlayer['extended_completed']) ?></p>
                     </article>
                     <article>
-                        <h3>Legacy list completed</h3>
+                        <h3><?= e(t('stats.legacy_completed')) ?></h3>
                         <p id="stats-legacy-completed"><?= render_stats_demon_links((array) $selectedPlayer['legacy_completed']) ?></p>
                     </article>
                     <article>
-                        <h3>Demons created</h3>
+                        <h3><?= e(t('stats.created')) ?></h3>
                         <p id="stats-created"><?= render_stats_demon_links((array) $selectedPlayer['demons_created']) ?></p>
                     </article>
                     <article>
-                        <h3>Demons published</h3>
+                        <h3><?= e(t('stats.published')) ?></h3>
                         <p id="stats-published"><?= render_stats_demon_links((array) $selectedPlayer['demons_published']) ?></p>
                     </article>
                     <article>
-                        <h3>Demons verified</h3>
+                        <h3><?= e(t('stats.verified')) ?></h3>
                         <p id="stats-verified"><?= render_stats_demon_links((array) $selectedPlayer['demons_verified']) ?></p>
                     </article>
                     <article>
-                        <h3>Progress on</h3>
+                        <h3><?= e(t('stats.progress_on')) ?></h3>
                         <p id="stats-progress"><?= render_stats_demon_links((array) $selectedPlayer['progress_on'], true) ?></p>
                     </article>
                 </div>
@@ -948,6 +948,18 @@ render_header('Stats Viewer', 'players');
         <script>
         (() => {
             const data = <?= json_encode($playersPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+            const statsText = <?= json_encode([
+                'none' => t('common.none'),
+                'breakdown' => t('stats.breakdown'),
+                'contrib' => t('stats.contrib_counts'),
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+            const statsTr = (template, replace = {}) => {
+                let text = String(template || '');
+                Object.entries(replace).forEach(([name, value]) => {
+                    text = text.replaceAll(`{${name}}`, String(value));
+                });
+                return text;
+            };
             if (!Array.isArray(data) || data.length === 0) {
                 return;
             }
@@ -996,7 +1008,7 @@ render_header('Stats Viewer', 'players');
 
                 target.textContent = '';
                 if (!Array.isArray(demons) || demons.length === 0) {
-                    target.textContent = 'None';
+                    target.textContent = statsText.none;
                     return;
                 }
 
@@ -1031,7 +1043,7 @@ render_header('Stats Viewer', 'players');
                 });
 
                 if (target.textContent === '') {
-                    target.textContent = 'None';
+                    target.textContent = statsText.none;
                 }
             };
 
@@ -1156,13 +1168,21 @@ render_header('Stats Viewer', 'players');
                     scoreEl.textContent = Number(player.points || 0).toFixed(2);
                 }
                 if (breakdownEl instanceof HTMLElement) {
-                    breakdownEl.textContent = `${player.main_records} Main, ${player.extended_records} Extended, ${player.legacy_records} Legacy`;
+                    breakdownEl.textContent = statsTr(statsText.breakdown, {
+                        main: player.main_records,
+                        extended: player.extended_records,
+                        legacy: player.legacy_records,
+                    });
                 }
                 if (hardestEl instanceof HTMLElement) {
-                    hardestEl.textContent = String(player.hardest_label || 'None');
+                    hardestEl.textContent = String(player.hardest_label || statsText.none);
                 }
                 if (contribEl instanceof HTMLElement) {
-                    contribEl.textContent = `${player.created_count} Created, ${player.published_count} Published, ${player.verified_count} Verified`;
+                    contribEl.textContent = statsTr(statsText.contrib, {
+                        created: player.created_count,
+                        published: player.published_count,
+                        verified: player.verified_count,
+                    });
                 }
                 renderDemonList(mainCompletedEl, player.main_completed);
                 renderDemonList(extendedCompletedEl, player.extended_completed);

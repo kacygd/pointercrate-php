@@ -129,8 +129,8 @@ function render_creator_credit(array $demon): string
     }
     $tooltipText = implode(', ', array_map(fn($c) => e($c), $creators));
     
-    $html .= ' and <span class="tooltip underdotted">';
-    $html .= 'more';
+    $html .= ' ' . e(t('demon.and')) . ' <span class="tooltip underdotted">';
+    $html .= e(t('demon.more'));
     $html .= '<span class="tooltiptext fade">' . $tooltipText . '</span>';
     $html .= '</span>';
 
@@ -162,12 +162,12 @@ function render_demon_dropdown(string $id, string $title, string $description, a
 
         <div class="see-through fade dropdown" id="<?= e($id) ?>">
             <div class="search js-search seperated" style="margin: 10px;">
-                <input placeholder="Filter..." type="text">
+                <input placeholder="<?= e(t('list.filter')) ?>" type="text">
             </div>
             <p style="margin: 10px;"><?= e($description) ?></p>
             <ul class="flex wrap space">
                 <?php if ($demons === []): ?>
-                    <li class="white" style="min-width: 100%; width: 100%;">No entries in this list.</li>
+                    <li class="white" style="min-width: 100%; width: 100%;"><?= e(t('list.no_entries')) ?></li>
                 <?php endif; ?>
 
                 <?php foreach ($demons as $demon): ?>
@@ -175,7 +175,7 @@ function render_demon_dropdown(string $id, string $title, string $description, a
                         <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
                             #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
                             <br>
-                            <i>published by <?= e((string) $demon['publisher']) ?></i>
+                            <i><?= e(t('list.published_by')) ?> <?= e((string) $demon['publisher']) ?></i>
                         </a>
                     </li>
                 <?php endforeach; ?>
@@ -239,23 +239,23 @@ function render_level_comment_card(
                 </a>
                 <?= $commentBadgesHtml ?>
                 <?php if ($isPinned): ?>
-                    <span class="level-comment-pin">Pinned</span>
+                    <span class="level-comment-pin"><?= e(t('comment.pinned')) ?></span>
                 <?php endif; ?>
             </div>
             <time datetime="<?= e(date('c', $commentCreatedAt)) ?>">
                 <?= e(date('Y-m-d H:i', $commentCreatedAt)) ?>
             </time>
         </div>
-        <p class="level-comment-body"><?php if ($commentUpdatedAt > $commentCreatedAt): ?><span class="muted level-comment-edited">(Edited)</span> <?php endif; ?><?= nl2br(e($commentBody)) ?></p>
+        <p class="level-comment-body"><?php if ($commentUpdatedAt > $commentCreatedAt): ?><span class="muted level-comment-edited"><?= e(t('comment.edited')) ?></span> <?php endif; ?><?= nl2br(e($commentBody)) ?></p>
 
-        <div class="level-comment-actions" aria-label="Comment actions">
+        <div class="level-comment-actions" aria-label="<?= e(t('comment.actions')) ?>">
             <?php if (is_logged_in()): ?>
                 <form method="post" action="<?= e($commentActionUrl) ?>">
                     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="action" value="react_level_comment">
                     <input type="hidden" name="comment_id" value="<?= $commentId ?>">
                     <input type="hidden" name="reaction" value="like">
-                    <button class="level-comment-action<?= $currentReaction === 1 ? ' is-active' : '' ?>" type="submit" title="Like">
+                    <button class="level-comment-action<?= $currentReaction === 1 ? ' is-active' : '' ?>" type="submit" title="<?= e(t('comment.like')) ?>">
                         <i class="fa fa-thumbs-up"></i><span><?= $likeCount ?></span>
                     </button>
                 </form>
@@ -264,7 +264,7 @@ function render_level_comment_card(
                     <input type="hidden" name="action" value="react_level_comment">
                     <input type="hidden" name="comment_id" value="<?= $commentId ?>">
                     <input type="hidden" name="reaction" value="dislike">
-                    <button class="level-comment-action<?= $currentReaction === -1 ? ' is-active' : '' ?>" type="submit" title="Dislike">
+                    <button class="level-comment-action<?= $currentReaction === -1 ? ' is-active' : '' ?>" type="submit" title="<?= e(t('comment.dislike')) ?>">
                         <i class="fa fa-thumbs-down"></i><span><?= $dislikeCount ?></span>
                     </button>
                 </form>
@@ -279,8 +279,8 @@ function render_level_comment_card(
                     <input type="hidden" name="action" value="pin_level_comment">
                     <input type="hidden" name="comment_id" value="<?= $commentId ?>">
                     <input type="hidden" name="pin_state" value="<?= $isPinned ? 'unpin' : 'pin' ?>">
-                    <button class="level-comment-action" type="submit" title="<?= $isPinned ? 'Unpin comment' : 'Pin comment' ?>">
-                        <i class="fa fa-thumb-tack"></i><span><?= $isPinned ? 'Unpin' : 'Pin' ?></span>
+                    <button class="level-comment-action" type="submit" title="<?= e($isPinned ? t('comment.unpin_title') : t('comment.pin_title')) ?>">
+                        <i class="fa fa-thumb-tack"></i><span><?= e($isPinned ? t('comment.unpin') : t('comment.pin')) ?></span>
                     </button>
                 </form>
             <?php endif; ?>
@@ -290,8 +290,8 @@ function render_level_comment_card(
                     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="action" value="delete_level_comment">
                     <input type="hidden" name="comment_id" value="<?= $commentId ?>">
-                    <button class="level-comment-action is-danger" type="submit" title="Delete comment" data-confirm="Delete this comment? Replies under it will also be removed.">
-                        <i class="fa fa-trash"></i><span>Delete</span>
+                    <button class="level-comment-action is-danger" type="submit" title="<?= e(t('comment.delete_title')) ?>" data-confirm="<?= e(t('comment.delete_confirm')) ?>">
+                        <i class="fa fa-trash"></i><span><?= e(t('common.delete')) ?></span>
                     </button>
                 </form>
             <?php endif; ?>
@@ -299,29 +299,29 @@ function render_level_comment_card(
             <?php if (is_logged_in()): ?>
                 <?php if ($canEditOwnComment): ?>
                     <details class="level-comment-report level-comment-edit-box">
-                        <summary>Edit</summary>
+                        <summary><?= e(t('common.edit')) ?></summary>
                         <form class="stack-form level-comment-form level-comment-edit-form" method="post" action="<?= e($commentActionUrl) ?>">
                             <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                             <input type="hidden" name="action" value="edit_level_comment">
                             <input type="hidden" name="comment_id" value="<?= $commentId ?>">
                             <label class="field">
-                                <span>Edit Comment</span>
+                                <span><?= e(t('comment.edit_comment')) ?></span>
                                 <textarea name="comment_body" maxlength="<?= (int) level_comment_body_max_length() ?>" required><?= e($commentBody) ?></textarea>
                             </label>
-                            <button class="button blue hover small" type="submit">Save Edit</button>
+                            <button class="button blue hover small" type="submit"><?= e(t('comment.save_edit')) ?></button>
                         </form>
                     </details>
                 <?php elseif ($reportedByCurrentUser): ?>
-                    <span class="level-comment-action-static">Reported</span>
+                    <span class="level-comment-action-static"><?= e(t('comment.reported')) ?></span>
                 <?php else: ?>
                     <details class="level-comment-report">
-                        <summary>Report</summary>
+                        <summary><?= e(t('common.report')) ?></summary>
                         <form class="level-comment-mini-form" method="post" action="<?= e($commentActionUrl) ?>">
                             <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                             <input type="hidden" name="action" value="report_level_comment">
                             <input type="hidden" name="comment_id" value="<?= $commentId ?>">
-                            <input type="text" name="report_reason" maxlength="<?= (int) level_comment_report_reason_max_length() ?>" placeholder="Reason (optional)">
-                            <button class="button danger small" type="submit">Submit</button>
+                            <input type="text" name="report_reason" maxlength="<?= (int) level_comment_report_reason_max_length() ?>" placeholder="<?= e(t('comment.reason_optional')) ?>">
+                            <button class="button danger small" type="submit"><?= e(t('common.submit')) ?></button>
                         </form>
                     </details>
                 <?php endif; ?>
@@ -330,16 +330,16 @@ function render_level_comment_card(
 
         <?php if (!$isReply && $commentsOpen && current_user_can_comment()): ?>
             <details class="level-comment-reply-box">
-                <summary>Reply</summary>
+                <summary><?= e(t('comment.reply')) ?></summary>
                 <form class="stack-form level-comment-form level-comment-reply-form" method="post" action="<?= e($commentActionUrl) ?>">
                     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="action" value="add_level_comment">
                     <input type="hidden" name="parent_comment_id" value="<?= $commentId ?>">
                     <label class="field">
-                        <span>Add Reply</span>
-                        <textarea name="comment_body" maxlength="<?= (int) level_comment_body_max_length() ?>" placeholder="Write a reply..." required></textarea>
+                        <span><?= e(t('comment.add_reply')) ?></span>
+                        <textarea name="comment_body" maxlength="<?= (int) level_comment_body_max_length() ?>" placeholder="<?= e(t('comment.reply_placeholder')) ?>" required></textarea>
                     </label>
-                    <button class="button blue hover small" type="submit">Post Reply</button>
+                    <button class="button blue hover small" type="submit"><?= e(t('comment.post_reply')) ?></button>
                 </form>
             </details>
         <?php endif; ?>
@@ -348,7 +348,7 @@ function render_level_comment_card(
             <details class="level-comment-replies-toggle">
                 <summary>
                     <i class="fa fa-chevron-down" aria-hidden="true"></i>
-                    <span><?= count($commentReplies) ?> repl<?= count($commentReplies) === 1 ? 'y' : 'ies' ?></span>
+                    <span><?= e(t_choice('comment.reply_count_one', 'comment.reply_count_many', count($commentReplies))) ?></span>
                 </summary>
                 <div class="level-comment-replies">
                     <?php foreach ($commentReplies as $reply): ?>
@@ -373,12 +373,12 @@ if ($requestedRank < 1 && $requestedId > 0) {
     $legacyPosition = (int) ($legacyStmt->fetchColumn() ?: 0);
     if ($legacyPosition < 1) {
         http_response_code(404);
-        render_header('Not Found', 'list');
+        render_header(t('demon.not_found_title'), 'list');
         ?>
         <section class="panel fade">
-            <h1>Level not found</h1>
-            <p class="muted">This entry does not exist.</p>
-            <a class="button blue hover" href="<?= e(base_url('index.php')) ?>">Back to list</a>
+            <h1><?= e(t('demon.not_found_title')) ?></h1>
+            <p class="muted"><?= e(t('demon.not_found_text')) ?></p>
+            <a class="button blue hover" href="<?= e(base_url('index.php')) ?>"><?= e(t('common.back_to_list')) ?></a>
         </section>
         <?php
         render_footer();
@@ -425,12 +425,12 @@ if ($demon !== false) {
 
 if ($demon === false) {
     http_response_code(404);
-    render_header('Not Found', 'list');
+    render_header(t('demon.not_found_title'), 'list');
     ?>
     <section class="panel fade">
-        <h1>Level not found</h1>
-        <p class="muted">This entry does not exist.</p>
-        <a class="button blue hover" href="<?= e(base_url('index.php')) ?>">Back to list</a>
+        <h1><?= e(t('demon.not_found_title')) ?></h1>
+        <p class="muted"><?= e(t('demon.not_found_text')) ?></p>
+        <a class="button blue hover" href="<?= e(base_url('index.php')) ?>"><?= e(t('common.back_to_list')) ?></a>
     </section>
     <?php
     render_footer();
@@ -475,23 +475,23 @@ if (method_is_post()) {
         $commentRedirect = $levelCommentAnchorRedirect($commentId);
 
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect($commentRedirect);
         }
 
         if (!is_logged_in()) {
-            flash('error', 'You need to login first.');
+            flash('error', t('comments.login_required'));
             redirect('login.php?next=' . rawurlencode($commentRedirect));
         }
 
         if (in_array($action, ['add_level_comment', 'edit_level_comment'], true) && current_user_comments_disabled()) {
-            flash('error', 'Your account is disabled from commenting.');
+            flash('error', t('comments.account_disabled'));
             redirect($commentRedirect);
         }
 
         if ($action === 'add_level_comment') {
             if (!level_comments_enabled_for_demon($demon)) {
-                flash('error', $levelCommentsDisabledMessage ?? 'Comments are disabled.');
+                flash('error', $levelCommentsDisabledMessage ?? t('comments.disabled'));
                 redirect($levelCommentRedirect);
             }
 
@@ -500,7 +500,7 @@ if (method_is_post()) {
                 try {
                     $parentComment = $fetchLevelCommentForAction($parentCommentId);
                     if ($parentComment === null) {
-                        flash('error', 'Could not find the comment you are replying to.');
+                        flash('error', t('comments.reply_target_missing'));
                         redirect($levelCommentRedirect);
                     }
 
@@ -509,14 +509,14 @@ if (method_is_post()) {
                         $parentCommentId = $parentParentId;
                     }
                 } catch (Throwable) {
-                    flash('error', 'Could not post reply. Please run the schema update and try again.');
+                    flash('error', t('comments.reply_schema_error'));
                     redirect($levelCommentRedirect);
                 }
             }
 
             $commentBody = normalize_level_comment_body((string) ($_POST['comment_body'] ?? ''));
             if ($commentBody === '') {
-                flash('error', 'Comment cannot be empty.');
+                flash('error', t('comments.empty'));
                 redirect($parentCommentId > 0 ? $levelCommentAnchorRedirect($parentCommentId) : $levelCommentRedirect);
             }
 
@@ -531,9 +531,9 @@ if (method_is_post()) {
                     ':parent_comment_id' => $parentCommentId > 0 ? $parentCommentId : null,
                     ':body' => $commentBody,
                 ]);
-                flash('success', $parentCommentId > 0 ? 'Reply posted.' : 'Comment posted.');
+                flash('success', $parentCommentId > 0 ? t('comments.reply_posted') : t('comments.posted'));
             } catch (Throwable) {
-                flash('error', 'Could not post comment. Please try again.');
+                flash('error', t('comments.post_failed'));
             }
 
             redirect($parentCommentId > 0 ? $levelCommentAnchorRedirect($parentCommentId) : $levelCommentRedirect);
@@ -542,25 +542,25 @@ if (method_is_post()) {
         try {
             $targetComment = $fetchLevelCommentForAction($commentId);
         } catch (Throwable) {
-            flash('error', 'Comment actions are not ready yet. Please run the schema update.');
+            flash('error', t('comments.actions_schema_error'));
             redirect($levelCommentRedirect);
         }
 
         if ($targetComment === null) {
-            flash('error', 'Comment not found.');
+            flash('error', t('comments.not_found'));
             redirect($levelCommentRedirect);
         }
 
         if ($action === 'edit_level_comment') {
             $targetUserId = (int) ($targetComment['user_id'] ?? 0);
             if ($targetUserId < 1 || $targetUserId !== (int) current_user_id()) {
-                flash('error', 'You can only edit your own comments.');
+                flash('error', t('comments.edit_own_only'));
                 redirect($commentRedirect);
             }
 
             $commentBody = normalize_level_comment_body((string) ($_POST['comment_body'] ?? ''));
             if ($commentBody === '') {
-                flash('error', 'Comment cannot be empty.');
+                flash('error', t('comments.empty'));
                 redirect($commentRedirect);
             }
 
@@ -579,9 +579,9 @@ if (method_is_post()) {
                     ':demon_id' => $id,
                     ':user_id' => current_user_id(),
                 ]);
-                flash('success', 'Comment updated.');
+                flash('success', t('comments.updated'));
             } catch (Throwable) {
-                flash('error', 'Could not update comment.');
+                flash('error', t('comments.update_failed'));
             }
 
             redirect($commentRedirect);
@@ -591,7 +591,7 @@ if (method_is_post()) {
             $targetUserId = (int) ($targetComment['user_id'] ?? 0);
             $canDeleteTarget = can_moderate_level_comments() || ($targetUserId > 0 && $targetUserId === (int) current_user_id());
             if (!$canDeleteTarget) {
-                flash('error', 'You can only delete your own comments.');
+                flash('error', t('comments.delete_own_only'));
                 redirect($commentRedirect);
             }
 
@@ -602,9 +602,9 @@ if (method_is_post()) {
                     ':comment_id' => $commentId,
                     ':demon_id' => $id,
                 ]);
-                flash('success', 'Comment deleted.');
+                flash('success', t('comments.deleted'));
             } catch (Throwable) {
-                flash('error', 'Could not delete comment.');
+                flash('error', t('comments.delete_failed'));
             }
 
             redirect($parentCommentId > 0 ? $levelCommentAnchorRedirect($parentCommentId) : $levelCommentRedirect);
@@ -613,7 +613,7 @@ if (method_is_post()) {
         if ($action === 'react_level_comment') {
             $reactionValue = level_comment_reaction_value((string) ($_POST['reaction'] ?? ''));
             if ($reactionValue === null) {
-                flash('error', 'Invalid reaction.');
+                flash('error', t('comments.invalid_reaction'));
                 redirect($commentRedirect);
             }
 
@@ -654,7 +654,7 @@ if (method_is_post()) {
                     ]);
                 }
             } catch (Throwable) {
-                flash('error', 'Could not update reaction. Please try again.');
+                flash('error', t('comments.reaction_failed'));
             }
 
             redirect($commentRedirect);
@@ -675,9 +675,9 @@ if (method_is_post()) {
                     ':user_id' => current_user_id(),
                     ':reason' => $reason !== '' ? $reason : null,
                 ]);
-                flash('success', 'Report sent.');
+                flash('success', t('comments.report_sent'));
             } catch (Throwable) {
-                flash('error', 'Could not send report. Please try again.');
+                flash('error', t('comments.report_failed'));
             }
 
             redirect($commentRedirect);
@@ -685,12 +685,12 @@ if (method_is_post()) {
 
         if ($action === 'pin_level_comment') {
             if (!can_pin_level_comments()) {
-                flash('error', 'Only owners and list editors can pin comments.');
+                flash('error', t('comments.pin_permission'));
                 redirect($commentRedirect);
             }
 
             if ((int) ($targetComment['parent_comment_id'] ?? 0) > 0) {
-                flash('error', 'Only top-level comments can be pinned.');
+                flash('error', t('comments.pin_top_level_only'));
                 redirect($commentRedirect);
             }
 
@@ -709,7 +709,7 @@ if (method_is_post()) {
                         ':comment_id' => $commentId,
                         ':demon_id' => $id,
                     ]);
-                    flash('success', 'Comment unpinned.');
+                    flash('success', t('comments.unpinned'));
                 } else {
                     $commentDb->beginTransaction();
 
@@ -732,7 +732,7 @@ if (method_is_post()) {
                         }
                     }
                     if (!$targetExists) {
-                        throw new RuntimeException('Comment not found.');
+                        throw new RuntimeException(t('comments.not_found'));
                     }
 
                     $clearPinned = $commentDb->prepare(
@@ -764,13 +764,13 @@ if (method_is_post()) {
                     ]);
 
                     $commentDb->commit();
-                    flash('success', 'Comment pinned.');
+                    flash('success', t('comments.pinned'));
                 }
             } catch (Throwable) {
                 if (isset($commentDb) && $commentDb->inTransaction()) {
                     $commentDb->rollBack();
                 }
-                flash('error', 'Could not update pinned comment.');
+                flash('error', t('comments.pin_failed'));
             }
 
             redirect($commentRedirect);
@@ -986,9 +986,9 @@ $minimumScore = number_format(pointercrate_score($position, $requirement, $requi
 $fullScore = number_format(pointercrate_score($position, $requirement, 100), 2);
 $currentBucket = demonlist_list_bucket($position, (int) ($demon['legacy'] ?? 0) === 1);
 $category = match ($currentBucket) {
-    'extended' => 'Extended List',
-    'legacy' => 'Legacy List',
-    default => 'Main List',
+    'extended' => t('list.extended'),
+    'legacy' => t('list.legacy'),
+    default => t('list.main'),
 };
 $creator = demon_creator_name($demon);
 $publisher = trim((string) ($demon['publisher'] ?? ''));
@@ -996,7 +996,7 @@ $verifier = trim((string) ($demon['verifier'] ?? ''));
 $levelDescription = normalize_demon_description((string) ($demon['description'] ?? ''));
 $publisherUserId = isset($demon['publisher_user_id']) ? (int) $demon['publisher_user_id'] : 0;
 $verifierUserId = isset($demon['verifier_user_id']) ? (int) $demon['verifier_user_id'] : 0;
-$verifiedMetaSuffix = $verifier !== '' ? ', verified by ' . $verifier : '';
+$verifiedMetaSuffix = $verifier !== '' ? t('demon.meta_verified_by', ['verifier' => $verifier]) : '';
 $levelInfoRows = demon_level_info_rows();
 $levelInfoCustomValues = demon_level_info_custom_values(db(), $id);
 
@@ -1039,16 +1039,15 @@ $renderLevelInfoValue = static function (array $row) use (
     };
 };
 
-$metaDescription = sprintf(
-    '#%d - %s by %s, published by %s%s. %d%% to qualify, %s points at 100%%.',
-    $position,
-    (string) $demon['name'],
-    $creator !== '' ? $creator : 'Unknown',
-    $publisher !== '' ? $publisher : 'Unknown',
-    $verifiedMetaSuffix,
-    $requirement,
-    $fullScore
-);
+$metaDescription = t('demon.meta_description', [
+    'position' => $position,
+    'name' => (string) $demon['name'],
+    'creator' => $creator !== '' ? $creator : t('common.unknown'),
+    'publisher' => $publisher !== '' ? $publisher : t('common.unknown'),
+    'verified' => $verifiedMetaSuffix,
+    'requirement' => $requirement,
+    'points' => $fullScore,
+]);
 
 render_header((string) $demon['name'], 'list', [
     'title' => '#' . $position . ' - ' . (string) $demon['name'],
@@ -1064,12 +1063,12 @@ render_header((string) $demon['name'], 'list', [
     $extendedListDescription = demonlist_extended_list_dropdown_description(true);
     $legacyListDescription = demonlist_legacy_list_dropdown_description();
     ?>
-    <?php render_demon_dropdown('mainlist', 'Main List', $mainListDescription, $main, $id); ?>
+    <?php render_demon_dropdown('mainlist', t('list.main'), $mainListDescription, $main, $id); ?>
     <?php if ($showExtendedList): ?>
-        <?php render_demon_dropdown('extended', 'Extended List', $extendedListDescription, $extended, $id); ?>
+        <?php render_demon_dropdown('extended', t('list.extended'), $extendedListDescription, $extended, $id); ?>
     <?php endif; ?>
     <?php if ($showLegacyList): ?>
-        <?php render_demon_dropdown('legacy', 'Legacy List', $legacyListDescription, $legacy, $id); ?>
+        <?php render_demon_dropdown('legacy', t('list.legacy'), $legacyListDescription, $legacy, $id); ?>
     <?php endif; ?>
 </nav>
 
@@ -1079,7 +1078,7 @@ render_header((string) $demon['name'], 'list', [
             <div class="flex mobile-col demon-hero">
                 <a class="thumb ratio-16-9 demon-hero-thumb" href="<?= e((string) $demon['video_url']) ?>" target="_blank" rel="noreferrer" style="<?= e($thumbStyle) ?>">
                     <?php if ($thumbUrl !== ''): ?>
-                        <img src="<?= e($thumbUrl) ?>" alt="<?= e((string) $demon['name']) ?> thumbnail" loading="lazy">
+                        <img src="<?= e($thumbUrl) ?>" alt="<?= e(t('demon.thumbnail_alt', ['name' => (string) $demon['name']])) ?>" loading="lazy">
                     <?php endif; ?>
                 </a>
                 <div class="demon-hero-content">
@@ -1087,19 +1086,19 @@ render_header((string) $demon['name'], 'list', [
                         #<?= $position ?> &#8211; <?= e((string) $demon['name']) ?>
                     </h1>
                     <p class="demon-hero-byline">
-                        by <?= render_creator_credit($demon) ?>, published by <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, verified by <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
+                        <?= e(t('demon.byline_by')) ?> <?= render_creator_credit($demon) ?>, <?= e(t('list.published_by')) ?> <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
                     </p>
                     <p class="demon-hero-score">
-                        <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) points
+                        <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) <?= e(t('list.points')) ?>
                     </p>
                     <div class="demon-hero-actions">
                         <?php if ($prevId !== null): ?>
-                            <a class="button white hover small" href="<?= e(base_url((string) $prevId)) ?>"><i class="fa fa-chevron-left"></i> Prev</a>
+                            <a class="button white hover small" href="<?= e(base_url((string) $prevId)) ?>"><i class="fa fa-chevron-left"></i> <?= e(t('demon.prev')) ?></a>
                         <?php endif; ?>
                         <?php if ($nextId !== null): ?>
-                            <a class="button white hover small" href="<?= e(base_url((string) $nextId)) ?>">Next <i class="fa fa-chevron-right"></i></a>
+                            <a class="button white hover small" href="<?= e(base_url((string) $nextId)) ?>"><?= e(t('demon.next')) ?> <i class="fa fa-chevron-right"></i></a>
                         <?php endif; ?>
-                        <a class="button blue hover small" href="<?= e((string) $demon['video_url']) ?>" target="_blank" rel="noreferrer">Verification Video</a>
+                        <a class="button blue hover small" href="<?= e((string) $demon['video_url']) ?>" target="_blank" rel="noreferrer"><?= e(t('demon.verification_video')) ?></a>
                     </div>
                 </div>
             </div>
@@ -1112,9 +1111,9 @@ render_header((string) $demon['name'], 'list', [
 
             <div class="detail-grid demon-detail-grid">
                 <div class="panel subtle">
-                    <h3>Level Info</h3>
+                    <h3><?= e(t('demon.level_info')) ?></h3>
                     <?php if ($levelInfoRows === []): ?>
-                        <p class="muted">No level info rows configured.</p>
+                        <p class="muted"><?= e(t('demon.no_level_info')) ?></p>
                     <?php else: ?>
                         <dl class="key-value compact">
                             <?php foreach ($levelInfoRows as $row): ?>
@@ -1124,11 +1123,11 @@ render_header((string) $demon['name'], 'list', [
                     <?php endif; ?>
                 </div>
                 <div class="panel subtle">
-                    <h3>Scoring</h3>
+                    <h3><?= e(t('demon.scoring')) ?></h3>
                     <dl class="key-value compact">
-                        <div><dt>At Requirement</dt><dd><?= $minimumScore ?> pts</dd></div>
-                        <div><dt>At 100%</dt><dd><?= $fullScore ?> pts</dd></div>
-                        <div><dt>Completions</dt><dd><?= (int) $demon['completion_count'] ?></dd></div>
+                        <div><dt><?= e(t('demon.at_requirement')) ?></dt><dd><?= $minimumScore ?> pts</dd></div>
+                        <div><dt><?= e(t('demon.at_100')) ?></dt><dd><?= $fullScore ?> pts</dd></div>
+                        <div><dt><?= e(t('demon.completions')) ?></dt><dd><?= (int) $demon['completion_count'] ?></dd></div>
                     </dl>
                 </div>
             </div>
@@ -1137,29 +1136,29 @@ render_header((string) $demon['name'], 'list', [
         <?php if ($embed !== null): ?>
             <section class="panel fade">
                 <div class="panel-head">
-                    <h2>Verification Preview</h2>
+                    <h2><?= e(t('demon.verification_preview')) ?></h2>
                 </div>
-                <iframe class="ratio-16-9 demon-preview-frame" allowfullscreen src="<?= e($embed) ?>" title="<?= e((string) $demon['name']) ?> verification"></iframe>
+                <iframe class="ratio-16-9 demon-preview-frame" allowfullscreen src="<?= e($embed) ?>" title="<?= e(t('demon.video_iframe_title', ['name' => (string) $demon['name']])) ?>"></iframe>
             </section>
         <?php endif; ?>
 
         <section class="records panel fade">
             <div class="underlined pad">
-                <h2>Records</h2>
-                <h3><?= $requirement ?>% or better to qualify</h3>
-                <h4><?= count($completions) ?> records submitted</h4>
+                <h2><?= e(t('demon.records')) ?></h2>
+                <h3><?= e(t('demon.qualify', ['requirement' => $requirement])) ?></h3>
+                <h4><?= e(t('demon.records_submitted', ['count' => count($completions)])) ?></h4>
             </div>
 
             <?php if ($completions === []): ?>
-                <h3>No records yet</h3>
+                <h3><?= e(t('demon.no_records')) ?></h3>
             <?php else: ?>
                 <div class="table-wrap">
                     <table class="data-table records-table">
                         <thead>
                             <tr>
-                                <th class="blue">Record Holder</th>
-                                <th class="blue">Progress</th>
-                                <th class="blue">Video Proof</th>
+                                <th class="blue"><?= e(t('demon.record_holder')) ?></th>
+                                <th class="blue"><?= e(t('common.progress')) ?></th>
+                                <th class="blue"><?= e(t('demon.video_proof')) ?></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1194,27 +1193,27 @@ render_header((string) $demon['name'], 'list', [
 
         <section class="panel fade">
             <details class="history-toggle">
-                <summary>Position History</summary>
+                <summary><?= e(t('demon.position_history')) ?></summary>
                 <div class="history-toggle-content">
                     <div class="history-toggle-inner">
                         <div class="table-wrap">
                             <table class="data-table">
                                 <thead>
                                     <tr>
-                                        <th>Date Change</th>
-                                        <th>New Position</th>
-                                        <th>Reason</th>
+                                        <th><?= e(t('demon.date_change')) ?></th>
+                                        <th><?= e(t('demon.new_position')) ?></th>
+                                        <th><?= e(t('demon.reason')) ?></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php if ($positionHistory === []): ?>
-                                        <tr><td colspan="3" class="muted">No position changes recorded yet.</td></tr>
+                                        <tr><td colspan="3" class="muted"><?= e(t('demon.no_position_history')) ?></td></tr>
                                     <?php endif; ?>
                                     <?php foreach ($positionHistory as $event): ?>
                                         <?php
                                         $reason = trim((string) ($event['note'] ?? ''));
                                         if ($reason === '') {
-                                            $reason = $event['old_position'] === null ? 'Initial placement' : 'Position updated';
+                                            $reason = $event['old_position'] === null ? t('demon.initial_placement') : t('demon.position_updated');
                                         }
                                         ?>
                                         <tr>
@@ -1233,9 +1232,9 @@ render_header((string) $demon['name'], 'list', [
 
         <section class="panel fade level-comments-panel" id="level-comments">
             <div class="panel-head">
-                <h2>Comments</h2>
+                <h2><?= e(t('common.comments')) ?></h2>
                 <?php if ($levelCommentTotal > 0): ?>
-                    <p><?= $levelCommentTotal ?> comment<?= $levelCommentTotal === 1 ? '' : 's' ?> on this level.</p>
+                    <p><?= e(t_choice('demon.comments_count_one', 'demon.comments_count_many', $levelCommentTotal)) ?></p>
                 <?php endif; ?>
             </div>
 
@@ -1246,21 +1245,21 @@ render_header((string) $demon['name'], 'list', [
                     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="action" value="add_level_comment">
                     <label class="field">
-                        <span>Add Comment</span>
-                        <textarea name="comment_body" maxlength="<?= (int) level_comment_body_max_length() ?>" placeholder="Share a thought about this level..." required></textarea>
+                        <span><?= e(t('demon.add_comment')) ?></span>
+                        <textarea name="comment_body" maxlength="<?= (int) level_comment_body_max_length() ?>" placeholder="<?= e(t('demon.comment_placeholder')) ?>" required></textarea>
                     </label>
                     <div class="level-comment-form-actions">
-                        <span class="muted">Signed in as <?= e((string) (current_user_display_name() ?? '')) ?></span>
-                        <button class="button blue hover" type="submit">Post Comment</button>
+                        <span class="muted"><?= e(t('demon.signed_in_as', ['name' => (string) (current_user_display_name() ?? '')])) ?></span>
+                        <button class="button blue hover" type="submit"><?= e(t('demon.post_comment')) ?></button>
                     </div>
                 </form>
             <?php elseif (is_logged_in()): ?>
-                <p class="muted level-comments-status">Your account is disabled from commenting.</p>
+                <p class="muted level-comments-status"><?= e(t('comments.account_disabled')) ?></p>
             <?php endif; ?>
 
             <div class="level-comments-list">
                 <?php if ($levelCommentTotal === 0 && $levelCommentsDisabledMessage === null): ?>
-                    <p class="muted level-comments-empty">No comments yet.</p>
+                    <p class="muted level-comments-empty"><?= e(t('demon.no_comments')) ?></p>
                 <?php endif; ?>
                 <?php foreach ($levelComments as $comment): ?>
                     <?php render_level_comment_card(
@@ -1277,11 +1276,11 @@ render_header((string) $demon['name'], 'list', [
             </div>
 
             <?php if ($levelCommentTotalPages > 1): ?>
-                <nav class="level-comments-pagination" aria-label="Comment pages">
+                <nav class="level-comments-pagination" aria-label="<?= e(t('demon.comment_pages')) ?>">
                     <a class="button white hover small<?= $levelCommentPage <= 1 ? ' is-disabled' : '' ?>"
                        href="<?= e($levelCommentPage <= 1 ? $levelCommentPageUrl(1) : $levelCommentPageUrl($levelCommentPage - 1)) ?>"
                        aria-disabled="<?= $levelCommentPage <= 1 ? 'true' : 'false' ?>"><</a>
-                    <span class="level-comments-page-status">Page <?= $levelCommentPage ?></span>
+                    <span class="level-comments-page-status"><?= e(t('demon.page', ['page' => $levelCommentPage])) ?></span>
                     <a class="button white hover small<?= $levelCommentPage >= $levelCommentTotalPages ? ' is-disabled' : '' ?>"
                        href="<?= e($levelCommentPage >= $levelCommentTotalPages ? $levelCommentPageUrl($levelCommentTotalPages) : $levelCommentPageUrl($levelCommentPage + 1)) ?>"
                        aria-disabled="<?= $levelCommentPage >= $levelCommentTotalPages ? 'true' : 'false' ?>">></a>
@@ -1293,13 +1292,13 @@ render_header((string) $demon['name'], 'list', [
     <aside class="right">
         <section id="staff-contacts" class="panel fade staff-contact-panel">
             <div class="staff-contact-subsection">
-                <h2 class="underlined pad">List Editors</h2>
+                <h2 class="underlined pad"><?= e(t('home.editors')) ?></h2>
                 <p class="staff-contact-note">
-                    Contact any of these people if you have problems with the list or want to see a specific thing changed.
+                    <?= e(t('home.editors_note')) ?>
                 </p>
                 <ul class="staff-contact-list">
                     <?php if ($listEditors === []): ?>
-                        <li class="staff-contact-empty">No list editors yet.</li>
+                        <li class="staff-contact-empty"><?= e(t('home.no_editors')) ?></li>
                     <?php endif; ?>
                     <?php foreach ($listEditors as $editor): ?>
                         <?php
@@ -1309,21 +1308,20 @@ render_header((string) $demon['name'], 'list', [
                         $username = e(user_display_name_from_row($editor));
                         ?>
                         <li>
-                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
+                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="<?= e(t('home.youtube_channel')) ?>" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
                         </li>
                     <?php endforeach; ?>
                 </ul>
             </div>
 
             <div class="staff-contact-subsection">
-                <h2 class="underlined pad">List Helpers</h2>
+                <h2 class="underlined pad"><?= e(t('home.helpers')) ?></h2>
                 <p class="staff-contact-note">
-                    Contact these people if you have any questions regarding why a specific record was rejected.
-                    Do not needlessly bug them about checking submissions though!
+                    <?= e(t('home.helpers_note')) ?>
                 </p>
                 <ul class="staff-contact-list">
                     <?php if ($listHelpers === []): ?>
-                        <li class="staff-contact-empty">No list helpers yet.</li>
+                        <li class="staff-contact-empty"><?= e(t('home.no_helpers')) ?></li>
                     <?php endif; ?>
                     <?php foreach ($listHelpers as $helper): ?>
                         <?php
@@ -1333,7 +1331,7 @@ render_header((string) $demon['name'], 'list', [
                         $username = e(user_display_name_from_row($helper));
                         ?>
                         <li>
-                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
+                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="<?= e(t('home.youtube_channel')) ?>" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
                         </li>
                     <?php endforeach; ?>
                 </ul>
@@ -1341,37 +1339,35 @@ render_header((string) $demon['name'], 'list', [
         </section>
 
         <section id="rules" class="panel fade">
-            <h2 class="underlined pad clickable">Guidelines</h2>
-            <p>Only legitimate, unedited runs with clear proof are accepted. All records are reviewed manually.</p>
-            <a class="blue hover button" href="<?= e(base_url('guidelines.php')) ?>">Read Guidelines</a>
+            <h2 class="underlined pad clickable"><?= e(t('home.guidelines_title')) ?></h2>
+            <p><?= e(t('home.guidelines_text')) ?></p>
+            <a class="blue hover button" href="<?= e(base_url('guidelines.php')) ?>"><?= e(t('home.read_guidelines')) ?></a>
         </section>
 
         <section id="submit" class="panel fade">
-            <h2 class="underlined pad">Submit Record</h2>
+            <h2 class="underlined pad"><?= e(t('home.submit_title')) ?></h2>
             <p>
-                Note: Please do not submit nonsense, it only makes it harder for us all and will get you banned.
-                Also note that the form rejects duplicate submissions.
+                <?= e(t('home.submit_text')) ?>
             </p>
-            <a class="blue hover button" href="<?= e(base_url('submit.php')) ?>">Open Submit</a>
+            <a class="blue hover button" href="<?= e(base_url('submit.php')) ?>"><?= e(t('home.submit_button')) ?></a>
         </section>
 
         <section id="stats-viewer" class="panel fade">
-            <h2 class="underlined pad">Stats Viewer</h2>
+            <h2 class="underlined pad"><?= e(t('home.stats_title')) ?></h2>
             <p>
-                Get a detailed overview of who completed the most, created the most demons, or beat the hardest demons.
-                Compare your progress and climb the leaderboard.
+                <?= e(t('home.stats_text')) ?>
             </p>
-            <a class="blue hover button" href="<?= e(base_url('players.php')) ?>">Open stats viewer!</a>
+            <a class="blue hover button" href="<?= e(base_url('players.php')) ?>"><?= e(t('home.stats_button')) ?></a>
         </section>
 
         <?php if ($discordWidgetUrl !== null): ?>
             <section id="discord" class="panel fade">
-                <h2 class="underlined pad">Discord Server</h2>
+                <h2 class="underlined pad"><?= e(t('home.discord_title')) ?></h2>
                 <div class="discord-widget-wrap">
                     <iframe
                         class="discord-widget-frame"
                         src="<?= e($discordWidgetUrl) ?>"
-                        title="Discord Server"
+                        title="<?= e(t('home.discord_title')) ?>"
                         sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
                     ></iframe>
                 </div>

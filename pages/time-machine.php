@@ -44,13 +44,13 @@ $showExtendedList = demonlist_show_extended_list();
 $showLegacyList = demonlist_show_legacy_list();
 
 $mainListDescription = $isTimeMachineView
-    ? 'Main List entries in this historical snapshot.'
+    ? t('time.main_snapshot')
     : demonlist_main_list_dropdown_description($showExtendedList, $showLegacyList);
 $extendedListDescription = $isTimeMachineView
-    ? 'Extended List entries in this historical snapshot.'
+    ? t('time.extended_snapshot')
     : demonlist_extended_list_dropdown_description(true);
 $legacyListDescription = $isTimeMachineView
-    ? 'Legacy entries in this historical snapshot.'
+    ? t('time.legacy_snapshot')
     : demonlist_legacy_list_dropdown_description();
 
 $timeMachineInputValue = time_machine_format_input($viewAt);
@@ -58,9 +58,9 @@ $timeMachineMinValue = $availableSince instanceof DateTimeImmutable
     ? time_machine_format_input($availableSince)
     : time_machine_format_input($now);
 $timeMachineBanner = time_machine_format_banner($viewAt);
-render_header('Time Machine', 'time_machine', [
-    'title' => 'Time Machine',
-    'description' => 'View the Demonlist at a previous point in time.',
+render_header(t('time.title'), 'time_machine', [
+    'title' => t('time.title'),
+    'description' => t('time.meta_description'),
     'url' => $isTimeMachineView
         ? (base_url('time-machine.php') . '?at=' . rawurlencode(time_machine_format_input($viewAt)))
         : base_url('time-machine.php'),
@@ -68,12 +68,12 @@ render_header('Time Machine', 'time_machine', [
 ?>
 
 <nav class="flex wrap m-center fade" id="lists" style="text-align: center;">
-    <?php render_list_dropdown('mainlist', 'Main List', $mainListDescription, $main); ?>
+                    <?php render_list_dropdown('mainlist', t('list.main'), $mainListDescription, $main); ?>
     <?php if ($showExtendedList): ?>
-        <?php render_list_dropdown('extended', 'Extended List', $extendedListDescription, $extended); ?>
+        <?php render_list_dropdown('extended', t('list.extended'), $extendedListDescription, $extended); ?>
     <?php endif; ?>
     <?php if ($showLegacyList): ?>
-        <?php render_list_dropdown('legacy', 'Legacy List', $legacyListDescription, $legacy); ?>
+        <?php render_list_dropdown('legacy', t('list.legacy'), $legacyListDescription, $legacy); ?>
     <?php endif; ?>
 </nav>
 
@@ -82,20 +82,20 @@ render_header('Time Machine', 'time_machine', [
         <?php if ($isTimeMachineView): ?>
             <section class="panel fade time-machine-banner">
                 <div class="time-machine-banner-copy">
-                    You are currently looking at the demonlist how it was on <b><?= e($timeMachineBanner) ?></b>
+                    <?= e(t('time.banner')) ?> <b><?= e($timeMachineBanner) ?></b>
                 </div>
-                <a class="button white hover" href="<?= e(base_url('time-machine.php')) ?>">Go to present</a>
+                <a class="button white hover" href="<?= e(base_url('time-machine.php')) ?>"><?= e(t('time.present')) ?></a>
             </section>
         <?php endif; ?>
 
         <section class="panel fade time-machine-tool" id="time-machine">
             <form class="stack-form" id="time-machine-form" method="get" action="<?= e(base_url('time-machine.php')) ?>">
                 <div class="underlined pad">
-                    <h1>Time Machine</h1>
+                    <h1><?= e(t('time.title')) ?></h1>
                 </div>
-                <p>Enter the date you want to view the list at below.</p>
+                <p><?= e(t('time.intro')) ?></p>
                 <span class="form-input" id="time-machine-destination" data-type="datetime-local">
-                    <h3>Destination</h3>
+                    <h3><?= e(t('time.destination')) ?></h3>
                     <input
                         type="datetime-local"
                         name="at"
@@ -107,9 +107,9 @@ render_header('Time Machine', 'time_machine', [
                     <p class="error"></p>
                 </span>
                 <div class="homepage-tool-actions centered-actions">
-                    <button class="button blue hover" type="submit">Go</button>
+                    <button class="button blue hover" type="submit"><?= e(t('time.go')) ?></button>
                     <?php if ($isTimeMachineView): ?>
-                        <a class="button white hover" href="<?= e(base_url('time-machine.php')) ?>">Go to present</a>
+                        <a class="button white hover" href="<?= e(base_url('time-machine.php')) ?>"><?= e(t('time.present')) ?></a>
                     <?php endif; ?>
                 </div>
             </form>
@@ -117,8 +117,8 @@ render_header('Time Machine', 'time_machine', [
 
         <?php if ($showcase === []): ?>
             <section class="panel fade">
-                <h2>No Demons Yet</h2>
-                <p>No levels existed at this destination.</p>
+                <h2><?= e(t('time.no_demons_title')) ?></h2>
+                <p><?= e(t('time.no_demons_text')) ?></p>
             </section>
         <?php endif; ?>
 
@@ -164,14 +164,14 @@ render_header('Time Machine', 'time_machine', [
                             </a>
                         </h2>
                         <h3 class="demon-card-byline" style="text-align: left; margin-bottom: 0;">
-                            published by <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, verified by <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
+                            <?= e(t('list.published_by')) ?> <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
                         </h3>
                         <div class="demon-points" style="text-align: left; font-size: 0.8em;">
-                            <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) points
+                            <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) <?= e(t('list.points')) ?>
                         </div>
                         <?php if ($isTimeMachineView): ?>
                             <div class="muted" style="text-align: left; font-size: 0.85em; margin-top: 4px;">
-                                <?= historical_list_bucket($currentPosition) === 'legacy' ? 'Currently Legacy' : 'Currently #' . e((string) $currentPosition) ?>
+                                <?= historical_list_bucket($currentPosition) === 'legacy' ? e(t('list.currently_legacy')) : e(t('list.currently_rank', ['rank' => $currentPosition])) ?>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -182,9 +182,9 @@ render_header('Time Machine', 'time_machine', [
 
     <aside class="right">
         <section class="panel fade">
-            <h2 class="underlined pad">About</h2>
-            <p>Historical positions are reconstructed from recorded list changes. The earliest selectable date is the date the first level was added to this list.</p>
-            <a class="blue hover button" href="<?= e(base_url('index.php')) ?>">Back to Main List</a>
+            <h2 class="underlined pad"><?= e(t('time.about')) ?></h2>
+            <p><?= e(t('time.about_text')) ?></p>
+            <a class="blue hover button" href="<?= e(base_url('index.php')) ?>"><?= e(t('common.back_to_main_list')) ?></a>
         </section>
     </aside>
 </div>

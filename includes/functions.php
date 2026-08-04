@@ -19,6 +19,92 @@ function config(string $key, mixed $default = null): mixed
     return $value;
 }
 
+/** @return array<string, array{name: string}> */
+function supported_languages(): array
+{
+    static $languages = null;
+    if (is_array($languages)) {
+        return $languages;
+    }
+
+    $languages = [];
+    $directory = dirname(__DIR__) . '/lang';
+    foreach (glob($directory . '/*.php') ?: [] as $file) {
+        $code = basename($file, '.php');
+        if (preg_match('/^[a-z]{2}(?:_[A-Z]{2})?$/', $code) !== 1) {
+            continue;
+        }
+        $translation = require $file;
+        if (is_array($translation)) {
+            $languages[$code] = ['name' => (string) ($translation['_name'] ?? $code)];
+        }
+    }
+
+    return $languages;
+}
+
+function is_supported_language(string $language): bool
+{
+    return array_key_exists($language, supported_languages());
+}
+
+function current_language(): string
+{
+    $configured = (string) config('app.default_language', 'en');
+    $selected = isset($_SESSION['language']) ? (string) $_SESSION['language'] : $configured;
+    return is_supported_language($selected) ? $selected : 'en';
+}
+
+function t(string $key, array $replace = []): string
+{
+    static $translations = [];
+    $language = current_language();
+    if (!isset($translations[$language])) {
+        $loaded = require dirname(__DIR__) . '/lang/' . $language . '.php';
+        $fallback = $language === 'en' ? [] : require dirname(__DIR__) . '/lang/en.php';
+        $translations[$language] = is_array($loaded) ? array_replace($fallback, $loaded) : $fallback;
+    }
+
+    $text = (string) ($translations[$language][$key] ?? $key);
+    foreach ($replace as $name => $value) {
+        $text = str_replace('{' . $name . '}', (string) $value, $text);
+    }
+    return $text;
+}
+
+function t_choice(string $singularKey, string $pluralKey, int $count, array $replace = []): string
+{
+    $replace['count'] = $count;
+    return t($count === 1 ? $singularKey : $pluralKey, $replace);
+}
+
+function t_js(array $keys): array
+{
+    $translations = [];
+    foreach ($keys as $key) {
+        $key = (string) $key;
+        $translations[$key] = t($key);
+    }
+
+    return $translations;
+}
+
+function status_label(string $status): string
+{
+    $normalized = strtolower(trim($status));
+    return t('status.' . $normalized);
+}
+
+function language_url(string $language): string
+{
+    $uri = (string) ($_SERVER['REQUEST_URI'] ?? base_url(''));
+    $parts = parse_url($uri);
+    $path = (string) ($parts['path'] ?? base_url(''));
+    parse_str((string) ($parts['query'] ?? ''), $query);
+    $query['lang'] = $language;
+    return $path . '?' . http_build_query($query);
+}
+
 function db_connection_settings(): array
 {
     $host = trim((string) config('db.host', ''));
@@ -852,17 +938,17 @@ function demonlist_set_list_limits(int $mainLimit, int $extendedLimit): bool
 function demon_level_info_field_definitions(): array
 {
     return [
-        'position' => 'Position',
-        'category' => 'Category',
-        'difficulty' => 'Difficulty',
-        'requirement' => 'Requirement',
-        'creator' => 'Created by',
-        'publisher' => 'Published by',
-        'verifier' => 'Verified by',
-        'level_id' => 'Level ID',
-        'level_length' => 'Level Length',
-        'song' => 'Song',
-        'object_count' => 'Object Count',
+        'position' => t('level_info.position'),
+        'category' => t('level_info.category'),
+        'difficulty' => t('level_info.difficulty'),
+        'requirement' => t('level_info.requirement'),
+        'creator' => t('level_info.creator'),
+        'publisher' => t('level_info.publisher'),
+        'verifier' => t('level_info.verifier'),
+        'level_id' => t('level_info.level_id'),
+        'level_length' => t('level_info.level_length'),
+        'song' => t('level_info.song'),
+        'object_count' => t('level_info.object_count'),
     ];
 }
 
@@ -1201,11 +1287,11 @@ function current_user_can_comment(): bool
 function level_comments_disabled_message(array $demon): ?string
 {
     if (!level_comments_enabled()) {
-        return 'Comments are disabled for the whole list.';
+        return t('comments.disabled_global');
     }
 
     if ((int) ($demon['comments_disabled'] ?? 0) === 1) {
-        return 'Comments are disabled for this level.';
+        return t('comments.disabled_level');
     }
 
     return null;
@@ -1553,10 +1639,10 @@ function demonlist_list_bucket(int $position, bool $legacy): string
 function demonlist_main_list_dropdown_description(bool $showExtendedList, bool $showLegacyList): string
 {
     return match (true) {
-        !$showExtendedList && !$showLegacyList => 'All ranked demons are currently merged into this single list.',
-        !$showExtendedList && $showLegacyList => 'Main and Extended entries are merged into this list.',
-        $showExtendedList && !$showLegacyList => 'Main and Legacy entries are merged into this list.',
-        default => 'Top 1-' . demonlist_main_list_limit() . ' demons in the current list.',
+        !$showExtendedList && !$showLegacyList => t('list.desc.main_all_merged'),
+        !$showExtendedList && $showLegacyList => t('list.desc.main_extended_merged'),
+        $showExtendedList && !$showLegacyList => t('list.desc.main_legacy_merged'),
+        default => t('list.desc.main_range', ['limit' => demonlist_main_list_limit()]),
     };
 }
 
@@ -1567,12 +1653,12 @@ function demonlist_extended_list_dropdown_description(bool $includeScoreHint = f
     $firstExtendedRank = $mainLimit + 1;
 
     if ($extendedLimit < $firstExtendedRank) {
-        return 'No ranks are currently assigned to Extended List.';
+        return t('list.desc.extended_empty');
     }
 
-    $description = 'Demons top ' . $firstExtendedRank . '-' . $extendedLimit;
+    $description = t('list.desc.extended_range', ['from' => $firstExtendedRank, 'to' => $extendedLimit]);
     if ($includeScoreHint) {
-        $description .= ' that still count toward score';
+        $description .= ' ' . t('list.desc.count_score');
     }
 
     return $description . '.';
@@ -1581,7 +1667,7 @@ function demonlist_extended_list_dropdown_description(bool $includeScoreHint = f
 function demonlist_legacy_list_dropdown_description(): string
 {
     $firstLegacyRank = demonlist_extended_list_limit() + 1;
-    return 'Demons top ' . $firstLegacyRank . '+ or manually marked as legacy.';
+    return t('list.desc.legacy', ['from' => $firstLegacyRank]);
 }
 
 function demonlist_is_ranked_entry(int $position, bool $legacy): bool
@@ -2427,6 +2513,133 @@ function validate_csrf(?string $token): bool
     return is_string($token) && $token !== '' && hash_equals(csrf_token(), $token);
 }
 
+function recaptcha_site_key(): string
+{
+    return trim((string) config('security.recaptcha_site_key', ''));
+}
+
+function recaptcha_secret_key(): string
+{
+    return trim((string) config('security.recaptcha_secret_key', ''));
+}
+
+function recaptcha_verify_url(): string
+{
+    $url = trim((string) config('security.recaptcha_verify_url', 'https://www.google.com/recaptcha/api/siteverify'));
+    return $url !== '' ? $url : 'https://www.google.com/recaptcha/api/siteverify';
+}
+
+function recaptcha_is_enabled(string $context = ''): bool
+{
+    $enabled = config('security.captcha_enabled', config('security.setup_captcha_enabled', true));
+    $driver = strtolower(trim((string) config('security.captcha_driver', 'google_recaptcha_v2')));
+    $context = strtolower(trim($context));
+
+    if ($context !== '') {
+        $contextEnabled = config('security.captcha_' . $context . '_enabled', null);
+        if ($contextEnabled !== null) {
+            $enabled = $enabled && (bool) $contextEnabled;
+        }
+    }
+
+    return (bool) $enabled
+        && $driver === 'google_recaptcha_v2'
+        && recaptcha_site_key() !== ''
+        && recaptcha_secret_key() !== '';
+}
+
+function recaptcha_script_url(): string
+{
+    $query = [
+        'hl' => current_language(),
+    ];
+
+    return 'https://www.google.com/recaptcha/api.js?' . http_build_query($query);
+}
+
+function recaptcha_widget_html(string $context = ''): string
+{
+    if (!recaptcha_is_enabled($context)) {
+        return '';
+    }
+
+    return '<div class="recaptcha-field"><div class="g-recaptcha" data-sitekey="'
+        . e(recaptcha_site_key())
+        . '"></div></div>';
+}
+
+function recaptcha_verify_response(?string $responseToken, ?string $remoteIp = null, string $context = ''): bool
+{
+    if (!recaptcha_is_enabled($context)) {
+        return true;
+    }
+
+    $token = trim((string) $responseToken);
+    if ($token === '') {
+        return false;
+    }
+
+    $payload = [
+        'secret' => recaptcha_secret_key(),
+        'response' => $token,
+    ];
+
+    $remoteIp = trim((string) $remoteIp);
+    if ($remoteIp !== '') {
+        $payload['remoteip'] = $remoteIp;
+    }
+
+    $body = null;
+    if (function_exists('curl_init')) {
+        $ch = curl_init(recaptcha_verify_url());
+        if ($ch !== false) {
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => http_build_query($payload),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/x-www-form-urlencoded',
+                    'User-Agent: demonlist-php',
+                ],
+                CURLOPT_CONNECTTIMEOUT => 3,
+                CURLOPT_TIMEOUT => 8,
+            ]);
+
+            $response = curl_exec($ch);
+            $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+            curl_close($ch);
+
+            if (is_string($response) && $status >= 200 && $status < 300) {
+                $body = $response;
+            }
+        }
+    }
+
+    if ($body === null) {
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => "Content-Type: application/x-www-form-urlencoded\r\nUser-Agent: demonlist-php\r\n",
+                'content' => http_build_query($payload),
+                'timeout' => 8,
+                'ignore_errors' => true,
+            ],
+        ]);
+        $response = @file_get_contents(recaptcha_verify_url(), false, $context);
+        if (is_string($response)) {
+            $body = $response;
+        }
+    }
+
+    if ($body === null || $body === '') {
+        return false;
+    }
+
+    $decoded = json_decode($body, true);
+
+    return is_array($decoded) && ($decoded['success'] ?? false) === true;
+}
+
 function method_is_post(): bool
 {
     return ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST';
@@ -2753,7 +2966,7 @@ function require_login(?string $next = null): void
     }
     $destination = auth_next_path($destination);
 
-    flash('error', 'You need to login before submitting records.');
+    flash('error', t('flash.login_required_submit'));
     redirect('login.php?next=' . rawurlencode($destination));
 }
 
@@ -2772,10 +2985,10 @@ function normalize_user_role(?string $role): string
 function role_label(string $role): string
 {
     return match (normalize_user_role($role)) {
-        'owner' => 'Owner',
-        'list_editor' => 'List Editor',
-        'list_helper' => 'List Helper',
-        default => 'Player',
+        'owner' => t('role.owner'),
+        'list_editor' => t('role.list_editor'),
+        'list_helper' => t('role.list_helper'),
+        default => t('role.player'),
     };
 }
 
@@ -2835,18 +3048,18 @@ function has_owner_access(): bool
 function admin_permission_definitions(): array
 {
     return [
-        'admin_panel_access' => 'Admin Panel Access',
-        'manage_levels' => 'Manage Levels',
-        'claim_contributors' => 'Claim Contributors',
-        'manage_users' => 'Manage Users',
-        'manage_user_roles' => 'Manage User Roles',
-        'manage_scoring' => 'Change Score',
-        'manage_list_visibility' => 'Manage List Visibility',
-        'manage_role_permissions' => 'Manage Role Permissions',
-        'manage_badges' => 'Manage Badges',
-        'moderate_comments' => 'Moderate Comments',
-        'reset_passwords' => 'Reset Passwords',
-        'review_submissions' => 'Review Submissions',
+        'admin_panel_access' => t('permission.admin_panel_access'),
+        'manage_levels' => t('permission.manage_levels'),
+        'claim_contributors' => t('permission.claim_contributors'),
+        'manage_users' => t('permission.manage_users'),
+        'manage_user_roles' => t('permission.manage_user_roles'),
+        'manage_scoring' => t('permission.manage_scoring'),
+        'manage_list_visibility' => t('permission.manage_list_visibility'),
+        'manage_role_permissions' => t('permission.manage_role_permissions'),
+        'manage_badges' => t('permission.manage_badges'),
+        'moderate_comments' => t('permission.moderate_comments'),
+        'reset_passwords' => t('permission.reset_passwords'),
+        'review_submissions' => t('permission.review_submissions'),
     ];
 }
 
@@ -3041,6 +3254,6 @@ function require_admin(): void
         return;
     }
 
-    flash('error', 'Admin permission required.');
+    flash('error', t('flash.admin_required'));
     redirect('admin.php');
 }

@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS demons (
     verifier_user_id INT UNSIGNED NULL,
     video_url VARCHAR(255) NOT NULL,
     thumbnail_url VARCHAR(255) NULL,
+    description TEXT NULL,
     level_id VARCHAR(32) NULL,
     level_length VARCHAR(40) NULL,
     song VARCHAR(120) NULL,

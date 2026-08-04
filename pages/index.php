@@ -90,8 +90,8 @@ function render_creator_credit(array $demon): string
     // Additional creators in tooltip - plain text only
     $tooltipText = implode(', ', array_map(fn($c) => e($c), $creators));
     
-    $html .= ' and <span class="tooltip underdotted">';
-    $html .= 'more';
+    $html .= ' ' . e(t('demon.and')) . ' <span class="tooltip underdotted">';
+    $html .= e(t('demon.more'));
     $html .= '<span class="tooltiptext fade">' . $tooltipText . '</span>';
     $html .= '</span>';
 
@@ -108,12 +108,12 @@ function render_list_dropdown(string $id, string $title, string $description, ar
 
         <div class="see-through fade dropdown" id="<?= e($id) ?>">
             <div class="search js-search seperated" style="margin: 10px;">
-                <input placeholder="Filter..." type="text">
+                <input placeholder="<?= e(t('list.filter')) ?>" type="text">
             </div>
             <p style="margin: 10px;"><?= e($description) ?></p>
             <ul class="flex wrap space">
                 <?php if ($demons === []): ?>
-                    <li class="white" style="min-width: 100%; width: 100%;">No entries in this list.</li>
+                    <li class="white" style="min-width: 100%; width: 100%;"><?= e(t('list.no_entries')) ?></li>
                 <?php endif; ?>
 
                 <?php foreach ($demons as $demon): ?>
@@ -127,7 +127,7 @@ function render_list_dropdown(string $id, string $title, string $description, ar
                         <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
                             #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
                             <br>
-                            <i>published by <?= e($dropdownPublisherLabel) ?><?php if ($dropdownVerifier !== ''): ?>, verified by <?= e($dropdownVerifierLabel) ?><?php endif; ?></i>
+                            <i><?= e(t('list.published_by')) ?> <?= e($dropdownPublisherLabel) ?><?php if ($dropdownVerifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= e($dropdownVerifierLabel) ?><?php endif; ?></i>
                         </a>
                     </li>
                 <?php endforeach; ?>
@@ -331,7 +331,7 @@ function roulette_item_from_demon(array $demon, string $bucket, bool $shown): ar
         'videoUrl' => (string) ($demon['video_url'] ?? ''),
         'thumb' => card_thumbnail_url($demon),
         'levelId' => $levelId,
-        'byline' => 'published by ' . $publisherLabel . ($verifierLabel !== '' ? ', verified by ' . $verifierLabel : ''),
+        'byline' => t('list.published_by') . ' ' . $publisherLabel . ($verifierLabel !== '' ? ', ' . t('list.verified_by') . ' ' . $verifierLabel : ''),
         'score' => number_format(pointercrate_score($position, $requirement, $requirement), 2) . ' (' . $requirement . '%) - '
             . number_format(pointercrate_score($position, $requirement, 100), 2) . ' (100%) points',
     ];
@@ -431,11 +431,11 @@ $mainListDescription = demonlist_main_list_dropdown_description($showExtendedLis
 $extendedListDescription = demonlist_extended_list_dropdown_description(true);
 $legacyListDescription = demonlist_legacy_list_dropdown_description();
 $mainIntro = (!$showExtendedList && !$showLegacyList)
-    ? 'The main list currently shows every ranked demon with no section limits.'
-    : 'The main list of the Demonlist with ranked hardest levels in the game.';
+    ? t('home.intro_all')
+    : t('home.intro_default');
 
-render_header('Main List', 'list', [
-    'title' => 'Main List',
+render_header(t('home.title'), 'list', [
+    'title' => t('home.title'),
     'description' => $pageDescription,
     'url' => base_url('index.php'),
 ]);
@@ -454,10 +454,10 @@ render_header('Main List', 'list', [
 <div class="flex m-center container">
     <main class="left">
         <section class="panel fade">
-            <h1>Geometry Dash Demonlist</h1>
+            <h1><?= e(t('home.heading')) ?></h1>
             <p style="margin-top: 0;"><?= e($mainIntro) ?></p>
             <div class="search seperated" style="margin: 10px 0;">
-                <input placeholder="Filter shown demons..." type="text" data-live-search>
+                <input placeholder="<?= e(t('list.filter_shown')) ?>" type="text" data-live-search>
             </div>
         </section>
 
@@ -504,14 +504,14 @@ render_header('Main List', 'list', [
                             </a>
                         </h2>
                         <h3 class="demon-card-byline" style="text-align: left; margin-bottom: 0;">
-                            published by <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, verified by <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
+                            <?= e(t('list.published_by')) ?> <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
                         </h3>
                         <div class="demon-points" style="text-align: left; font-size: 0.8em;">
-                            <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) points
+                            <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) <?= e(t('list.points')) ?>
                         </div>
                         <?php if ($isTimeMachineView): ?>
                             <div class="muted" style="text-align: left; font-size: 0.85em; margin-top: 4px;">
-                                <?= historical_list_bucket($currentPosition) === 'legacy' ? 'Currently Legacy' : 'Currently #' . e((string) $currentPosition) ?>
+                                <?= historical_list_bucket($currentPosition) === 'legacy' ? e(t('list.currently_legacy')) : e(t('list.currently_rank', ['rank' => $currentPosition])) ?>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -523,13 +523,13 @@ render_header('Main List', 'list', [
     <aside class="right">
         <section id="staff-contacts" class="panel fade staff-contact-panel">
             <div class="staff-contact-subsection">
-                <h2 class="underlined pad">List Editors</h2>
+                <h2 class="underlined pad"><?= e(t('home.editors')) ?></h2>
                 <p class="staff-contact-note">
-                    Contact any of these people if you have problems with the list or want to see a specific thing changed.
+                    <?= e(t('home.editors_note')) ?>
                 </p>
                 <ul class="staff-contact-list">
                     <?php if ($listEditors === []): ?>
-                        <li class="staff-contact-empty">No list editors yet.</li>
+                        <li class="staff-contact-empty"><?= e(t('home.no_editors')) ?></li>
                     <?php endif; ?>
                     <?php foreach ($listEditors as $editor): ?>
                         <?php
@@ -539,21 +539,20 @@ render_header('Main List', 'list', [
                         $username = e(user_display_name_from_row($editor));
                         ?>
                         <li>
-                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
+                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="<?= e(t('home.youtube_channel')) ?>" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
                         </li>
                     <?php endforeach; ?>
                 </ul>
             </div>
 
             <div class="staff-contact-subsection">
-                <h2 class="underlined pad">List Helpers</h2>
+                <h2 class="underlined pad"><?= e(t('home.helpers')) ?></h2>
                 <p class="staff-contact-note">
-                    Contact these people if you have any questions regarding why a specific record was rejected.
-                    Do not needlessly bug them about checking submissions though!
+                    <?= e(t('home.helpers_note')) ?>
                 </p>
                 <ul class="staff-contact-list">
                     <?php if ($listHelpers === []): ?>
-                        <li class="staff-contact-empty">No list helpers yet.</li>
+                        <li class="staff-contact-empty"><?= e(t('home.no_helpers')) ?></li>
                     <?php endif; ?>
                     <?php foreach ($listHelpers as $helper): ?>
                         <?php
@@ -563,7 +562,7 @@ render_header('Main List', 'list', [
                         $username = e(user_display_name_from_row($helper));
                         ?>
                         <li>
-                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="YouTube Channel" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
+                            <b><?= $prefix ?><?php if ($youtubeChannel !== ''): ?><a target="_blank" rel="noreferrer" href="<?= e($youtubeChannel) ?>" title="<?= e(t('home.youtube_channel')) ?>" style="color: inherit; text-decoration: none;"><?= $username ?></a><?php else: ?><?= $username ?><?php endif; ?></b>
                         </li>
                     <?php endforeach; ?>
                 </ul>
@@ -571,37 +570,35 @@ render_header('Main List', 'list', [
         </section>
 
         <section id="rules" class="panel fade">
-            <h2 class="underlined pad clickable">Guidelines</h2>
-            <p>Only legitimate, unedited runs with clear proof are accepted. All records are reviewed manually.</p>
-            <a class="blue hover button" href="<?= e(base_url('guidelines.php')) ?>">Submission Guidelines</a>
+            <h2 class="underlined pad clickable"><?= e(t('home.guidelines_title')) ?></h2>
+            <p><?= e(t('home.guidelines_text')) ?></p>
+            <a class="blue hover button" href="<?= e(base_url('guidelines.php')) ?>"><?= e(t('home.guidelines_button')) ?></a>
         </section>
 
         <section id="submit" class="panel fade">
-            <h2 class="underlined pad">Submit Record</h2>
+            <h2 class="underlined pad"><?= e(t('home.submit_title')) ?></h2>
             <p>
-                Note: Please do not submit nonsense, it only makes it harder for us all and will get you banned. 
-                Also note that the form rejects duplicate submissions.
+                <?= e(t('home.submit_text')) ?>
             </p>
-            <a class="blue hover button" href="<?= e(base_url('submit.php')) ?>">Open Submit</a>
+            <a class="blue hover button" href="<?= e(base_url('submit.php')) ?>"><?= e(t('home.submit_button')) ?></a>
         </section>
 
         <section id="stats-viewer" class="panel fade">
-            <h2 class="underlined pad">Stats Viewer</h2>
+            <h2 class="underlined pad"><?= e(t('home.stats_title')) ?></h2>
             <p>
-                Get a detailed overview of who completed the most, created the most demons, or beat the hardest demons.
-                Compare your progress and climb the leaderboard.
+                <?= e(t('home.stats_text')) ?>
             </p>
-            <a class="blue hover button" href="<?= e(base_url('players.php')) ?>">Open stats viewer!</a>
+            <a class="blue hover button" href="<?= e(base_url('players.php')) ?>"><?= e(t('home.stats_button')) ?></a>
         </section>
 
         <?php if ($discordWidgetUrl !== null): ?>
             <section id="discord" class="panel fade">
-                <h2 class="underlined pad">Discord Server</h2>
+                <h2 class="underlined pad"><?= e(t('home.discord_title')) ?></h2>
                 <div class="discord-widget-wrap">
                     <iframe
                         class="discord-widget-frame"
                         src="<?= e($discordWidgetUrl) ?>"
-                        title="Discord Server"
+                        title="<?= e(t('home.discord_title')) ?>"
                         sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
                     ></iframe>
                 </div>

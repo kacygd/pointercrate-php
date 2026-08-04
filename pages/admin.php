@@ -39,6 +39,18 @@ function admin_safe_transaction_commit(PDO $pdo, bool $transactionStarted, bool 
     }
 }
 
+function admin_generate_temporary_password(int $length = 14): string
+{
+    $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+    $max = strlen($alphabet) - 1;
+    $password = '';
+    for ($i = 0; $i < $length; $i++) {
+        $password .= $alphabet[random_int(0, $max)];
+    }
+
+    return $password;
+}
+
 function admin_column_exists(PDO $pdo, string $table, string $column): bool
 {
     $stmt = $pdo->prepare(
@@ -668,7 +680,7 @@ if (method_is_post()) {
 
     if ($action === 'update_scoring' && can_manage_scoring()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-scoring'));
         }
 
@@ -714,7 +726,7 @@ if (method_is_post()) {
 
     if ($action === 'update_list_visibility' && can_manage_list_visibility()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-list-visibility'));
         }
 
@@ -790,7 +802,7 @@ if (method_is_post()) {
 
     if ($action === 'update_level_info_rows' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-level-info-rows'));
         }
 
@@ -848,7 +860,7 @@ if (method_is_post()) {
 
     if ($action === 'update_comment_settings' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-level-comments'));
         }
 
@@ -919,7 +931,7 @@ if (method_is_post()) {
 
     if ($action === 'delete_reported_level_comment' && can_moderate_level_comments()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-level-comments'));
         }
 
@@ -956,7 +968,7 @@ if (method_is_post()) {
 
     if ($action === 'update_role_permissions' && can_manage_role_permissions()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-role-permissions'));
         }
 
@@ -998,7 +1010,7 @@ if (method_is_post()) {
 
     if ($action === 'create_badge' && can_manage_badges()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-badges'));
         }
 
@@ -1044,7 +1056,7 @@ if (method_is_post()) {
 
     if ($action === 'update_badge' && can_manage_badges()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-badges'));
         }
 
@@ -1103,7 +1115,7 @@ if (method_is_post()) {
 
     if ($action === 'delete_badge' && can_manage_badges()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-badges'));
         }
 
@@ -1144,7 +1156,7 @@ if (method_is_post()) {
 
     if ($action === 'assign_badge' && can_manage_badges()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-badges'));
         }
 
@@ -1199,7 +1211,7 @@ if (method_is_post()) {
 
     if ($action === 'claim_contributor' && can_claim_contributors()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-claims'));
         }
 
@@ -1292,7 +1304,7 @@ if (method_is_post()) {
 
     if ($action === 'add_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-add-level'));
         }
 
@@ -1477,7 +1489,7 @@ if (method_is_post()) {
     }
     if ($action === 'edit_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-edit-level'));
         }
 
@@ -1838,7 +1850,7 @@ if (method_is_post()) {
 
     if ($action === 'delete_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-delete-level'));
         }
 
@@ -1945,7 +1957,7 @@ if (method_is_post()) {
 
     if ($action === 'move_level' && can_manage_levels()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-edit-level'));
         }
 
@@ -2098,7 +2110,7 @@ if (method_is_post()) {
         );
 
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect($redirectTarget);
         }
 
@@ -2159,7 +2171,7 @@ if (method_is_post()) {
             $currentCommentsDisabled = (int) ($target['comments_disabled'] ?? 0) === 1 ? 1 : 0;
 
             if (!can_manage_user_roles() && $role !== $currentRoleNormalized) {
-                throw new RuntimeException('You do not have permission to change user roles.');
+                throw new RuntimeException(t('admin.error_role_permission'));
             }
             if (!can_manage_user_roles()) {
                 $role = $currentRoleNormalized;
@@ -2238,13 +2250,13 @@ if (method_is_post()) {
         );
 
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect($redirectTarget);
         }
 
         $userId = (int) ($_POST['user_id'] ?? 0);
         if ($userId < 1) {
-            flash('error', 'Invalid user ID for password reset.');
+            flash('error', t('admin.error_invalid_reset_user'));
             redirect($redirectTarget);
         }
 
@@ -2255,11 +2267,11 @@ if (method_is_post()) {
             $user = $userStmt->fetch();
 
             if ($user === false) {
-                flash('error', 'User not found.');
+                flash('error', t('admin.user_not_found'));
                 redirect($redirectTarget);
             }
 
-            $tempPassword = '123456';
+            $tempPassword = admin_generate_temporary_password();
             $passwordHash = password_hash($tempPassword, PASSWORD_DEFAULT);
 
             $updateStmt = $pdo->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
@@ -2272,16 +2284,16 @@ if (method_is_post()) {
                 login_clear_failed_attempts($userId);
             }
 
-            flash('success', 'Password reset for ' . (string) $user['username'] . '. New password: ' . $tempPassword);
+            flash('success', t('admin.password_reset_success', ['user' => (string) $user['username'], 'password' => $tempPassword]));
         } catch (Throwable $throwable) {
-            flash('error', 'Failed to reset password: ' . $throwable->getMessage());
+            flash('error', t('admin.password_reset_failed', ['error' => $throwable->getMessage()]));
         }
 
         redirect($redirectTarget);
     }
     if ($action === 'review' && can_review_submissions()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
-            flash('error', 'Invalid session token.');
+            flash('error', t('flash.invalid_token'));
             redirect(admin_section_url('admin-pending-submissions'));
         }
 
@@ -2478,18 +2490,18 @@ if (method_is_post()) {
 
         redirect(admin_section_url('admin-pending-submissions'));
     }
-    flash('error', 'You do not have permission to access this page.');
+    flash('error', t('flash.no_permission'));
     redirect(admin_section_url('overview'));
 
 }
 if (!is_admin()) {
     http_response_code(403);
-    render_header('Access Denied', 'admin');
+    render_header(t('admin.access_denied'), 'admin');
     ?>
     <section class="panel panel-narrow fade">
         <div class="panel-head">
-            <h1>Access Denied</h1>
-            <p>You do not have permission to access this page.</p>
+            <h1><?= e(t('admin.access_denied')) ?></h1>
+            <p><?= e(t('flash.no_permission')) ?></p>
         </div>
     </section>
     <?php
@@ -2751,49 +2763,49 @@ if ($activeSection === 'admin-role-permissions') {
     }
 }
 
-render_header('Admin', 'admin');
+render_header(t('admin.title'), 'admin');
 ?>
 <div class="admin-dashboard-layout">
     <aside class="admin-sidebar">
         <div class="admin-sidebar-role">
-            <span class="muted">Signed in as</span>
+            <span class="muted"><?= e(t('admin.signed_in_as')) ?></span>
             <strong><?= e($adminRoleLabel) ?></strong>
         </div>
 
         <div class="admin-action-group">
             <div class="admin-quick-actions">
                 <a class="admin-action-tile<?= $activeSection === 'overview' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('overview')) ?>">
-                    <span class="admin-action-title">Overview</span>
-                    <small>Dashboard summary.</small>
+                    <span class="admin-action-title"><?= e(t('admin.overview')) ?></span>
+                    <small><?= e(t('admin.overview_desc')) ?></small>
                 </a>
             </div>
         </div>
 
         <?php if ($canManageLevels || $canModerateLevelComments): ?>
             <div class="admin-action-group">
-                <h3 class="admin-action-group-title">Content</h3>
+                <h3 class="admin-action-group-title"><?= e(t('admin.content')) ?></h3>
                 <div class="admin-quick-actions">
                     <?php if ($canManageLevels): ?>
                         <a class="admin-action-tile<?= $activeSection === 'admin-add-level' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-add-level')) ?>">
-                            <span class="admin-action-title">Add Level</span>
-                            <small>Create a new demon entry.</small>
+                            <span class="admin-action-title"><?= e(t('admin.add_level')) ?></span>
+                            <small><?= e(t('admin.add_level_desc')) ?></small>
                         </a>
                         <a class="admin-action-tile<?= $activeSection === 'admin-edit-level' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-edit-level')) ?>">
-                            <span class="admin-action-title">Edit Level</span>
-                            <small>Update level info and ranking.</small>
+                            <span class="admin-action-title"><?= e(t('admin.edit_level')) ?></span>
+                            <small><?= e(t('admin.edit_level_desc')) ?></small>
                         </a>
                         <a class="admin-action-tile<?= $activeSection === 'admin-delete-level' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-delete-level')) ?>">
-                            <span class="admin-action-title">Delete Level</span>
-                            <small>Remove a level and close the rank gap.</small>
+                            <span class="admin-action-title"><?= e(t('admin.delete_level')) ?></span>
+                            <small><?= e(t('admin.delete_level_desc')) ?></small>
                         </a>
                         <a class="admin-action-tile<?= $activeSection === 'admin-level-info-rows' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-level-info-rows')) ?>">
-                            <span class="admin-action-title">Level Info Rows</span>
-                            <small>Control rows shown on level pages.</small>
+                            <span class="admin-action-title"><?= e(t('admin.level_info_rows')) ?></span>
+                            <small><?= e(t('admin.level_info_rows_desc')) ?></small>
                         </a>
                     <?php endif; ?>
                     <a class="admin-action-tile<?= $activeSection === 'admin-level-comments' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-level-comments')) ?>">
-                        <span class="admin-action-title">Level Comments<?php if ($openCommentReportCount > 0): ?> <span class="admin-action-badge"><?= (int) $openCommentReportCount ?></span><?php endif; ?></span>
-                        <small><?= $canManageLevels ? 'Open or close comments globally and per level.' : 'Review reported comments and delete abusive threads.' ?></small>
+                        <span class="admin-action-title"><?= e(t('admin.level_comments')) ?><?php if ($openCommentReportCount > 0): ?> <span class="admin-action-badge"><?= (int) $openCommentReportCount ?></span><?php endif; ?></span>
+                        <small><?= e($canManageLevels ? t('admin.level_comments_desc') : t('admin.level_comments_moderate_desc')) ?></small>
                     </a>
                 </div>
             </div>
@@ -2801,15 +2813,15 @@ render_header('Admin', 'admin');
 
         <?php if ($canReviewSubmissions): ?>
             <div class="admin-action-group">
-                <h3 class="admin-action-group-title">Moderation</h3>
+                <h3 class="admin-action-group-title"><?= e(t('admin.moderation')) ?></h3>
                 <div class="admin-quick-actions">
                     <a class="admin-action-tile<?= $activeSection === 'admin-pending-submissions' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-pending-submissions')) ?>">
-                        <span class="admin-action-title">Pending Submissions<?php if ($stats['pending'] > 0): ?> <span class="admin-action-badge"><?= (int) $stats['pending'] ?></span><?php endif; ?></span>
-                        <small>Review new records in queue.</small>
+                        <span class="admin-action-title"><?= e(t('admin.pending_submissions')) ?><?php if ($stats['pending'] > 0): ?> <span class="admin-action-badge"><?= (int) $stats['pending'] ?></span><?php endif; ?></span>
+                        <small><?= e(t('admin.pending_submissions_desc')) ?></small>
                     </a>
                     <a class="admin-action-tile<?= $activeSection === 'admin-reviewed-submissions' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-reviewed-submissions')) ?>">
-                        <span class="admin-action-title">Recently Reviewed</span>
-                        <small>Check moderation history.</small>
+                        <span class="admin-action-title"><?= e(t('admin.recently_reviewed')) ?></span>
+                        <small><?= e(t('admin.recently_reviewed_desc')) ?></small>
                     </a>
                 </div>
             </div>
@@ -2817,24 +2829,24 @@ render_header('Admin', 'admin');
 
         <?php if ($canManageUsers || $canClaimContributors || $canManageBadges): ?>
             <div class="admin-action-group">
-                <h3 class="admin-action-group-title">People</h3>
+                <h3 class="admin-action-group-title"><?= e(t('admin.people')) ?></h3>
                 <div class="admin-quick-actions">
                     <?php if ($canManageUsers): ?>
                         <a class="admin-action-tile<?= $activeSection === 'admin-user-management' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-user-management')) ?>">
-                            <span class="admin-action-title">User Management<?php if ($stats['banned'] > 0): ?> <span class="admin-action-badge"><?= (int) $stats['banned'] ?></span><?php endif; ?></span>
-                            <small>Adjust role, ban status, comment access, and bonus points.</small>
+                            <span class="admin-action-title"><?= e(t('admin.user_management')) ?><?php if ($stats['banned'] > 0): ?> <span class="admin-action-badge"><?= (int) $stats['banned'] ?></span><?php endif; ?></span>
+                            <small><?= e(t('admin.user_management_desc')) ?></small>
                         </a>
                     <?php endif; ?>
                     <?php if ($canClaimContributors): ?>
                         <a class="admin-action-tile<?= $activeSection === 'admin-claims' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-claims')) ?>">
-                            <span class="admin-action-title">Claim Contributors</span>
-                            <small>Bind publisher/verifier to real accounts via user ID.</small>
+                            <span class="admin-action-title"><?= e(t('admin.claim_contributors')) ?></span>
+                            <small><?= e(t('admin.claim_contributors_desc')) ?></small>
                         </a>
                     <?php endif; ?>
                     <?php if ($canManageBadges): ?>
                         <a class="admin-action-tile<?= $activeSection === 'admin-badges' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-badges')) ?>">
-                            <span class="admin-action-title">Badges</span>
-                            <small>Upload badge icons and assign them to accounts.</small>
+                            <span class="admin-action-title"><?= e(t('admin.badges')) ?></span>
+                            <small><?= e(t('admin.badges_desc')) ?></small>
                         </a>
                     <?php endif; ?>
                 </div>
@@ -2843,28 +2855,28 @@ render_header('Admin', 'admin');
 
         <?php if ($hasOwnerOnlyQuickActions || $canManageScoring): ?>
             <div class="admin-action-group admin-action-group-owner">
-                <h3 class="admin-action-group-title">Restricted</h3>
-                <p class="admin-action-group-note">Available to roles with the matching permission.</p>
+                <h3 class="admin-action-group-title"><?= e(t('admin.restricted')) ?></h3>
+                <p class="admin-action-group-note"><?= e(t('admin.restricted_note')) ?></p>
                 <div class="admin-quick-actions admin-quick-actions-owner">
                     <?php if ($canManageRolePermissions): ?>
                         <a class="admin-action-tile is-owner<?= $activeSection === 'admin-role-permissions' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-role-permissions')) ?>">
-                            <span class="admin-action-title">Role Permissions</span>
-                            <small>Customize List Editor and List Helper rights in database.</small>
-                            <span class="admin-action-meta">Restricted</span>
+                            <span class="admin-action-title"><?= e(t('admin.role_permissions')) ?></span>
+                            <small><?= e(t('admin.role_permissions_desc')) ?></small>
+                            <span class="admin-action-meta"><?= e(t('admin.restricted_meta')) ?></span>
                         </a>
                     <?php endif; ?>
                     <?php if ($canManageListVisibility): ?>
                         <a class="admin-action-tile is-owner<?= $activeSection === 'admin-list-visibility' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-list-visibility')) ?>">
-                            <span class="admin-action-title">List Visibility</span>
-                            <small>Choose section visibility and rank ranges for Main/Extended.</small>
-                            <span class="admin-action-meta">Restricted</span>
+                            <span class="admin-action-title"><?= e(t('admin.list_visibility')) ?></span>
+                            <small><?= e(t('admin.list_visibility_desc')) ?></small>
+                            <span class="admin-action-meta"><?= e(t('admin.restricted_meta')) ?></span>
                         </a>
                     <?php endif; ?>
                     <?php if ($canManageScoring): ?>
                         <a class="admin-action-tile is-owner<?= $activeSection === 'admin-scoring' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-scoring')) ?>">
-                            <span class="admin-action-title">Change Score</span>
-                            <small>Adjust the highest score on the list.</small>
-                            <span class="admin-action-meta">Restricted</span>
+                            <span class="admin-action-title"><?= e(t('admin.change_score')) ?></span>
+                            <small><?= e(t('admin.change_score_desc')) ?></small>
+                            <span class="admin-action-meta"><?= e(t('admin.restricted_meta')) ?></span>
                         </a>
                     <?php endif; ?>
                 </div>
@@ -2872,7 +2884,7 @@ render_header('Admin', 'admin');
         <?php endif; ?>
 
         <?php if (!$hasGeneralQuickActions && !$hasOwnerOnlyQuickActions): ?>
-            <div class="muted admin-sidebar-empty">Your role currently has no admin actions assigned.</div>
+            <div class="muted admin-sidebar-empty"><?= e(t('admin.empty_actions')) ?></div>
         <?php endif; ?>
     </aside>
 
@@ -2881,17 +2893,17 @@ render_header('Admin', 'admin');
         <section class="panel fade">
             <div class="panel-head">
                 <div>
-                    <h1>Admin Dashboard</h1>
-                    <p>Moderation center for records and level management.</p>
+                    <h1><?= e(t('admin.dashboard')) ?></h1>
+                    <p><?= e(t('admin.dashboard_intro')) ?></p>
                 </div>
             </div>
 
             <div class="detail-grid" style="grid-template-columns: repeat(5, 1fr); gap: 10px;">
-                <div class="panel subtle"><h3><?= $stats['pending'] ?></h3><p>Pending</p></div>
-                <div class="panel subtle"><h3><?= $stats['approved'] ?></h3><p>Approved</p></div>
-                <div class="panel subtle"><h3><?= $stats['rejected'] ?></h3><p>Rejected</p></div>
-                <div class="panel subtle"><h3><?= $stats['players'] ?></h3><p>Players</p></div>
-                <div class="panel subtle"><h3><?= $stats['banned'] ?></h3><p>Banned</p></div>
+                <div class="panel subtle"><h3><?= $stats['pending'] ?></h3><p><?= e(t('admin.pending')) ?></p></div>
+                <div class="panel subtle"><h3><?= $stats['approved'] ?></h3><p><?= e(t('admin.approved')) ?></p></div>
+                <div class="panel subtle"><h3><?= $stats['rejected'] ?></h3><p><?= e(t('admin.rejected')) ?></p></div>
+                <div class="panel subtle"><h3><?= $stats['players'] ?></h3><p><?= e(t('admin.players')) ?></p></div>
+                <div class="panel subtle"><h3><?= $stats['banned'] ?></h3><p><?= e(t('admin.banned')) ?></p></div>
             </div>
         </section>
     <?php endif; ?>
@@ -2899,8 +2911,8 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-role-permissions'): ?>
 <section class="panel fade admin-tool-section admin-role-permissions-section" id="admin-role-permissions">
     <div class="panel-head">
-        <h2>Role Permissions</h2>
-        <p>Customize List Editor and List Helper permissions stored in database. Owner always keeps full permissions.</p>
+        <h2><?= e(t('admin.role_permissions')) ?></h2>
+        <p><?= e(t('admin.role_permissions_intro')) ?></p>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-role-permissions')) ?>">
@@ -2911,7 +2923,7 @@ render_header('Admin', 'admin');
             <table class="data-table role-permission-table">
                 <thead>
                     <tr>
-                        <th>Permission</th>
+                        <th><?= e(t('common.permission')) ?></th>
                         <?php foreach ($editableStaffRoles as $staffRole): ?>
                             <th><?= e(role_label($staffRole)) ?></th>
                         <?php endforeach; ?>
@@ -2941,7 +2953,7 @@ render_header('Admin', 'admin');
             </table>
         </div>
 
-        <button class="button blue hover" type="submit">Save Role Permissions</button>
+        <button class="button blue hover" type="submit"><?= e(t('admin.save_role_permissions')) ?></button>
     </form>
 </section>
 <?php endif; ?>
@@ -2949,45 +2961,45 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-badges'): ?>
 <section class="panel fade admin-tool-section admin-badges-section" id="admin-badges">
     <div class="panel-head">
-        <h2>Badges</h2>
-        <p>Uploaded badge images shown beside comments and on Stats Viewer profiles.</p>
+        <h2><?= e(t('admin.badges')) ?></h2>
+        <p><?= e(t('admin.badges_intro')) ?></p>
     </div>
 
     <div class="admin-badge-toolbox">
         <div class="admin-badge-card">
-            <h3 class="admin-badge-card-title">Create Badge</h3>
+            <h3 class="admin-badge-card-title"><?= e(t('admin.create_badge')) ?></h3>
             <form class="admin-badge-form" method="post" action="<?= e(admin_section_url('admin-badges')) ?>" enctype="multipart/form-data">
                 <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="action" value="create_badge">
 
                 <label class="field">
-                    <span>Badge Label</span>
-                    <input type="text" name="badge_name" maxlength="<?= (int) badge_name_max_length() ?>" placeholder="Mythic Badge" required>
+                    <span><?= e(t('admin.badge_label')) ?></span>
+                    <input type="text" name="badge_name" maxlength="<?= (int) badge_name_max_length() ?>" placeholder="<?= e(t('admin.badge_label_placeholder')) ?>" required>
                 </label>
                 <label class="field">
-                    <span>Description</span>
-                    <input type="text" name="badge_description" maxlength="<?= (int) badge_description_max_length() ?>" placeholder="Optional hover text">
+                    <span><?= e(t('common.description')) ?></span>
+                    <input type="text" name="badge_description" maxlength="<?= (int) badge_description_max_length() ?>" placeholder="<?= e(t('admin.badge_description_placeholder')) ?>">
                 </label>
                 <label class="field">
-                    <span>Upload Badge Image</span>
+                    <span><?= e(t('admin.upload_badge_image')) ?></span>
                     <input type="file" name="badge_image_file" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp" required>
                 </label>
 
-                <button class="button blue hover" type="submit">Create Badge</button>
+                <button class="button blue hover" type="submit"><?= e(t('admin.create_badge')) ?></button>
             </form>
         </div>
 
         <div class="admin-badge-card">
-            <h3 class="admin-badge-card-title">Assign to Player</h3>
+            <h3 class="admin-badge-card-title"><?= e(t('admin.assign_to_player')) ?></h3>
             <form class="admin-badge-form" method="post" action="<?= e(admin_section_url('admin-badges')) ?>">
                 <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="action" value="assign_badge">
 
                 <label class="field">
-                    <span>Badge</span>
+                    <span><?= e(t('admin.badge')) ?></span>
                     <select name="badge_id" <?= $badgeList === [] ? 'disabled' : '' ?> required>
                         <?php if ($badgeList === []): ?>
-                            <option value="">Create a badge first</option>
+                            <option value=""><?= e(t('admin.create_badge_first')) ?></option>
                         <?php endif; ?>
                         <?php foreach ($badgeList as $badge): ?>
                             <option value="<?= (int) $badge['id'] ?>"><?= e((string) $badge['name']) ?></option>
@@ -2996,13 +3008,13 @@ render_header('Admin', 'admin');
                 </label>
 
                 <label class="field">
-                    <span>Username</span>
-                    <input type="text" name="badge_username" data-suggest-list="admin-badge-user-list" placeholder="Exact username" autocomplete="off" required>
+                    <span><?= e(t('common.username')) ?></span>
+                    <input type="text" name="badge_username" data-suggest-list="admin-badge-user-list" placeholder="<?= e(t('admin.exact_username')) ?>" autocomplete="off" required>
                 </label>
 
                 <div class="admin-badge-actions">
-                    <button class="button blue hover" type="submit" name="badge_mode" value="assign" <?= $badgeList === [] ? 'disabled' : '' ?>>Assign</button>
-                    <button class="button ghost hover" type="submit" name="badge_mode" value="remove" <?= $badgeList === [] ? 'disabled' : '' ?>>Remove</button>
+                    <button class="button blue hover" type="submit" name="badge_mode" value="assign" <?= $badgeList === [] ? 'disabled' : '' ?>><?= e(t('common.assign')) ?></button>
+                    <button class="button ghost hover" type="submit" name="badge_mode" value="remove" <?= $badgeList === [] ? 'disabled' : '' ?>><?= e(t('common.remove')) ?></button>
                 </div>
             </form>
         </div>
@@ -3016,44 +3028,44 @@ render_header('Admin', 'admin');
 
     <div class="admin-badge-grid">
         <?php if ($badgeList === []): ?>
-            <p class="muted">No badges created yet.</p>
+            <p class="muted"><?= e(t('admin.no_badges')) ?></p>
         <?php endif; ?>
         <?php foreach ($badgeList as $badge): ?>
             <?php $badgePreviewHtml = render_user_badges([$badge], 'admin-badge-card-preview'); ?>
             <article class="admin-badge-item">
                 <div class="admin-badge-item-head">
-                    <?= $badgePreviewHtml !== '' ? $badgePreviewHtml : '<span class="admin-badge-item-noimage muted">No image</span>' ?>
+                    <?= $badgePreviewHtml !== '' ? $badgePreviewHtml : '<span class="admin-badge-item-noimage muted">' . e(t('admin.no_image')) . '</span>' ?>
                     <div class="admin-badge-item-info">
                         <strong><?= e((string) $badge['name']) ?></strong>
-                        <small><?= e((string) ($badge['description'] !== '' ? $badge['description'] : 'No description')) ?></small>
+                        <small><?= e((string) ($badge['description'] !== '' ? $badge['description'] : t('admin.no_description'))) ?></small>
                     </div>
                 </div>
 
                 <div class="admin-badge-item-meta">
-                    <span class="badge"><?= (int) ($badge['assigned_count'] ?? 0) ?> assigned</span>
+                    <span class="badge"><?= e(t('admin.assigned_count', ['count' => (int) ($badge['assigned_count'] ?? 0)])) ?></span>
                 </div>
 
                 <details class="admin-badge-edit-details">
-                    <summary class="button white hover small">Edit badge</summary>
+                    <summary class="button white hover small"><?= e(t('admin.edit_badge')) ?></summary>
                     <form class="admin-badge-edit-form" method="post" action="<?= e(admin_section_url('admin-badges')) ?>" enctype="multipart/form-data">
                         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                         <input type="hidden" name="action" value="update_badge">
                         <input type="hidden" name="badge_id" value="<?= (int) $badge['id'] ?>">
 
                         <label class="field">
-                            <span>Label</span>
+                            <span><?= e(t('common.label')) ?></span>
                             <input type="text" name="badge_name" maxlength="<?= (int) badge_name_max_length() ?>" value="<?= e((string) $badge['name']) ?>" required>
                         </label>
                         <label class="field">
-                            <span>Description</span>
+                            <span><?= e(t('common.description')) ?></span>
                             <input type="text" name="badge_description" maxlength="<?= (int) badge_description_max_length() ?>" value="<?= e((string) $badge['description']) ?>">
                         </label>
                         <label class="field">
-                            <span>Replace Image</span>
+                            <span><?= e(t('admin.replace_image')) ?></span>
                             <input type="file" name="badge_image_file" accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp">
                         </label>
 
-                        <button class="button blue hover small" type="submit">Save Badge</button>
+                        <button class="button blue hover small" type="submit"><?= e(t('admin.save_badge')) ?></button>
                     </form>
                 </details>
 
@@ -3061,7 +3073,7 @@ render_header('Admin', 'admin');
                     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="action" value="delete_badge">
                     <input type="hidden" name="badge_id" value="<?= (int) $badge['id'] ?>">
-                    <button class="button danger hover small" type="submit" data-confirm="Delete this badge and remove it from every user?">Delete</button>
+                    <button class="button danger hover small" type="submit" data-confirm="<?= e(t('admin.delete_badge_confirm')) ?>"><?= e(t('common.delete')) ?></button>
                 </form>
             </article>
         <?php endforeach; ?>
@@ -3072,8 +3084,8 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-list-visibility'): ?>
 <section class="panel fade admin-tool-section" id="admin-list-visibility">
     <div class="panel-head">
-        <h2>List Visibility</h2>
-        <p>Owner-only setting for section visibility and rank ranges on the site.</p>
+        <h2><?= e(t('admin.list_visibility')) ?></h2>
+        <p><?= e(t('admin.list_visibility_intro')) ?></p>
     </div>
 
     <form class="stack-form panel-narrow" method="post" action="<?= e(admin_section_url('admin-list-visibility')) ?>">
@@ -3083,17 +3095,17 @@ render_header('Admin', 'admin');
         <label class="cb-container" style="text-align: left;">
             <input type="checkbox" name="show_extended_list" value="1" <?= $showExtendedList ? 'checked' : '' ?>>
             <span class="checkmark"></span>
-            Show Extended List as a separate section
+            <?= e(t('admin.show_extended_list')) ?>
         </label>
 
         <label class="cb-container" style="text-align: left;">
             <input type="checkbox" name="show_legacy_list" value="1" <?= $showLegacyList ? 'checked' : '' ?>>
             <span class="checkmark"></span>
-            Show Legacy List as a separate section
+            <?= e(t('admin.show_legacy_list')) ?>
         </label>
 
         <label class="field">
-            <span>Main List max rank</span>
+            <span><?= e(t('admin.main_list_max_rank')) ?></span>
             <input
                 type="number"
                 name="main_list_limit"
@@ -3106,7 +3118,7 @@ render_header('Admin', 'admin');
         </label>
 
         <label class="field">
-            <span>Extended List max rank</span>
+            <span><?= e(t('admin.extended_list_max_rank')) ?></span>
             <input
                 type="number"
                 name="extended_list_limit"
@@ -3119,14 +3131,15 @@ render_header('Admin', 'admin');
         </label>
 
         <small class="muted" style="text-align: left;">
-            Allowed range: <?= e($listLimitMinInput) ?> to <?= e($listLimitMaxInput) ?>.
-            Extended max rank must be greater than or equal to Main max rank.
-            Current split: Main #1-#<?= (int) $mainListLimit ?><?php if ($extendedListLimit > $mainListLimit): ?>, Extended #<?= (int) ($mainListLimit + 1) ?>-#<?= (int) $extendedListLimit ?><?php else: ?>, Extended none<?php endif; ?>.
-            Entries above Extended max rank (or marked legacy) go to Legacy when Legacy is ON.
-            When a section is hidden, its demons are merged into Main and still count for score.
+            <?= e(t('admin.list_visibility_help', [
+                'min' => $listLimitMinInput,
+                'max' => $listLimitMaxInput,
+                'main' => (int) $mainListLimit,
+                'extended' => $extendedListLimit > $mainListLimit ? '#' . (int) ($mainListLimit + 1) . '-#' . (int) $extendedListLimit : t('common.none'),
+            ])) ?>
         </small>
 
-        <button class="button blue hover" type="submit">Save List Settings</button>
+        <button class="button blue hover" type="submit"><?= e(t('admin.save_list_settings')) ?></button>
     </form>
 </section>
 <?php endif; ?>
@@ -3134,8 +3147,8 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-scoring'): ?>
 <section class="panel fade admin-tool-section" id="admin-scoring">
     <div class="panel-head">
-        <h2>Change score list</h2>
-        <p>Set the maximum score for the list.</p>
+        <h2><?= e(t('admin.change_score')) ?></h2>
+        <p><?= e(t('admin.scoring_intro')) ?></p>
     </div>
 
     <form class="stack-form panel-narrow" method="post" action="<?= e(admin_section_url('admin-scoring')) ?>">
@@ -3143,7 +3156,7 @@ render_header('Admin', 'admin');
         <input type="hidden" name="action" value="update_scoring">
 
         <label class="field">
-            <span>Top 1 points (100% completion)</span>
+            <span><?= e(t('admin.top1_points')) ?></span>
             <input
                 type="number"
                 name="top1_points"
@@ -3155,11 +3168,14 @@ render_header('Admin', 'admin');
             >
         </label>
         <small class="muted" style="text-align: left;">
-            Allowed range: <?= e($topOnePointsMinInput) ?> to <?= e($topOnePointsMaxInput) ?>.
-            Current #1 score: <?= e(number_format(demonlist_score(1, 100, 100), 2)) ?> points.
+            <?= e(t('admin.scoring_help', [
+                'min' => $topOnePointsMinInput,
+                'max' => $topOnePointsMaxInput,
+                'current' => number_format(demonlist_score(1, 100, 100), 2),
+            ])) ?>
         </small>
 
-        <button class="button blue hover" type="submit">Save Scoring Scale</button>
+        <button class="button blue hover" type="submit"><?= e(t('admin.save_scoring')) ?></button>
     </form>
 </section>
 <?php endif; ?>
@@ -3167,8 +3183,8 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-level-info-rows'): ?>
 <section class="panel fade admin-tool-section" id="admin-level-info-rows">
     <div class="panel-head">
-        <h2>Level Info Rows</h2>
-        <p>Choose built-in rows or add custom rows for the Level Info box on each level page.</p>
+        <h2><?= e(t('admin.level_info_rows')) ?></h2>
+        <p><?= e(t('admin.level_info_rows_intro')) ?></p>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-level-info-rows')) ?>" data-level-info-builder>
@@ -3191,14 +3207,14 @@ render_header('Admin', 'admin');
                 ?>
                 <div class="admin-level-info-row" data-level-info-row>
                     <label class="field">
-                        <span>Type</span>
+                        <span><?= e(t('common.type')) ?></span>
                         <select name="level_info_type[]" data-level-info-type>
-                            <option value="field" <?= !$isCustomRow ? 'selected' : '' ?>>Built-in Field</option>
-                            <option value="custom" <?= $isCustomRow ? 'selected' : '' ?>>Custom Row</option>
+                            <option value="field" <?= !$isCustomRow ? 'selected' : '' ?>><?= e(t('admin.built_in_field')) ?></option>
+                            <option value="custom" <?= $isCustomRow ? 'selected' : '' ?>><?= e(t('admin.custom_row')) ?></option>
                         </select>
                     </label>
                     <label class="field admin-level-info-field-wrap" data-level-info-field-wrap <?= $isCustomRow ? 'hidden' : '' ?>>
-                        <span>Source</span>
+                        <span><?= e(t('common.source')) ?></span>
                         <select name="level_info_field[]">
                             <?php foreach ($levelInfoFieldDefinitions as $field => $defaultLabel): ?>
                                 <option value="<?= e($field) ?>" <?= $rowField === $field ? 'selected' : '' ?>><?= e($defaultLabel) ?></option>
@@ -3207,14 +3223,14 @@ render_header('Admin', 'admin');
                     </label>
                     <input type="hidden" name="level_info_custom_key[]" value="<?= e($rowKey) ?>" data-level-info-custom-key>
                     <label class="field">
-                        <span>Label</span>
-                        <input type="text" name="level_info_label[]" value="<?= e($rowLabel) ?>" placeholder="<?= $isCustomRow ? 'Custom label' : 'Use default label' ?>">
+                        <span><?= e(t('common.label')) ?></span>
+                        <input type="text" name="level_info_label[]" value="<?= e($rowLabel) ?>" placeholder="<?= e($isCustomRow ? t('admin.custom_label') : t('admin.use_default_label')) ?>">
                     </label>
                     <label class="field admin-level-info-custom-wrap" data-level-info-custom-wrap <?= !$isCustomRow ? 'hidden' : '' ?>>
-                        <span>Default Value</span>
-                        <input type="text" name="level_info_default_value[]" value="<?= e($rowDefaultValue) ?>" placeholder="Optional fallback value">
+                        <span><?= e(t('admin.default_value')) ?></span>
+                        <input type="text" name="level_info_default_value[]" value="<?= e($rowDefaultValue) ?>" placeholder="<?= e(t('admin.optional_fallback_value')) ?>">
                     </label>
-                    <button class="button white hover admin-level-info-remove" type="button" data-level-info-remove>Remove</button>
+                    <button class="button white hover admin-level-info-remove" type="button" data-level-info-remove><?= e(t('common.remove')) ?></button>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -3222,14 +3238,14 @@ render_header('Admin', 'admin');
         <template data-level-info-template>
             <div class="admin-level-info-row" data-level-info-row>
                 <label class="field">
-                    <span>Type</span>
+                    <span><?= e(t('common.type')) ?></span>
                     <select name="level_info_type[]" data-level-info-type>
-                        <option value="field" selected>Built-in Field</option>
-                        <option value="custom">Custom Row</option>
+                        <option value="field" selected><?= e(t('admin.built_in_field')) ?></option>
+                        <option value="custom"><?= e(t('admin.custom_row')) ?></option>
                     </select>
                 </label>
                 <label class="field admin-level-info-field-wrap" data-level-info-field-wrap>
-                    <span>Source</span>
+                    <span><?= e(t('common.source')) ?></span>
                     <select name="level_info_field[]">
                         <?php foreach ($levelInfoFieldDefinitions as $field => $defaultLabel): ?>
                             <option value="<?= e($field) ?>"><?= e($defaultLabel) ?></option>
@@ -3238,21 +3254,21 @@ render_header('Admin', 'admin');
                 </label>
                 <input type="hidden" name="level_info_custom_key[]" data-level-info-custom-key>
                 <label class="field">
-                    <span>Label</span>
-                    <input type="text" name="level_info_label[]" placeholder="Use default label">
+                    <span><?= e(t('common.label')) ?></span>
+                    <input type="text" name="level_info_label[]" placeholder="<?= e(t('admin.use_default_label')) ?>">
                 </label>
                 <label class="field admin-level-info-custom-wrap" data-level-info-custom-wrap hidden>
-                    <span>Default Value</span>
-                    <input type="text" name="level_info_default_value[]" placeholder="Optional fallback value">
+                    <span><?= e(t('admin.default_value')) ?></span>
+                    <input type="text" name="level_info_default_value[]" placeholder="<?= e(t('admin.optional_fallback_value')) ?>">
                 </label>
-                <button class="button white hover admin-level-info-remove" type="button" data-level-info-remove>Remove</button>
+                <button class="button white hover admin-level-info-remove" type="button" data-level-info-remove><?= e(t('common.remove')) ?></button>
             </div>
         </template>
 
         <div class="homepage-tool-actions admin-level-info-actions">
-            <button class="button white hover" type="button" data-level-info-add>Add Row</button>
-            <button class="button blue hover" type="submit" name="mode" value="save">Save Rows</button>
-            <button class="button white hover" type="submit" name="mode" value="restore">Restore Defaults</button>
+            <button class="button white hover" type="button" data-level-info-add><?= e(t('admin.add_row')) ?></button>
+            <button class="button blue hover" type="submit" name="mode" value="save"><?= e(t('admin.save_rows')) ?></button>
+            <button class="button white hover" type="submit" name="mode" value="restore"><?= e(t('admin.restore_defaults')) ?></button>
         </div>
     </form>
 </section>
@@ -3261,8 +3277,8 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-level-comments'): ?>
 <section class="panel fade admin-tool-section" id="admin-level-comments">
     <div class="panel-head">
-        <h2>Level Comments</h2>
-        <p>Enable comments for the list, close comments per level, and review reported comments.</p>
+        <h2><?= e(t('admin.level_comments')) ?></h2>
+        <p><?= e(t('admin.level_comments_intro')) ?></p>
     </div>
 
     <?php if ($canManageLevels): ?>
@@ -3273,49 +3289,50 @@ render_header('Admin', 'admin');
         <label class="cb-container" style="text-align: left;">
             <input type="checkbox" name="comments_enabled" value="1" <?= $levelCommentsEnabled ? 'checked' : '' ?>>
             <span class="checkmark"></span>
-            Enable comments across the whole list
+            <?= e(t('admin.enable_all_comments')) ?>
         </label>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>Level Name (optional)</span>
-                <input type="text" name="comment_level_name" data-suggest-list="admin-demon-list" placeholder="Type level name..." autocomplete="off">
+                <span><?= e(t('admin.level_name_optional')) ?></span>
+                <input type="text" name="comment_level_name" data-suggest-list="admin-demon-list" placeholder="<?= e(t('admin.type_level_name')) ?>" autocomplete="off">
             </label>
             <label class="field">
-                <span>Level Comment Status</span>
+                <span><?= e(t('admin.level_comment_status')) ?></span>
                 <select name="level_comment_status">
-                    <option value="keep">No level change</option>
-                    <option value="enabled">Enable on this level</option>
-                    <option value="disabled">Disable on this level</option>
+                    <option value="keep"><?= e(t('admin.no_level_change')) ?></option>
+                    <option value="enabled"><?= e(t('admin.enable_on_level')) ?></option>
+                    <option value="disabled"><?= e(t('admin.disable_on_level')) ?></option>
                 </select>
             </label>
         </div>
 
         <small class="muted" style="text-align: left;">
-            Current global status: <?= $levelCommentsEnabled ? 'enabled' : 'disabled' ?>.
-            Levels with comments disabled: <?= (int) $levelCommentsDisabledCount ?>.
-            Only logged-in users can post comments.
+            <?= e(t('admin.comments_status_help', [
+                'status' => $levelCommentsEnabled ? t('common.enabled') : t('common.disabled'),
+                'count' => (int) $levelCommentsDisabledCount,
+            ])) ?>
         </small>
 
-        <button class="button blue hover" type="submit">Save Comment Settings</button>
+        <button class="button blue hover" type="submit"><?= e(t('admin.save_comment_settings')) ?></button>
     </form>
     <?php endif; ?>
 
     <?php if ($canModerateLevelComments): ?>
         <div class="admin-reported-comments">
             <div class="panel-head">
-                <h3>Reported Comments</h3>
+                <h3><?= e(t('admin.reported_comments')) ?></h3>
                 <?php if ($reportedLevelCommentsError !== ''): ?>
-                    <p>Could not load reported comments.</p>
+                    <p><?= e(t('admin.reported_comments_load_failed')) ?></p>
                 <?php else: ?>
-                    <p><?= count($reportedLevelComments) ?> reported comment<?= count($reportedLevelComments) === 1 ? '' : 's' ?> awaiting review.</p>
+                    <p><?= e(t_choice('admin.reported_comments_count_one', 'admin.reported_comments_count_many', count($reportedLevelComments))) ?></p>
                 <?php endif; ?>
             </div>
 
             <?php if ($reportedLevelCommentsError !== ''): ?>
-                <div class="info-red">Could not load reported comments: <?= e($reportedLevelCommentsError) ?></div>
+                <div class="info-red"><?= e(t('admin.reported_comments_load_error', ['error' => $reportedLevelCommentsError])) ?></div>
             <?php elseif ($reportedLevelComments === []): ?>
-                <p class="muted" style="text-align: left;">No reported comments right now.</p>
+                <p class="muted" style="text-align: left;"><?= e(t('admin.no_reported_comments')) ?></p>
             <?php endif; ?>
 
             <?php foreach ($reportedLevelComments as $reportedComment): ?>
@@ -3332,20 +3349,20 @@ render_header('Admin', 'admin');
                 <article class="moderation-card reported-comment-card">
                     <div class="moderation-head">
                         <strong>#<?= $reportedCommentId ?></strong>
-                        <span class="badge error"><?= (int) ($reportedComment['report_count'] ?? 0) ?> report<?= (int) ($reportedComment['report_count'] ?? 0) === 1 ? '' : 's' ?></span>
-                        <span class="muted">Latest: <?= e(date('Y-m-d H:i', strtotime((string) ($reportedComment['latest_reported_at'] ?? 'now')))) ?></span>
+                        <span class="badge error"><?= e(t_choice('admin.report_count_one', 'admin.report_count_many', (int) ($reportedComment['report_count'] ?? 0))) ?></span>
+                        <span class="muted"><?= e(t('admin.latest_at', ['time' => date('Y-m-d H:i', strtotime((string) ($reportedComment['latest_reported_at'] ?? 'now')))])) ?></span>
                     </div>
                     <dl class="key-value compact">
-                        <div><dt>Level</dt><dd><a class="link" href="<?= e($reportedCommentUrl) ?>">#<?= $reportedPosition ?> <?= e((string) ($reportedComment['demon_name'] ?? 'Unknown')) ?></a></dd></div>
-                        <div><dt>Author</dt><dd><?= e($reportedAuthor !== '' ? $reportedAuthor : (string) ($reportedComment['username'] ?? 'Unknown')) ?></dd></div>
-                        <div><dt>Comment</dt><dd><?= e($reportedBody !== '' ? $reportedBody : '-') ?></dd></div>
-                        <div><dt>Reports</dt><dd><?= nl2br(e($reportedSummary !== '' ? $reportedSummary : '-')) ?></dd></div>
+                        <div><dt><?= e(t('common.level')) ?></dt><dd><a class="link" href="<?= e($reportedCommentUrl) ?>">#<?= $reportedPosition ?> <?= e((string) ($reportedComment['demon_name'] ?? t('common.unknown'))) ?></a></dd></div>
+                        <div><dt><?= e(t('common.author')) ?></dt><dd><?= e($reportedAuthor !== '' ? $reportedAuthor : (string) ($reportedComment['username'] ?? t('common.unknown'))) ?></dd></div>
+                        <div><dt><?= e(t('common.comment')) ?></dt><dd><?= e($reportedBody !== '' ? $reportedBody : '-') ?></dd></div>
+                        <div><dt><?= e(t('common.reports')) ?></dt><dd><?= nl2br(e($reportedSummary !== '' ? $reportedSummary : '-')) ?></dd></div>
                     </dl>
                     <form method="post" action="<?= e(admin_section_url('admin-level-comments')) ?>">
                         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                         <input type="hidden" name="action" value="delete_reported_level_comment">
                         <input type="hidden" name="comment_id" value="<?= $reportedCommentId ?>">
-                        <button class="button danger hover small" type="submit" data-confirm="Delete this reported comment? Replies under it will also be removed.">Delete Comment</button>
+                        <button class="button danger hover small" type="submit" data-confirm="<?= e(t('admin.delete_reported_comment_confirm')) ?>"><?= e(t('admin.delete_comment')) ?></button>
                     </form>
                 </article>
             <?php endforeach; ?>
@@ -3357,12 +3374,12 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-claims'): ?>
 <section class="panel fade admin-tool-section" id="admin-claims">
     <div class="panel-head">
-        <h2>Claim Contributors</h2>
-        <p>Attach publisher/verifier to a real account. Leave username blank to clear claim and keep text as unclaimed metadata.</p>
+        <h2><?= e(t('admin.claim_contributors')) ?></h2>
+        <p><?= e(t('admin.claims_intro')) ?></p>
     </div>
 
     <?php if (!$claimColumnsReady): ?>
-        <div class="info-red">Claim columns are missing in this database. Open <code>update_db_schema.php</code> once, then reload this page.</div>
+        <div class="info-red"><?= e(t('admin.claim_columns_missing')) ?></div>
     <?php endif; ?>
 
     <form class="stack-form panel-narrow" method="post" action="<?= e(admin_section_url('admin-claims')) ?>">
@@ -3370,25 +3387,25 @@ render_header('Admin', 'admin');
         <input type="hidden" name="action" value="claim_contributor">
 
         <label class="field">
-            <span>Level Name</span>
-            <input type="text" name="demon_name" data-suggest-list="admin-demon-list" placeholder="Type level name..." autocomplete="off" required>
+            <span><?= e(t('admin.level_name')) ?></span>
+            <input type="text" name="demon_name" data-suggest-list="admin-demon-list" placeholder="<?= e(t('admin.type_level_name')) ?>" autocomplete="off" required>
         </label>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>Role</span>
+                    <span><?= e(t('common.role')) ?></span>
                 <select name="claim_role" required>
-                    <option value="publisher">Publisher</option>
-                    <option value="verifier">Verifier</option>
+                    <option value="publisher"><?= e(t('admin.publisher')) ?></option>
+                    <option value="verifier"><?= e(t('admin.verifier')) ?></option>
                 </select>
             </label>
             <label class="field">
-                <span>Account Username (optional)</span>
-                <input type="text" name="claim_username" data-suggest-list="admin-user-claim-list" placeholder="Leave blank to clear claim" autocomplete="off">
+                <span><?= e(t('admin.account_username_optional')) ?></span>
+                <input type="text" name="claim_username" data-suggest-list="admin-user-claim-list" placeholder="<?= e(t('admin.clear_claim_placeholder')) ?>" autocomplete="off">
             </label>
         </div>
 
-        <button class="button blue hover" type="submit">Save Claim</button>
+        <button class="button blue hover" type="submit"><?= e(t('admin.save_claim')) ?></button>
     </form>
 
     <datalist id="admin-user-claim-list">
@@ -3410,8 +3427,8 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-add-level'): ?>
 <section class="panel fade admin-tool-section" id="admin-add-level">
     <div class="panel-head">
-        <h2>Add Level</h2>
-        <p>Owners and List Editors can add demons to the list. Extra level metadata is optional.</p>
+        <h2><?= e(t('admin.add_level')) ?></h2>
+        <p><?= e(t('admin.add_level_intro')) ?></p>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-add-level')) ?>">
@@ -3420,81 +3437,81 @@ render_header('Admin', 'admin');
 
         <div class="detail-grid" style="grid-template-columns: 2fr 1fr 1fr;">
             <label class="field">
-                <span>Level Name</span>
+                <span><?= e(t('admin.level_name')) ?></span>
                 <input type="text" name="name" required>
             </label>
             <label class="field">
-                <span>Position (optional)</span>
-                <input type="number" min="1" name="position" placeholder="Auto = end">
+                <span><?= e(t('admin.position_optional')) ?></span>
+                <input type="number" min="1" name="position" placeholder="<?= e(t('admin.auto_end')) ?>">
             </label>
             <label class="field">
-                <span>Requirement (%)</span>
+                <span><?= e(t('admin.requirement_percent')) ?></span>
                 <input type="number" min="1" max="100" name="requirement" value="100" required>
             </label>
         </div>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>Creator(s)</span>
+                <span><?= e(t('admin.creators')) ?></span>
                 <input type="text" name="creators" placeholder="e.g. ABC, XYZ" required>
             </label>
             <label class="field">
-                <span>Publisher</span>
+                <span><?= e(t('admin.publisher')) ?></span>
                 <input type="text" name="publisher" required>
             </label>
         </div>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>Verifier</span>
+                <span><?= e(t('admin.verifier')) ?></span>
                 <input type="text" name="verifier">
             </label>
             <label class="field">
-                <span>Difficulty</span>
+                <span><?= e(t('admin.difficulty')) ?></span>
                 <input type="text" name="difficulty" value="Extreme Demon" required>
             </label>
         </div>
 
         <label class="field">
-            <span>Verification Video URL</span>
+            <span><?= e(t('admin.verification_video_url')) ?></span>
             <input type="url" name="video_url" required>
         </label>
 
         <label class="field">
-            <span>Thumbnail URL (optional)</span>
+            <span><?= e(t('admin.thumbnail_url_optional')) ?></span>
             <input type="url" name="thumbnail_url">
         </label>
 
         <label class="field">
-            <span>Level Description (optional)</span>
-            <textarea name="description" maxlength="1000" placeholder="Short description shown above Level Info and Scoring"></textarea>
+            <span><?= e(t('admin.level_description_optional')) ?></span>
+            <textarea name="description" maxlength="1000" placeholder="<?= e(t('admin.short_description_placeholder')) ?>"></textarea>
         </label>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>Level ID (optional)</span>
+                <span><?= e(t('admin.level_id_optional')) ?></span>
                 <input type="text" name="level_id" placeholder="e.g. 12345678">
             </label>
             <label class="field">
-                <span>Level Length (optional)</span>
+                <span><?= e(t('admin.level_length_optional')) ?></span>
                 <input type="text" name="level_length" placeholder="e.g. Long">
             </label>
         </div>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>Song (optional)</span>
+                <span><?= e(t('admin.song_optional')) ?></span>
                 <input type="text" name="song" placeholder="e.g. Creo - Sphere">
             </label>
             <label class="field">
-                <span>Object Count (optional)</span>
+                <span><?= e(t('admin.object_count_optional')) ?></span>
                 <input type="number" min="0" name="object_count" placeholder="e.g. 178945">
             </label>
         </div>
 
         <?php if ($levelInfoCustomRows !== []): ?>
             <div class="admin-custom-level-info">
-                <h3>Custom Level Info</h3>
+                <h3><?= e(t('admin.custom_level_info')) ?></h3>
                 <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
                     <?php foreach ($levelInfoCustomRows as $customRow): ?>
                         <label class="field">
@@ -3502,7 +3519,7 @@ render_header('Admin', 'admin');
                             <input
                                 type="text"
                                 name="custom_level_info[<?= e((string) $customRow['key']) ?>]"
-                                placeholder="<?= e((string) ($customRow['default_value'] !== '' ? $customRow['default_value'] : 'Optional value')) ?>"
+                                    placeholder="<?= e((string) ($customRow['default_value'] !== '' ? $customRow['default_value'] : t('admin.optional_value'))) ?>"
                             >
                         </label>
                     <?php endforeach; ?>
@@ -3513,16 +3530,16 @@ render_header('Admin', 'admin');
         <label class="cb-container" style="text-align: left; margin-top: 6px;">
             <input type="checkbox" name="legacy" value="1">
             <span class="checkmark"></span>
-            Mark as Legacy list entry
+            <?= e(t('admin.mark_legacy')) ?>
         </label>
 
         <label class="cb-container" style="text-align: left; margin-top: 6px;">
             <input type="checkbox" name="comments_disabled" value="1">
             <span class="checkmark"></span>
-            Disable comments for this level
+            <?= e(t('admin.disable_comments_for_level')) ?>
         </label>
 
-        <button class="button blue hover" type="submit">Add Level</button>
+        <button class="button blue hover" type="submit"><?= e(t('admin.add_level')) ?></button>
     </form>
 </section>
 <?php endif; ?>
@@ -3530,8 +3547,8 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-edit-level'): ?>
 <section class="panel fade admin-tool-section" id="admin-edit-level">
     <div class="panel-head">
-        <h2>Edit Level</h2>
-        <p>Update level information and ranking in one place.</p>
+        <h2><?= e(t('admin.edit_level')) ?></h2>
+        <p><?= e(t('admin.edit_level_intro')) ?></p>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-edit-level')) ?>">
@@ -3539,90 +3556,90 @@ render_header('Admin', 'admin');
         <input type="hidden" name="action" value="edit_level">
 
         <label class="field">
-            <span>Level to Edit</span>
-            <input type="text" name="demon_name" data-suggest-list="admin-demon-list" placeholder="Type level name..." autocomplete="off" required>
+            <span><?= e(t('admin.level_to_edit')) ?></span>
+            <input type="text" name="demon_name" data-suggest-list="admin-demon-list" placeholder="<?= e(t('admin.type_level_name')) ?>" autocomplete="off" required>
         </label>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>New Name (optional)</span>
-                <input type="text" name="name" placeholder="Leave blank to keep current">
+                <span><?= e(t('admin.new_name_optional')) ?></span>
+                <input type="text" name="name" placeholder="<?= e(t('admin.keep_current_long')) ?>">
             </label>
             <label class="field">
-                <span>Difficulty (optional)</span>
-                <input type="text" name="difficulty" placeholder="Leave blank to keep current">
+                <span><?= e(t('admin.difficulty_optional')) ?></span>
+                <input type="text" name="difficulty" placeholder="<?= e(t('admin.keep_current_long')) ?>">
             </label>
         </div>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr 1fr;">
             <label class="field">
-                <span>Requirement % (optional)</span>
-                <input type="number" min="1" max="100" name="requirement" placeholder="Keep current">
+                <span><?= e(t('admin.requirement_optional')) ?></span>
+                <input type="number" min="1" max="100" name="requirement" placeholder="<?= e(t('admin.keep_current')) ?>">
             </label>
             <label class="field">
-                <span>Creator(s) (optional)</span>
-                <input type="text" name="creators" placeholder="Keep current">
+                <span><?= e(t('admin.creators_optional')) ?></span>
+                <input type="text" name="creators" placeholder="<?= e(t('admin.keep_current')) ?>">
             </label>
             <label class="field">
-                <span>Publisher (optional)</span>
-                <input type="text" name="publisher" placeholder="Keep current">
-            </label>
-        </div>
-
-        <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
-            <label class="field">
-                <span>Verifier (optional)</span>
-                <input type="text" name="verifier" placeholder="Keep current">
-            </label>
-            <label class="field">
-                <span>Verification Video URL (optional)</span>
-                <input type="url" name="video_url" placeholder="Keep current">
+                <span><?= e(t('admin.publisher_optional')) ?></span>
+                <input type="text" name="publisher" placeholder="<?= e(t('admin.keep_current')) ?>">
             </label>
         </div>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>Thumbnail URL (optional)</span>
-                <input type="url" name="thumbnail_url" placeholder="Keep current">
+                <span><?= e(t('admin.verifier_optional')) ?></span>
+                <input type="text" name="verifier" placeholder="<?= e(t('admin.keep_current')) ?>">
+            </label>
+            <label class="field">
+                <span><?= e(t('admin.verification_video_url_optional')) ?></span>
+                <input type="url" name="video_url" placeholder="<?= e(t('admin.keep_current')) ?>">
+            </label>
+        </div>
+
+        <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
+            <label class="field">
+                <span><?= e(t('admin.thumbnail_url_optional')) ?></span>
+                <input type="url" name="thumbnail_url" placeholder="<?= e(t('admin.keep_current')) ?>">
             </label>
         </div>
 
         <label class="field">
-            <span>Level Description (optional)</span>
-            <textarea name="description" maxlength="1000" placeholder="Leave blank to keep current"></textarea>
+            <span><?= e(t('admin.level_description_optional')) ?></span>
+            <textarea name="description" maxlength="1000" placeholder="<?= e(t('admin.keep_current_long')) ?>"></textarea>
         </label>
 
         <label class="cb-container" style="text-align: left; margin-top: 6px;">
             <input type="checkbox" name="clear_description" value="1">
             <span class="checkmark"></span>
-            Clear current level description
+            <?= e(t('admin.clear_current_description')) ?>
         </label>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>Level ID (optional)</span>
-                <input type="text" name="level_id" placeholder="Keep current">
+                <span><?= e(t('admin.level_id_optional')) ?></span>
+                <input type="text" name="level_id" placeholder="<?= e(t('admin.keep_current')) ?>">
             </label>
             <label class="field">
-                <span>Level Length (optional)</span>
-                <input type="text" name="level_length" placeholder="Keep current">
+                <span><?= e(t('admin.level_length_optional')) ?></span>
+                <input type="text" name="level_length" placeholder="<?= e(t('admin.keep_current')) ?>">
             </label>
         </div>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>Song (optional)</span>
-                <input type="text" name="song" placeholder="Keep current">
+                <span><?= e(t('admin.song_optional')) ?></span>
+                <input type="text" name="song" placeholder="<?= e(t('admin.keep_current')) ?>">
             </label>
             <label class="field">
-                <span>Object Count (optional)</span>
-                <input type="number" min="0" name="object_count" placeholder="Keep current">
+                <span><?= e(t('admin.object_count_optional')) ?></span>
+                <input type="number" min="0" name="object_count" placeholder="<?= e(t('admin.keep_current')) ?>">
             </label>
         </div>
 
         <?php if ($levelInfoCustomRows !== []): ?>
             <div class="admin-custom-level-info">
-                <h3>Custom Level Info</h3>
+                <h3><?= e(t('admin.custom_level_info')) ?></h3>
                 <div class="admin-custom-level-info-grid">
                     <?php foreach ($levelInfoCustomRows as $customRow): ?>
                         <div class="admin-custom-level-info-field">
@@ -3631,13 +3648,13 @@ render_header('Admin', 'admin');
                                 <input
                                     type="text"
                                     name="custom_level_info[<?= e((string) $customRow['key']) ?>]"
-                                    placeholder="Leave blank to keep current/default"
+                                    placeholder="<?= e(t('admin.keep_current_default')) ?>"
                                 >
                             </label>
                             <label class="cb-container admin-custom-level-info-clear">
                                 <input type="checkbox" name="custom_level_info_clear[<?= e((string) $customRow['key']) ?>]" value="1">
                                 <span class="checkmark"></span>
-                                Clear
+                                <?= e(t('common.clear')) ?>
                             </label>
                         </div>
                     <?php endforeach; ?>
@@ -3647,32 +3664,32 @@ render_header('Admin', 'admin');
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr;">
             <label class="field">
-                <span>Legacy Status</span>
+                <span><?= e(t('admin.legacy_status')) ?></span>
                 <select name="legacy_status">
-                    <option value="keep">Keep current</option>
-                    <option value="normal">Set as Current List</option>
-                    <option value="legacy">Set as Legacy</option>
+                    <option value="keep"><?= e(t('admin.keep_current')) ?></option>
+                    <option value="normal"><?= e(t('admin.set_current_list')) ?></option>
+                    <option value="legacy"><?= e(t('admin.set_legacy')) ?></option>
                 </select>
             </label>
             <label class="field">
-                <span>Comment Status</span>
+                <span><?= e(t('admin.comment_status')) ?></span>
                 <select name="comment_status">
-                    <option value="keep">Keep current</option>
-                    <option value="enabled">Enable comments</option>
-                    <option value="disabled">Disable comments</option>
+                    <option value="keep"><?= e(t('admin.keep_current')) ?></option>
+                    <option value="enabled"><?= e(t('admin.enable_comments')) ?></option>
+                    <option value="disabled"><?= e(t('admin.disable_comments')) ?></option>
                 </select>
             </label>
             <label class="field">
-                <span>New Position (optional)</span>
-                <input type="number" min="1" max="<?= $maxPosition ?>" name="new_position" placeholder="Keep current">
+                <span><?= e(t('admin.new_position_optional')) ?></span>
+                <input type="number" min="1" max="<?= $maxPosition ?>" name="new_position" placeholder="<?= e(t('admin.keep_current')) ?>">
             </label>
             <label class="field">
-                <span>Move Note (optional)</span>
-                <input type="text" name="move_note" placeholder="Reason for rank change">
+                <span><?= e(t('admin.move_note_optional')) ?></span>
+                <input type="text" name="move_note" placeholder="<?= e(t('admin.move_note_placeholder')) ?>">
             </label>
         </div>
 
-        <button class="button blue hover" type="submit">Save Level Changes</button>
+        <button class="button blue hover" type="submit"><?= e(t('admin.save_level_changes')) ?></button>
     </form>
 </section>
 <?php endif; ?>
@@ -3680,8 +3697,8 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-delete-level'): ?>
 <section class="panel fade admin-tool-section" id="admin-delete-level">
     <div class="panel-head">
-        <h2>Delete Level</h2>
-        <p>Remove a level from the list. Records for that level are deleted and later positions are shifted down.</p>
+        <h2><?= e(t('admin.delete_level')) ?></h2>
+        <p><?= e(t('admin.delete_level_intro')) ?></p>
     </div>
 
     <form class="stack-form panel-narrow" method="post" action="<?= e(admin_section_url('admin-delete-level')) ?>">
@@ -3689,20 +3706,20 @@ render_header('Admin', 'admin');
         <input type="hidden" name="action" value="delete_level">
 
         <label class="field">
-            <span>Level to Delete</span>
-            <input type="text" name="demon_name" data-suggest-list="admin-demon-list" placeholder="Type level name..." autocomplete="off" required>
+            <span><?= e(t('admin.level_to_delete')) ?></span>
+            <input type="text" name="demon_name" data-suggest-list="admin-demon-list" placeholder="<?= e(t('admin.type_level_name')) ?>" autocomplete="off" required>
         </label>
 
         <label class="field">
-            <span>Confirm Level Name</span>
-            <input type="text" name="confirm_name" placeholder="Retype the exact level name" autocomplete="off" required>
+            <span><?= e(t('admin.confirm_level_name')) ?></span>
+            <input type="text" name="confirm_name" placeholder="<?= e(t('admin.confirm_level_placeholder')) ?>" autocomplete="off" required>
         </label>
 
         <small class="muted" style="text-align: left;">
-            This cannot be undone from the admin panel. Existing completion records and position history for this level are removed.
+            <?= e(t('admin.delete_level_warning')) ?>
         </small>
 
-        <button class="button red hover" type="submit">Delete Level</button>
+        <button class="button red hover" type="submit"><?= e(t('admin.delete_level')) ?></button>
     </form>
 </section>
 <?php endif; ?>
@@ -3710,11 +3727,11 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-user-management'): ?>
 <section class="panel fade admin-tool-section admin-list-section" id="admin-user-management">
     <div class="panel-head">
-        <h2>User Management</h2>
+        <h2><?= e(t('admin.user_management')) ?></h2>
         <p>
-            Adjust role, banned status, comment access, and bonus points for each account in one place.
+            <?= e(t('admin.user_management_intro')) ?>
             <?php if (!$canManageUserRoles): ?>
-                Your access does not include role changes; role fields are read-only.
+                <?= e(t('admin.user_management_no_role_access')) ?>
             <?php endif; ?>
         </p>
     </div>
@@ -3723,13 +3740,13 @@ render_header('Admin', 'admin');
         <input type="hidden" name="section" value="admin-user-management">
         <div class="admin-user-search-grid">
             <label class="field">
-                <span>Search Username</span>
-                <input id="admin-user-search" type="text" name="users_q" value="<?= e($usersQuery) ?>" placeholder="Type username...">
+                <span><?= e(t('admin.search_username')) ?></span>
+                <input id="admin-user-search" type="text" name="users_q" value="<?= e($usersQuery) ?>" placeholder="<?= e(t('admin.type_username')) ?>">
             </label>
             <div class="admin-user-search-actions">
-                <button class="button white hover" type="submit">Search</button>
+                <button class="button white hover" type="submit"><?= e(t('common.search')) ?></button>
                 <?php if ($usersQuery !== ''): ?>
-                    <a class="button ghost hover" href="<?= e(admin_section_url('admin-user-management')) ?>">Clear</a>
+                    <a class="button ghost hover" href="<?= e(admin_section_url('admin-user-management')) ?>"><?= e(t('common.clear')) ?></a>
                 <?php endif; ?>
             </div>
         </div>
@@ -3739,22 +3756,22 @@ render_header('Admin', 'admin');
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>User</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Banned</th>
-                    <th>Comments</th>
-                    <th>Points</th>
-                    <th>Bonus</th>
-                    <th>Joined</th>
-                    <th>Adjust</th>
+                    <th><?= e(t('common.user')) ?></th>
+                    <th><?= e(t('common.email')) ?></th>
+                    <th><?= e(t('common.role')) ?></th>
+                    <th><?= e(t('common.banned')) ?></th>
+                    <th><?= e(t('common.comments')) ?></th>
+                    <th><?= e(t('common.points')) ?></th>
+                    <th><?= e(t('common.bonus')) ?></th>
+                    <th><?= e(t('common.joined')) ?></th>
+                    <th><?= e(t('admin.adjust')) ?></th>
                 </tr>
             </thead>
             <tbody id="admin-user-table-body">
                 <?php if ($usersQuery === ''): ?>
-                    <tr><td colspan="10" class="muted">Enter a username and press Search to load users.</td></tr>
+                    <tr><td colspan="10" class="muted"><?= e(t('admin.load_users_hint')) ?></td></tr>
                 <?php elseif ($users === []): ?>
-                    <tr><td colspan="10" class="muted">No users found for "<?= e($usersQuery) ?>".</td></tr>
+                    <tr><td colspan="10" class="muted"><?= e(t('admin.no_users_found', ['query' => $usersQuery])) ?></td></tr>
                 <?php endif; ?>
 
                 <?php foreach ($users as $member): ?>
@@ -3781,8 +3798,8 @@ render_header('Admin', 'admin');
                         </td>
                         <td><?= e((string) ($member['email'] ?: '-')) ?></td>
                         <td><span class="badge <?= $memberIsOwner ? 'approved' : '' ?>"><?= e(strtoupper($memberRoleLabel)) ?></span></td>
-                        <td><span class="badge <?= $isBanned ? 'error' : 'success' ?>"><?= $isBanned ? 'BANNED' : 'ACTIVE' ?></span></td>
-                        <td><span class="badge <?= $commentsDisabledForUser ? 'error' : 'success' ?>"><?= $commentsDisabledForUser ? 'DISABLED' : 'ENABLED' ?></span></td>
+                        <td><span class="badge <?= $isBanned ? 'error' : 'success' ?>"><?= e($isBanned ? t('common.banned') : t('common.active')) ?></span></td>
+                        <td><span class="badge <?= $commentsDisabledForUser ? 'error' : 'success' ?>"><?= e($commentsDisabledForUser ? t('common.disabled') : t('common.enabled')) ?></span></td>
                         <td><?= e(number_format((float) ($member['points'] ?? 0.0), 2)) ?></td>
                         <td><?= e(number_format((float) ($member['bonus_points'] ?? 0.0), 2)) ?></td>
                         <td><?= e(date('Y-m-d', strtotime((string) $member['created_at']))) ?></td>
@@ -3795,7 +3812,7 @@ render_header('Admin', 'admin');
 
                                 <div class="admin-user-edit-controls">
                                     <label class="admin-user-edit-field">
-                                        <span>Role</span>
+                                        <span><?= e(t('common.role')) ?></span>
                                         <?php if ($canManageUserRoles): ?>
                                             <select name="role">
                                                 <option value="owner" <?= $memberRole === 'owner' ? 'selected' : '' ?>>OWNER</option>
@@ -3809,26 +3826,26 @@ render_header('Admin', 'admin');
                                         <?php endif; ?>
                                     </label>
                                     <label class="admin-user-edit-field">
-                                        <span>Banned</span>
+                                        <span><?= e(t('common.banned')) ?></span>
                                         <select name="is_banned">
-                                            <option value="0" <?= !$isBanned ? 'selected' : '' ?>>NO</option>
-                                            <option value="1" <?= $isBanned ? 'selected' : '' ?>>YES</option>
+                                            <option value="0" <?= !$isBanned ? 'selected' : '' ?>><?= e(t('common.no')) ?></option>
+                                            <option value="1" <?= $isBanned ? 'selected' : '' ?>><?= e(t('common.yes')) ?></option>
                                         </select>
                                     </label>
                                     <label class="admin-user-edit-field">
-                                        <span>Comments</span>
+                                        <span><?= e(t('common.comments')) ?></span>
                                         <select name="comments_disabled">
-                                            <option value="0" <?= !$commentsDisabledForUser ? 'selected' : '' ?>>ENABLED</option>
-                                            <option value="1" <?= $commentsDisabledForUser ? 'selected' : '' ?>>DISABLED</option>
+                                            <option value="0" <?= !$commentsDisabledForUser ? 'selected' : '' ?>><?= e(t('common.enabled')) ?></option>
+                                            <option value="1" <?= $commentsDisabledForUser ? 'selected' : '' ?>><?= e(t('common.disabled')) ?></option>
                                         </select>
                                     </label>
                                     <label class="admin-user-edit-field">
-                                        <span>Bonus +/-</span>
+                                        <span><?= e(t('admin.bonus_adjust')) ?></span>
                                         <input type="number" name="bonus_delta" step="0.01" value="0" placeholder="+10 or -5">
                                     </label>
                                 </div>
 
-                                <button class="button blue hover small" type="submit">Save</button>
+                                <button class="button blue hover small" type="submit"><?= e(t('common.save')) ?></button>
                             </form>
                             <?php if ($canResetPasswords): ?>
                                 <form class="admin-user-reset-form" method="post" action="<?= e(admin_section_url('admin-user-management', $usersQuery !== '' ? ['users_q' => $usersQuery] : [])) ?>" style="display: inline;">
@@ -3836,14 +3853,14 @@ render_header('Admin', 'admin');
                                     <input type="hidden" name="action" value="reset_password">
                                     <input type="hidden" name="user_id" value="<?= (int) $member['id'] ?>">
                                     <input type="hidden" name="users_q" value="<?= e($usersQuery) ?>">
-                                    <button class="button orange hover small" type="submit" title="Reset password to 123456">Reset Password</button>
+                                    <button class="button orange hover small" type="submit" title="<?= e(t('admin.reset_password_title')) ?>"><?= e(t('admin.reset_password')) ?></button>
                                 </form>
                             <?php endif; ?>
                             <?php if ($isCurrentUser): ?>
-                                <span class="muted admin-user-note">(you)</span>
+                                <span class="muted admin-user-note"><?= e(t('common.you')) ?></span>
                             <?php endif; ?>
                             <?php if ($isLastOwner): ?>
-                                <span class="muted admin-user-note">Last owner cannot be demoted.</span>
+                                <span class="muted admin-user-note"><?= e(t('admin.last_owner_note')) ?></span>
                             <?php endif; ?>
                         </td>
                     </tr>
@@ -3857,11 +3874,11 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-pending-submissions'): ?>
 <section class="panel fade admin-tool-section admin-list-section" id="admin-pending-submissions">
     <div class="panel-head">
-        <h2>Pending Submissions</h2>
+        <h2><?= e(t('admin.pending_submissions')) ?></h2>
     </div>
 
     <?php if ($pending === []): ?>
-        <p class="muted">No pending submissions.</p>
+        <p class="muted"><?= e(t('admin.no_pending_submissions')) ?></p>
     <?php endif; ?>
 
     <?php foreach ($pending as $item): ?>
@@ -3869,21 +3886,21 @@ render_header('Admin', 'admin');
             <div class="moderation-head">
                 <strong>#<?= (int) $item['id'] ?></strong>
                 <span class="badge"><?= e(strtoupper((string) $item['type'])) ?></span>
-                <span class="muted">Submitted: <?= e(date('Y-m-d H:i', strtotime((string) $item['created_at']))) ?></span>
+                <span class="muted"><?= e(t('admin.submitted_at', ['time' => date('Y-m-d H:i', strtotime((string) $item['created_at']))])) ?></span>
             </div>
 
             <dl class="key-value compact">
-                <div><dt>Submitter</dt><dd><?= e((string) ($item['submitter_username'] ?: $item['player'] ?: 'Unknown')) ?></dd></div>
-                <div><dt>Demon</dt><dd><?= e((string) $item['demon_name']) ?></dd></div>
-                <div><dt>Progress</dt><dd><?= $item['progress'] !== null ? (int) $item['progress'] . '%' : '-' ?></dd></div>
-                <div><dt>Platform</dt><dd><?= e((string) ($item['platform'] ?: '-')) ?></dd></div>
-                <div><dt>Refresh</dt><dd><?= $item['refresh_rate'] !== null ? (int) $item['refresh_rate'] . 'Hz' : '-' ?></dd></div>
-                <div><dt>Proof</dt><dd><a class="link" target="_blank" rel="noreferrer" href="<?= e((string) ($item['video_url'] ?: '#')) ?>">Open</a></dd></div>
-                <div><dt>Raw Footage</dt><dd><?= !empty($item['raw_footage_url']) ? '<a class="link" target="_blank" rel="noreferrer" href="' . e((string) $item['raw_footage_url']) . '">Open</a>' : '-' ?></dd></div>
+                <div><dt><?= e(t('common.submitter')) ?></dt><dd><?= e((string) ($item['submitter_username'] ?: $item['player'] ?: t('common.unknown'))) ?></dd></div>
+                <div><dt><?= e(t('common.demon')) ?></dt><dd><?= e((string) $item['demon_name']) ?></dd></div>
+                <div><dt><?= e(t('common.progress')) ?></dt><dd><?= $item['progress'] !== null ? (int) $item['progress'] . '%' : '-' ?></dd></div>
+                <div><dt><?= e(t('common.platform')) ?></dt><dd><?= e((string) ($item['platform'] ?: '-')) ?></dd></div>
+                <div><dt><?= e(t('admin.refresh')) ?></dt><dd><?= $item['refresh_rate'] !== null ? (int) $item['refresh_rate'] . 'Hz' : '-' ?></dd></div>
+                <div><dt><?= e(t('common.proof')) ?></dt><dd><a class="link" target="_blank" rel="noreferrer" href="<?= e((string) ($item['video_url'] ?: '#')) ?>"><?= e(t('common.open')) ?></a></dd></div>
+                <div><dt><?= e(t('common.raw_footage')) ?></dt><dd><?= !empty($item['raw_footage_url']) ? '<a class="link" target="_blank" rel="noreferrer" href="' . e((string) $item['raw_footage_url']) . '">' . e(t('common.open')) . '</a>' : '-' ?></dd></div>
             </dl>
 
             <?php if (!empty($item['notes'])): ?>
-                <p><strong>Notes:</strong> <?= e((string) $item['notes']) ?></p>
+                <p><strong><?= e(t('common.notes')) ?>:</strong> <?= e((string) $item['notes']) ?></p>
             <?php endif; ?>
 
             <form class="moderation-actions" method="post" action="<?= e(admin_section_url('admin-pending-submissions')) ?>">
@@ -3891,11 +3908,11 @@ render_header('Admin', 'admin');
                 <input type="hidden" name="action" value="review">
                 <input type="hidden" name="submission_id" value="<?= (int) $item['id'] ?>">
                 <label class="field">
-                    <span>Review Note</span>
-                    <input type="text" name="review_note" placeholder="Optional note">
+                    <span><?= e(t('admin.review_note')) ?></span>
+                    <input type="text" name="review_note" placeholder="<?= e(t('admin.optional_note')) ?>">
                 </label>
-                <button class="button blue hover small" type="submit" name="decision" value="approved" data-confirm="Approve this submission?">Approve</button>
-                <button class="button red hover small" type="submit" name="decision" value="rejected" data-confirm="Reject this submission?">Reject</button>
+                <button class="button blue hover small" type="submit" name="decision" value="approved" data-confirm="<?= e(t('admin.approve_confirm')) ?>"><?= e(t('common.approve')) ?></button>
+                <button class="button red hover small" type="submit" name="decision" value="rejected" data-confirm="<?= e(t('admin.reject_confirm')) ?>"><?= e(t('common.reject')) ?></button>
             </form>
         </article>
     <?php endforeach; ?>
@@ -3905,23 +3922,23 @@ render_header('Admin', 'admin');
 <?php if ($activeSection === 'admin-reviewed-submissions'): ?>
 <section class="panel fade admin-tool-section admin-list-section" id="admin-reviewed-submissions">
     <div class="panel-head">
-        <h2>Recently Reviewed</h2>
+        <h2><?= e(t('admin.recently_reviewed')) ?></h2>
     </div>
     <div class="table-wrap">
         <table class="data-table">
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Type</th>
-                    <th>Demon</th>
-                    <th>Submitter</th>
-                    <th>Status</th>
-                    <th>Reviewed At</th>
+                    <th><?= e(t('common.type')) ?></th>
+                    <th><?= e(t('common.demon')) ?></th>
+                    <th><?= e(t('common.submitter')) ?></th>
+                    <th><?= e(t('common.status')) ?></th>
+                    <th><?= e(t('common.reviewed_at')) ?></th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ($reviewed === []): ?>
-                    <tr><td colspan="6" class="muted">No reviewed submissions yet.</td></tr>
+                    <tr><td colspan="6" class="muted"><?= e(t('admin.no_reviewed_submissions')) ?></td></tr>
                 <?php endif; ?>
                 <?php foreach ($reviewed as $item): ?>
                     <tr>
@@ -3929,7 +3946,7 @@ render_header('Admin', 'admin');
                         <td><?= e((string) $item['type']) ?></td>
                         <td><?= e((string) $item['demon_name']) ?></td>
                         <td><?= e((string) ($item['submitter_username'] ?: $item['player'] ?: '-')) ?></td>
-                        <td><span class="badge <?= $item['status'] === 'approved' ? 'success' : 'error' ?>"><?= e((string) $item['status']) ?></span></td>
+                        <td><span class="badge <?= $item['status'] === 'approved' ? 'success' : 'error' ?>"><?= e(status_label((string) $item['status'])) ?></span></td>
                         <td><?= e((string) ($item['reviewed_at'] ?: '-')) ?></td>
                     </tr>
                 <?php endforeach; ?>

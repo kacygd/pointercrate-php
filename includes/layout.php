@@ -1,6 +1,27 @@
 <?php
 declare(strict_types=1);
 
+function render_language_menu_form(string $class = 'nav-profile-language-form'): void
+{
+    ?>
+    <form method="get" action="<?= e(current_path()) ?>" class="<?= e($class) ?>">
+        <?php foreach ($_GET as $key => $value): ?>
+            <?php if ($key !== 'lang' && is_scalar($value)): ?>
+                <input type="hidden" name="<?= e((string) $key) ?>" value="<?= e((string) $value) ?>">
+            <?php endif; ?>
+        <?php endforeach; ?>
+        <label>
+            <span><?= e(t('nav.language')) ?></span>
+            <select name="lang" onchange="this.form.submit()" aria-label="<?= e(t('nav.language')) ?>">
+                <?php foreach (supported_languages() as $code => $language): ?>
+                    <option value="<?= e($code) ?>" <?= current_language() === $code ? 'selected' : '' ?>><?= e($language['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+    </form>
+    <?php
+}
+
 
 function render_header(string $title, string $activeNav = '', array $meta = []): void
 {
@@ -75,7 +96,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
     $styleHref = base_url('assets/css/style.css?v=' . rawurlencode($styleVersion));
 ?>
 <!doctype html>
-<html lang="en">
+<html lang="<?= e(current_language()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -101,6 +122,9 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="<?= e($styleHref) ?>">
+    <?php if (recaptcha_is_enabled()): ?>
+        <script src="<?= e(recaptcha_script_url()) ?>" async defer></script>
+    <?php endif; ?>
 </head>
 <body>
 <header>
@@ -120,19 +144,19 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
                 <span class="nav-demonlist-title"><?= e($appName) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
             </a>
             <ul class="nav-hover-dropdown white nav-demonlist-dropdown">
-                <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(base_url('guidelines.php')) ?>">Guidelines</a></li>
-                <li><a class="white hover <?= $activeNav === 'roulette' ? 'active' : '' ?>" href="<?= e(base_url('roulette.php')) ?>">Roulette</a></li>
-                <li><a class="white hover <?= $timeMachineActive ? 'active' : '' ?>" href="<?= e(base_url('time-machine.php')) ?>">Time Machine</a></li>
+                <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(base_url('guidelines.php')) ?>"><?= e(t('nav.guidelines')) ?></a></li>
+                <li><a class="white hover <?= $activeNav === 'roulette' ? 'active' : '' ?>" href="<?= e(base_url('roulette.php')) ?>"><?= e(t('nav.roulette')) ?></a></li>
+                <li><a class="white hover <?= $timeMachineActive ? 'active' : '' ?>" href="<?= e(base_url('time-machine.php')) ?>"><?= e(t('nav.time_machine')) ?></a></li>
             </ul>
         </div>
 
         <div class="nav-group">
-            <a class="nav-item hover white <?= $statsViewerActive ? 'active' : '' ?>" href="<?= e(base_url('players.php')) ?>">Stats Viewer</a>
+            <a class="nav-item hover white <?= $statsViewerActive ? 'active' : '' ?>" href="<?= e(base_url('players.php')) ?>"><?= e(t('nav.stats')) ?></a>
         </div>
 
         <?php if ($showAdminLink): ?>
             <div class="nav-group">
-                <a class="nav-item hover white <?= $activeNav === 'admin' ? 'active' : '' ?>" href="<?= e(base_url('admin.php')) ?>">Admin</a>
+                <a class="nav-item hover white <?= $activeNav === 'admin' ? 'active' : '' ?>" href="<?= e(base_url('admin.php')) ?>"><?= e(t('nav.admin')) ?></a>
             </div>
         <?php endif; ?>
 
@@ -140,17 +164,18 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
             <div class="nav-group nav-group-right nav-auth-status">
                 <div class="nav-item hover white <?= $profileActive ? 'active' : '' ?>"><?= e(user_display_name_from_row($user)) ?></div>
                 <div class="nav-hover-dropdown white nav-profile-dropdown">
-                    <a href="<?= e(base_url('account.php')) ?>">View Profile</a>
-                    <a href="<?= e(base_url('submit.php')) ?>">Record Submitter</a>
+                    <a href="<?= e(base_url('account.php')) ?>"><?= e(t('nav.profile')) ?></a>
+                    <a href="<?= e(base_url('submit.php')) ?>"><?= e(t('nav.submit')) ?></a>
+                    <?php render_language_menu_form(); ?>
                     <form method="post" action="<?= e(base_url('logout.php')) ?>" class="nav-profile-logout">
                         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-                        <button type="submit">Logout</button>
+                        <button type="submit"><?= e(t('nav.logout')) ?></button>
                     </form>
                 </div>
             </div>
         <?php else: ?>
             <div class="nav-group nav-group-right nav-auth-status">
-                <a class="nav-item hover white <?= $activeNav === 'login' ? 'active' : '' ?>" href="<?= e($loginUrl) ?>">Login</a>
+                <a class="nav-item nav-login-link hover white <?= in_array($activeNav, ['login', 'register'], true) ? 'active' : '' ?>" href="<?= e($loginUrl) ?>"><?= e(t('nav.login')) ?></a>
             </div>
         <?php endif; ?>
 
@@ -162,26 +187,27 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
                 <span></span>
             </div>
         </div>
-
         <div class="nav-drop-down" id="mobile-nav-dropdown">
-            <a class="nav-item hover white" href="<?= e(base_url('index.php')) ?>">Main List</a>
-            <a class="nav-item hover white" href="<?= e(base_url('guidelines.php')) ?>">Guidelines</a>
-            <a class="nav-item hover white" href="<?= e(base_url('submit.php')) ?>">Record Submitter</a>
-            <a class="nav-item hover white" href="<?= e(base_url('roulette.php')) ?>">Roulette</a>
-            <a class="nav-item hover white" href="<?= e(base_url('time-machine.php')) ?>">Time Machine</a>
+            <a class="nav-item hover white" href="<?= e(base_url('index.php')) ?>"><?= e(t('nav.main_list')) ?></a>
+            <a class="nav-item hover white" href="<?= e(base_url('guidelines.php')) ?>"><?= e(t('nav.guidelines')) ?></a>
+            <a class="nav-item hover white" href="<?= e(base_url('submit.php')) ?>"><?= e(t('nav.submit')) ?></a>
+            <a class="nav-item hover white" href="<?= e(base_url('roulette.php')) ?>"><?= e(t('nav.roulette')) ?></a>
+            <a class="nav-item hover white" href="<?= e(base_url('time-machine.php')) ?>"><?= e(t('nav.time_machine')) ?></a>
             <div class="nav-mobile-divider" aria-hidden="true"></div>
-            <a class="nav-item hover white" href="<?= e(base_url('players.php')) ?>">Stats Viewer</a>
+            <a class="nav-item hover white" href="<?= e(base_url('players.php')) ?>"><?= e(t('nav.stats')) ?></a>
             <?php if ($showAdminLink): ?>
-                <a class="nav-item hover white" href="<?= e(base_url('admin.php')) ?>">Admin</a>
+                <a class="nav-item hover white" href="<?= e(base_url('admin.php')) ?>"><?= e(t('nav.admin')) ?></a>
             <?php endif; ?>
             <?php if ($user !== null): ?>
-                <a class="nav-item hover white" href="<?= e(base_url('account.php')) ?>">View Profile</a>
+                <a class="nav-item hover white" href="<?= e(base_url('account.php')) ?>"><?= e(t('nav.profile')) ?></a>
+                <?php render_language_menu_form('nav-mobile-language-form'); ?>
                 <form method="post" action="<?= e(base_url('logout.php')) ?>" class="nav-mobile-form">
                     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
-                    <button type="submit" class="nav-item hover white">Logout</button>
+                    <button type="submit" class="nav-item hover white"><?= e(t('nav.logout')) ?></button>
                 </form>
             <?php else: ?>
-                <a class="nav-item hover white" href="<?= e($loginUrl) ?>">Login</a>
+                <a class="nav-item hover white" href="<?= e($loginUrl) ?>"><?= e(t('nav.login')) ?></a>
+                <?php render_language_menu_form('nav-mobile-language-form'); ?>
             <?php endif; ?>
         </div>
     </nav>
@@ -218,6 +244,28 @@ function render_footer(): void
     $scriptFilePath = dirname(__DIR__) . '/assets/js/app.js';
     $scriptVersion = is_file($scriptFilePath) ? (string) filemtime($scriptFilePath) : '1';
     $scriptSrc = base_url('assets/js/app.js?v=' . rawurlencode($scriptVersion));
+    $jsTranslations = t_js([
+        'roulette.open',
+        'roulette.level_id',
+        'roulette.at_least',
+        'roulette.progress_for',
+        'roulette.done',
+        'roulette.give_up',
+        'roulette.copy_id',
+        'roulette.copied',
+        'roulette.restart',
+        'roulette.start',
+        'roulette.alert_select_list',
+        'roulette.alert_no_demons',
+        'roulette.error_at_least',
+        'roulette.confirm_give_up',
+        'roulette.saved_filename',
+        'roulette.error_invalid_save',
+        'roulette.error_empty_save',
+        'roulette.confirm_reset',
+        'roulette.loaded',
+        'roulette.load_failed',
+    ]);
     ?>
     </main>
 </div>
@@ -225,28 +273,29 @@ function render_footer(): void
 <footer class="center">
     <span class="overlined pad">
         <?= e($appName) ?> &copy; <?= e($year) ?>.
-        All rights reserved <?= e($appName) ?> and the <?= e($appName) ?> are in no way affiliated with RobTopGamesAB &reg;
+        <?= e(t('footer.rights', ['app' => $appName])) ?>
     </span>
     <div class="flex no-stretch">
         <nav>
-            <h2>Navigation</h2>
-            <a class="link" href="<?= e(base_url('index.php')) ?>">Main List</a><br>
-            <a class="link" href="<?= e(base_url('players.php')) ?>">Stats Viewer</a><br>
-            <a class="link" href="<?= e(base_url('roulette.php')) ?>">Roulette</a><br>
-            <a class="link" href="<?= e(base_url('time-machine.php')) ?>">Time Machine</a><br>
-            <a class="link" href="<?= e(base_url('guidelines.php')) ?>">Guidelines</a><br>
-            <a class="link" href="<?= e(base_url('submit.php')) ?>">Submit Record</a>
+            <h2><?= e(t('footer.navigation')) ?></h2>
+            <a class="link" href="<?= e(base_url('index.php')) ?>"><?= e(t('nav.main_list')) ?></a><br>
+            <a class="link" href="<?= e(base_url('players.php')) ?>"><?= e(t('nav.stats')) ?></a><br>
+            <a class="link" href="<?= e(base_url('roulette.php')) ?>"><?= e(t('nav.roulette')) ?></a><br>
+            <a class="link" href="<?= e(base_url('time-machine.php')) ?>"><?= e(t('nav.time_machine')) ?></a><br>
+            <a class="link" href="<?= e(base_url('guidelines.php')) ?>"><?= e(t('nav.guidelines')) ?></a><br>
+            <a class="link" href="<?= e(base_url('submit.php')) ?>"><?= e(t('footer.submit_record')) ?></a>
         </nav>
         <nav>
-            <h2>Account</h2>
-            <a class="link" href="<?= e($footerRegisterUrl) ?>">Register</a><br>
-            <a class="link" href="<?= e($footerLoginUrl) ?>">Login</a><br>
-            <a class="link" href="<?= e(base_url('account.php')) ?>">My Account</a>
+            <h2><?= e(t('footer.account')) ?></h2>
+            <a class="link" href="<?= e($footerRegisterUrl) ?>"><?= e(t('footer.register')) ?></a><br>
+            <a class="link" href="<?= e($footerLoginUrl) ?>"><?= e(t('nav.login')) ?></a><br>
+            <a class="link" href="<?= e(base_url('account.php')) ?>"><?= e(t('footer.my_account')) ?></a>
         </nav>
     </div>
     <span class="muted" style="margin-top: 8px;">Created by kacygd</span>
 </footer>
 
+<script>window.DEMONLIST_I18N = <?= json_encode($jsTranslations, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 <script src="<?= e($scriptSrc) ?>" defer></script>
 </body>
 </html>

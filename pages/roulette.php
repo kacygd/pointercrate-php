@@ -26,28 +26,28 @@ foreach ($legacy as $demon) {
     $rouletteItems[] = roulette_item_from_demon($demon, 'legacy', false);
 }
 
-render_header('Roulette', 'roulette', [
-    'title' => 'Roulette',
-    'description' => 'Play the Demon Roulette challenge with levels from the Demonlist.',
+render_header(t('roulette.title'), 'roulette', [
+    'title' => t('roulette.title'),
+    'description' => t('roulette.meta_description'),
     'url' => base_url('roulette.php'),
 ]);
 ?>
 
 <section class="panel fade m-center roulette-page-intro">
-    <h1>Extreme Demon Roulette</h1>
-    <p>The Extreme Demon Roulette is a challenge where you must go through as many demons as possible, with the challenge ending when you get 100% or give up.</p>
+    <h1><?= e(t('roulette.heading')) ?></h1>
+    <p><?= e(t('roulette.intro')) ?></p>
 </section>
 
 <section class="panel fade m-center roulette-panel" id="roulette-panel" data-roulette-storage-scope="<?= e($rouletteStorageScope) ?>">
     <div class="panel-head split roulette-panel-head">
         <div>
-            <h2>Roulette</h2>
-            <p>Play the Demon Roulette challenge against the current list.</p>
+            <h2><?= e(t('roulette.title')) ?></h2>
+            <p><?= e(t('roulette.panel_intro')) ?></p>
         </div>
         <div class="homepage-tool-actions roulette-save-actions">
-            <button class="button white hover" type="button" data-roulette-save disabled>Save</button>
+            <button class="button white hover" type="button" data-roulette-save disabled><?= e(t('roulette.save')) ?></button>
             <label class="button white hover roulette-load-button">
-                Load
+                <?= e(t('roulette.load')) ?>
                 <input type="file" accept="application/json,.json" data-roulette-load hidden>
             </label>
         </div>
@@ -58,41 +58,41 @@ render_header('Roulette', 'roulette', [
             <label class="cb-container roulette-check">
                 <input type="checkbox" data-roulette-bucket="main" checked>
                 <span class="checkmark"></span>
-                Main List
+                <?= e(t('list.main')) ?>
             </label>
             <?php if ($showExtendedList): ?>
                 <label class="cb-container roulette-check">
                     <input type="checkbox" data-roulette-bucket="extended" checked>
                     <span class="checkmark"></span>
-                    Extended List
+                    <?= e(t('list.extended')) ?>
                 </label>
             <?php endif; ?>
             <?php if ($showLegacyList): ?>
                 <label class="cb-container roulette-check">
                     <input type="checkbox" data-roulette-bucket="legacy">
                     <span class="checkmark"></span>
-                    Legacy List
+                    <?= e(t('list.legacy')) ?>
                 </label>
             <?php endif; ?>
         </div>
 
         <div class="homepage-tool-actions roulette-start-actions">
-            <button class="button blue hover" type="button" data-roulette-start>Start</button>
-            <button class="button white hover" type="button" data-roulette-reset disabled>Reset</button>
+            <button class="button blue hover" type="button" data-roulette-start><?= e(t('roulette.start')) ?></button>
+            <button class="button white hover" type="button" data-roulette-reset disabled><?= e(t('roulette.reset')) ?></button>
         </div>
     </div>
 
     <div class="roulette-game-list" data-roulette-stack></div>
 
     <article class="roulette-results" data-roulette-results hidden>
-        <h3>Results</h3>
+        <h3><?= e(t('roulette.results')) ?></h3>
         <div class="homepage-tool-actions centered-actions">
-            <button class="button blue hover" type="button" data-roulette-show-remaining>Show remaining demons</button>
+            <button class="button blue hover" type="button" data-roulette-show-remaining><?= e(t('roulette.show_remaining')) ?></button>
         </div>
     </article>
 
     <section class="roulette-remaining" data-roulette-remaining hidden>
-        <h3>Remaining Demons</h3>
+        <h3><?= e(t('roulette.remaining')) ?></h3>
         <div class="roulette-game-list" data-roulette-remaining-list></div>
     </section>
 </section>

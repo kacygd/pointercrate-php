@@ -24,23 +24,27 @@ if (method_is_post()) {
     $passwordConfirm = (string) ($_POST['password_confirm'] ?? '');
 
     if (!validate_csrf($_POST['_token'] ?? null)) {
-        $errors[] = 'Invalid form token. Please refresh and try again.';
+        $errors[] = t('auth.login.error_token');
+    }
+
+    if (!recaptcha_verify_response($_POST['g-recaptcha-response'] ?? null, (string) ($_SERVER['REMOTE_ADDR'] ?? ''), 'register')) {
+        $errors[] = t('common.recaptcha_failed');
     }
 
     if (!validate_username($form['username'])) {
-        $errors[] = 'Username must be 3-24 characters using letters, numbers, or underscore.';
+        $errors[] = t('auth.register.error_username');
     }
 
     if (strlen($password) < 8) {
-        $errors[] = 'Password must be at least 8 characters.';
+        $errors[] = t('auth.register.error_password');
     }
 
     if ($password !== $passwordConfirm) {
-        $errors[] = 'Password confirmation does not match.';
+        $errors[] = t('auth.register.error_password_match');
     }
 
     if ($form['email'] !== '' && filter_var($form['email'], FILTER_VALIDATE_EMAIL) === false) {
-        $errors[] = 'Email format is invalid.';
+        $errors[] = t('auth.register.error_email');
     }
 
     if ($errors === []) {
@@ -73,28 +77,28 @@ if (method_is_post()) {
 
             if ($user !== false) {
                 login_user($user);
-                flash('success', 'Account created successfully. You can now submit records.');
+                flash('success', t('auth.register.created'));
                 redirect($nextPath);
             }
 
-            flash('success', 'Account created. Please login.');
+            flash('success', t('auth.register.created_login'));
             redirect($hasNext ? 'login.php?next=' . rawurlencode($nextPath) : 'login.php');
         } catch (PDOException $exception) {
             if ($exception->getCode() === '23000') {
-                $errors[] = 'Username or email already exists.';
+                $errors[] = t('auth.register.error_exists');
             } else {
-                $errors[] = 'Registration failed. Make sure you imported the latest db/schema.sql.';
+                $errors[] = t('auth.register.error_failed');
             }
         }
     }
 }
 
-render_header('Register', 'register');
+render_header(t('auth.register.title'), 'register');
 ?>
 <section class="panel panel-narrow fade">
     <div class="panel-head">
-        <h1>Player Registration</h1>
-        <p>Create an account to submit completion records.</p>
+        <h1><?= e(t('auth.register.heading')) ?></h1>
+        <p><?= e(t('auth.register.intro')) ?></p>
     </div>
 
     <?php if ($errors !== []): ?>
@@ -106,30 +110,32 @@ render_header('Register', 'register');
         <input type="hidden" name="next" value="<?= e($nextPath) ?>">
 
         <label class="field">
-            <span>Username</span>
+            <span><?= e(t('common.username')) ?></span>
             <input type="text" name="username" value="<?= e($form['username']) ?>" autocomplete="username" required>
         </label>
 
         <label class="field">
-            <span>Email (optional)</span>
+            <span><?= e(t('auth.register.email_optional')) ?></span>
             <input type="email" name="email" value="<?= e($form['email']) ?>" autocomplete="email">
         </label>
 
         <label class="field">
-            <span>Password</span>
+            <span><?= e(t('common.password')) ?></span>
             <input type="password" name="password" autocomplete="new-password" required>
         </label>
 
         <label class="field">
-            <span>Confirm Password</span>
+            <span><?= e(t('auth.register.confirm_password')) ?></span>
             <input type="password" name="password_confirm" autocomplete="new-password" required>
         </label>
 
-        <button class="button blue hover" type="submit">Create Account</button>
+        <?= recaptcha_widget_html('register') ?>
+
+        <button class="button blue hover" type="submit"><?= e(t('auth.register.button')) ?></button>
     </form>
 
     <p class="muted" style="margin-top: 12px;">
-        Already registered? <a class="link" href="<?= e($hasNext ? base_url('login.php?next=' . rawurlencode($nextPath)) : base_url('login.php')) ?>">Login now</a>
+        <?= e(t('auth.register.already')) ?> <a class="link" href="<?= e($hasNext ? base_url('login.php?next=' . rawurlencode($nextPath)) : base_url('login.php')) ?>"><?= e(t('auth.register.login_now')) ?></a>
     </p>
 </section>
 <?php render_footer(); ?>

@@ -39,8 +39,8 @@ foreach ($allDemons as $demon) {
 $showExtendedList = demonlist_show_extended_list();
 $showLegacyList = demonlist_show_legacy_list();
 $submitHint = (!$showExtendedList && !$showLegacyList)
-    ? 'All ranked demons are available. Type any part of the name to get suggestions.'
-    : 'Current ranked demons only. Type any part of the name to get suggestions.';
+    ? t('submit.hint_all')
+    : t('submit.hint_current');
 
 function resolve_demon_input(array $demons, string $rawInput): array
 {
@@ -79,49 +79,53 @@ if (method_is_post()) {
     $form['agree'] = isset($_POST['agree']) ? '1' : '0';
 
     if (!validate_csrf($_POST['_token'] ?? null)) {
-        $errors[] = 'Invalid form token. Reload page and try again.';
+        $errors[] = t('submit.error_token');
+    }
+
+    if (!recaptcha_verify_response($_POST['g-recaptcha-response'] ?? null, (string) ($_SERVER['REMOTE_ADDR'] ?? ''), 'submit')) {
+        $errors[] = t('common.recaptcha_failed');
     }
 
     if ($form['agree'] !== '1') {
-        $errors[] = 'You must confirm that you read the guidelines.';
+        $errors[] = t('submit.error_agree');
     }
 
     $resolution = resolve_demon_input($demons, $form['demon_name']);
     $demon = $resolution['demon'];
     if ($demon === null) {
         $errors[] = $resolution['ambiguous']
-            ? 'Your search matches multiple demons. Please type the full level name.'
-            : 'Please type a valid demon name from the current ranked list.';
+            ? t('submit.error_ambiguous')
+            : t('submit.error_demon');
     }
 
     if ($form['video_url'] === '' || filter_var($form['video_url'], FILTER_VALIDATE_URL) === false) {
-        $errors[] = 'A valid video proof URL is required.';
+        $errors[] = t('submit.error_video');
     }
 
     if ($form['raw_footage_url'] !== '' && filter_var($form['raw_footage_url'], FILTER_VALIDATE_URL) === false) {
-        $errors[] = 'Raw footage URL must be a valid URL if provided.';
+        $errors[] = t('submit.error_raw');
     }
 
     $progress = (int) $form['progress'];
     if ($progress < 1 || $progress > 100) {
-        $errors[] = 'Progress must be between 1 and 100.';
+        $errors[] = t('submit.error_progress');
     }
 
     if ($demon !== null) {
         $req = (int) $demon['requirement'];
         if ($progress < $req) {
-            $errors[] = 'Progress is below this demon requirement (' . $req . '%).';
+            $errors[] = t('submit.error_requirement', ['requirement' => $req]);
         }
     }
 
     $platforms = ['PC', 'Mobile', 'Tablet', 'Other'];
     if (!in_array($form['platform'], $platforms, true)) {
-        $errors[] = 'Invalid platform value.';
+        $errors[] = t('submit.error_platform');
     }
 
     $refreshRate = (int) $form['refresh_rate'];
     if ($refreshRate < 30 || $refreshRate > 1000) {
-        $errors[] = 'Refresh rate must be between 30 and 1000.';
+        $errors[] = t('submit.error_refresh');
     }
 
     if ($errors === [] && $demon !== null) {
@@ -145,28 +149,28 @@ if (method_is_post()) {
 
         $submissionId = (int) $pdo->lastInsertId();
         send_discord_webhook('', [[
-            'title' => 'New submission #' . $submissionId,
+            'title' => t('submit.discord_new', ['id' => $submissionId]),
             'color' => 3447003,
             'fields' => [
-                ['name' => 'Player', 'value' => (string) $user['username'], 'inline' => true],
-                ['name' => 'Demon', 'value' => '#' . (int) $demon['position'] . ' - ' . (string) $demon['name'], 'inline' => true],
-                ['name' => 'Progress', 'value' => $progress . '%', 'inline' => true],
-                ['name' => 'Video', 'value' => (string) $form['video_url'], 'inline' => false],
+                ['name' => t('common.player'), 'value' => (string) $user['username'], 'inline' => true],
+                ['name' => t('common.demon'), 'value' => '#' . (int) $demon['position'] . ' - ' . (string) $demon['name'], 'inline' => true],
+                ['name' => t('common.progress'), 'value' => $progress . '%', 'inline' => true],
+                ['name' => t('demon.video_proof'), 'value' => (string) $form['video_url'], 'inline' => false],
             ],
             'timestamp' => gmdate('c'),
         ]]);
 
-        flash('success', 'Record submission queued for admin review.');
+        flash('success', t('submit.success'));
         redirect('account.php');
     }
 }
 
-render_header('Submit', 'submit');
+render_header(t('submit.title'), 'submit');
 ?>
 <section class="panel fade" id="submission-form">
     <div class="panel-head">
-        <h1>Submit a Record</h1>
-        <p>Submitting as <b><?= e((string) $user['username']) ?></b></p>
+        <h1><?= e(t('submit.heading')) ?></h1>
+        <p><?= e(t('submit.as_user')) ?> <b><?= e((string) $user['username']) ?></b></p>
     </div>
 
     <?php if ($errors !== []): ?>
@@ -177,34 +181,34 @@ render_header('Submit', 'submit');
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
 
         <label class="field">
-            <span>Level Name (type to search)</span>
-            <input type="text" name="demon_name" value="<?= e($form['demon_name']) ?>" data-suggest-list="submit-demon-list" placeholder="Type demon name..." autocomplete="off" required>
+            <span><?= e(t('submit.level_name')) ?></span>
+            <input type="text" name="demon_name" value="<?= e($form['demon_name']) ?>" data-suggest-list="submit-demon-list" placeholder="<?= e(t('submit.type_demon')) ?>" autocomplete="off" required>
             <small class="muted"><?= e($submitHint) ?></small>
             <datalist id="submit-demon-list">
                 <?php foreach ($demons as $demon): ?>
-                    <option value="<?= e((string) $demon['name']) ?>" label="#<?= (int) $demon['position'] ?> (Req <?= (int) $demon['requirement'] ?>%)"></option>
+                    <option value="<?= e((string) $demon['name']) ?>" label="#<?= (int) $demon['position'] ?> (<?= e(t('level_info.requirement')) ?> <?= (int) $demon['requirement'] ?>%)"></option>
                 <?php endforeach; ?>
             </datalist>
         </label>
 
         <label class="field">
-            <span>Progress (%)</span>
+            <span><?= e(t('submit.progress')) ?></span>
             <input type="number" min="1" max="100" name="progress" value="<?= e($form['progress']) ?>" required>
         </label>
 
         <label class="field">
-            <span>Video Proof URL</span>
+            <span><?= e(t('submit.video_url')) ?></span>
             <input type="url" name="video_url" value="<?= e($form['video_url']) ?>" placeholder="https://www.youtube.com/watch?v=..." required>
         </label>
 
         <label class="field">
-            <span>Raw Footage URL (optional)</span>
-            <input type="url" name="raw_footage_url" value="<?= e($form['raw_footage_url']) ?>" placeholder="Drive/YouTube unlisted link">
+            <span><?= e(t('submit.raw_url')) ?></span>
+            <input type="url" name="raw_footage_url" value="<?= e($form['raw_footage_url']) ?>" placeholder="<?= e(t('submit.raw_placeholder')) ?>">
         </label>
 
         <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
             <label class="field">
-                <span>Platform</span>
+                <span><?= e(t('common.platform')) ?></span>
                 <select name="platform">
                     <?php foreach (['PC', 'Mobile', 'Tablet', 'Other'] as $platform): ?>
                         <option value="<?= e($platform) ?>" <?= $form['platform'] === $platform ? 'selected' : '' ?>><?= e($platform) ?></option>
@@ -213,26 +217,28 @@ render_header('Submit', 'submit');
             </label>
 
             <label class="field">
-                <span>Refresh Rate (Hz)</span>
+                <span><?= e(t('submit.refresh_rate')) ?></span>
                 <input type="number" min="30" max="1000" name="refresh_rate" value="<?= e($form['refresh_rate']) ?>">
             </label>
         </div>
 
         <label class="field">
-            <span>Moderator Notes (optional)</span>
-            <textarea name="notes" rows="5" placeholder="Attempts, run context, bugs, clicks, etc."><?= e($form['notes']) ?></textarea>
+            <span><?= e(t('submit.notes')) ?></span>
+            <textarea name="notes" rows="5" placeholder="<?= e(t('submit.notes_placeholder')) ?>"><?= e($form['notes']) ?></textarea>
         </label>
 
         <div class="submit-guidelines-agreement">
             <label class="cb-container">
                 <input type="checkbox" name="agree" value="1" <?= $form['agree'] === '1' ? 'checked' : '' ?>>
                 <span class="checkmark"></span>
-                <span>I have read and agree with the</span>
+                <span><?= e(t('submit.agree')) ?></span>
             </label>
-            <a class="link" href="<?= e(base_url('guidelines.php')) ?>">submission guidelines</a><span>.</span>
+            <a class="link" href="<?= e(base_url('guidelines.php')) ?>"><?= e(t('submit.guidelines_link')) ?></a><span>.</span>
         </div>
 
-        <button class="button blue hover" type="submit" style="margin-top: 10px;">Send Submission</button>
+        <?= recaptcha_widget_html('submit') ?>
+
+        <button class="button blue hover" type="submit" style="margin-top: 10px;"><?= e(t('submit.button')) ?></button>
     </form>
 </section>
 <?php render_footer(); ?>

@@ -2195,6 +2195,13 @@ body {
   gap: 10px;
 }
 
+.recaptcha-field {
+  display: flex;
+  justify-content: center;
+  margin: 4px 0;
+  min-height: 78px;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -2599,6 +2606,13 @@ main.left .demon-byline {
   flex-grow: 0;
 }
 
+.nav-login-link::after,
+.nav-login-link .fa-sort-down,
+.nav-login-link .fas.fa-sort-down {
+  content: none !important;
+  display: none !important;
+}
+
 .nav-profile-dropdown {
   right: 0;
   left: auto;
@@ -2638,6 +2652,30 @@ header nav .nav-profile-dropdown button {
 header nav .nav-profile-dropdown a:hover,
 header nav .nav-profile-dropdown button:hover {
   background: var(--color-unobstrusive-button-bg-hover);
+}
+
+.nav-profile-language-form,
+.nav-mobile-language-form {
+  padding: 10px 16px;
+}
+
+.nav-profile-language-form label,
+.nav-mobile-language-form label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  color: var(--color-text-accent);
+  font-size: 0.85em;
+  font-weight: 700;
+}
+
+.nav-profile-language-form select,
+.nav-mobile-language-form select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 0.95em;
 }
 
 /* Demon page improvements */

@@ -1,6 +1,17 @@
 (() => {
   console.info('list v2.0');
 
+  const i18n = window.DEMONLIST_I18N && typeof window.DEMONLIST_I18N === 'object'
+    ? window.DEMONLIST_I18N
+    : {};
+  const tr = (key, fallback, replace = {}) => {
+    let text = typeof i18n[key] === 'string' ? i18n[key] : fallback;
+    Object.entries(replace).forEach(([name, value]) => {
+      text = text.replaceAll(`{${name}}`, String(value));
+    });
+    return text;
+  };
+
   const closeAllDropdowns = () => {
     document.querySelectorAll('.dropdown').forEach((dropdown) => {
       dropdown.style.display = 'none';
@@ -770,7 +781,7 @@
         thumb.target = '_blank';
         thumb.rel = 'noreferrer';
       }
-      thumb.setAttribute('aria-label', `Open ${demon.name}`);
+      thumb.setAttribute('aria-label', tr('roulette.open', `Open ${demon.name}`, { name: demon.name }));
       setBackground(thumb, demon.thumb);
       article.appendChild(thumb);
 
@@ -788,7 +799,7 @@
       body.appendChild(createText('p', 'roulette-demon-creator', creator));
 
       if (demon.levelId !== '') {
-        body.appendChild(createText('p', 'roulette-demon-meta', `Level ID: ${demon.levelId}`));
+        body.appendChild(createText('p', 'roulette-demon-meta', tr('roulette.level_id', `Level ID: ${demon.levelId}`, { id: demon.levelId })));
       }
 
       article.appendChild(body);
@@ -802,9 +813,9 @@
         input.min = String(state.percent);
         input.max = '100';
         input.step = '1';
-        input.placeholder = `At least ${state.percent}%`;
+        input.placeholder = tr('roulette.at_least', `At least ${state.percent}%`, { percent: state.percent });
         input.inputMode = 'numeric';
-        input.setAttribute('aria-label', `Progress for ${demon.name}`);
+        input.setAttribute('aria-label', tr('roulette.progress_for', `Progress for ${demon.name}`, { name: demon.name }));
 
         const error = createText('p', 'error roulette-progress-error', '');
         const actions = document.createElement('div');
@@ -813,7 +824,7 @@
         const doneButton = document.createElement('button');
         doneButton.type = 'button';
         doneButton.className = 'button blue hover';
-        doneButton.textContent = 'Done';
+        doneButton.textContent = tr('roulette.done', 'Done');
         doneButton.addEventListener('click', () => {
           completeActiveDemon(input, error);
         });
@@ -821,7 +832,7 @@
         const giveUpButton = document.createElement('button');
         giveUpButton.type = 'button';
         giveUpButton.className = 'button red hover';
-        giveUpButton.textContent = 'Give up';
+        giveUpButton.textContent = tr('roulette.give_up', 'Give up');
         giveUpButton.addEventListener('click', giveUp);
 
         actions.appendChild(doneButton);
@@ -831,13 +842,13 @@
           const copyButton = document.createElement('button');
           copyButton.type = 'button';
           copyButton.className = 'button white hover';
-          copyButton.textContent = 'Copy ID';
+          copyButton.textContent = tr('roulette.copy_id', 'Copy ID');
           copyButton.addEventListener('click', () => {
             if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
               navigator.clipboard.writeText(demon.levelId).then(() => {
-                copyButton.textContent = 'Copied';
+                copyButton.textContent = tr('roulette.copied', 'Copied');
                 window.setTimeout(() => {
-                  copyButton.textContent = 'Copy ID';
+                  copyButton.textContent = tr('roulette.copy_id', 'Copy ID');
                 }, 900);
               });
             }
@@ -891,7 +902,7 @@
         input.checked = state.selectedBuckets.includes(String(input.getAttribute('data-roulette-bucket') || ''));
       });
 
-      startButton.textContent = state.playing ? 'Restart' : 'Start';
+      startButton.textContent = state.playing ? tr('roulette.restart', 'Restart') : tr('roulette.start', 'Start');
       resetButton.disabled = !hasRun;
       saveButton.disabled = !hasRun;
       resultsEl.hidden = state.playing || !hasRun;
@@ -927,13 +938,13 @@
     function start() {
       const buckets = selectedBuckets();
       if (buckets.length === 0) {
-        window.alert('Select at least one list.');
+        window.alert(tr('roulette.alert_select_list', 'Select at least one list.'));
         return;
       }
 
       const candidates = items.filter((item) => buckets.includes(item.bucket));
       if (candidates.length === 0) {
-        window.alert('No demons available in the selected lists.');
+        window.alert(tr('roulette.alert_no_demons', 'No demons available in the selected lists.'));
         return;
       }
 
@@ -953,7 +964,7 @@
     function completeActiveDemon(input, error) {
       const value = Number.parseInt(input.value, 10);
       if (!Number.isFinite(value) || value < state.percent) {
-        error.textContent = `Enter at least ${state.percent}%.`;
+        error.textContent = tr('roulette.error_at_least', `Enter at least ${state.percent}%.`, { percent: state.percent });
         return;
       }
 
@@ -978,7 +989,7 @@
     }
 
     function giveUp() {
-      if (!window.confirm('Give up on this roulette run?')) {
+      if (!window.confirm(tr('roulette.confirm_give_up', 'Give up on this roulette run?'))) {
         return;
       }
 
@@ -1003,7 +1014,7 @@
       });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = 'roulette-save.json';
+      link.download = tr('roulette.saved_filename', 'roulette-save.json');
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -1014,14 +1025,14 @@
 
     function applyLoadedState(rawState) {
       if (!rawState || typeof rawState !== 'object') {
-        throw new Error('Invalid save file.');
+        throw new Error(tr('roulette.error_invalid_save', 'Invalid save file.'));
       }
 
       const demons = Array.isArray(rawState.demons)
         ? rawState.demons.map(normalizeItem).filter((item) => item !== null)
         : [];
       if (demons.length === 0) {
-        throw new Error('Save file has no demons.');
+        throw new Error(tr('roulette.error_empty_save', 'Save file has no demons.'));
       }
 
       const selected = Array.isArray(rawState.selectedBuckets)
@@ -1069,7 +1080,7 @@
     }
 
     function resetRoulette() {
-      if (state.demons.length > 0 && !window.confirm('Reset saved roulette progress?')) {
+      if (state.demons.length > 0 && !window.confirm(tr('roulette.confirm_reset', 'Reset saved roulette progress?'))) {
         return;
       }
 
@@ -1102,10 +1113,10 @@
           applyLoadedState(payload && payload.state ? payload.state : payload);
           persistState();
           render();
-          window.alert('Roulette save loaded.');
+          window.alert(tr('roulette.loaded', 'Roulette save loaded.'));
         })
         .catch(() => {
-          window.alert('Could not load that roulette save.');
+          window.alert(tr('roulette.load_failed', 'Could not load that roulette save.'));
         })
         .finally(() => {
           loadInput.value = '';

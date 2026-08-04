@@ -24,8 +24,16 @@ When updating, remember to change the value `'updated' => 0` to update the datab
 
 1. Upload the project to your hosting path, for example `public_html/demonlist`.
 2. Create a MySQL database and user in your hosting panel.
-3. Import schema.sql into that database
-4. Edit `config.php` with your values:
+3. Open `https://your-domain.com/demonlist/setup.php` and complete the form.
+4. The installer writes `config.php`, imports `db/schema.sql`, creates your Owner account, and redirects to the Main List.
+
+`config.php` is intentionally excluded from the project. Use `config.example.php` only as a reference when a manual configuration is needed.
+
+### Languages
+
+The default language is selected during setup. Translation files live in `lang/*.php`; copy `lang/en.php` to add a language, then translate its values. Visitors can switch language from the navigation bar.
+
+### Manual configuration
 
 - `name`: website name
 - `tagline`: short site description

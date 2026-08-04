@@ -16,24 +16,24 @@ if (method_is_post()) {
     $action = (string) ($_POST['action'] ?? '');
 
     if (!validate_csrf($_POST['_token'] ?? null)) {
-        flash('error', 'Invalid session token.');
+        flash('error', t('flash.invalid_token'));
         redirect('account.php');
     }
 
     if ($action === 'start_discord_link') {
         if (!users_has_discord_link_columns()) {
-            flash('error', 'Discord link columns are missing. Please run the database schema update.');
+            flash('error', t('account.error_discord_columns'));
             redirect('account.php');
         }
         if (discord_bot_token() === null) {
-            flash('error', 'Discord bot token is not configured.');
+            flash('error', t('account.error_discord_bot'));
             redirect('account.php');
         }
 
         $discordInput = trim((string) ($_POST['discord_user'] ?? ''));
         $discordUserId = normalize_discord_user_id($discordInput);
         if ($discordUserId === '') {
-            flash('error', 'Enter a valid Discord user ID or @mention. Username alone cannot be DM-ed reliably.');
+            flash('error', t('account.error_discord_user'));
             redirect('account.php');
         }
 
@@ -45,12 +45,12 @@ if (method_is_post()) {
                 ':id' => (int) $user['id'],
             ]);
             if ($linkedCheck->fetch() !== false) {
-                throw new RuntimeException('That Discord account is already linked to another list account.');
+                throw new RuntimeException(t('account.error_discord_taken'));
             }
 
             $currentDiscordId = trim((string) ($user['discord_user_id'] ?? ''));
             if ($currentDiscordId !== '') {
-                throw new RuntimeException('Unlink your current Discord account before linking a new one.');
+                throw new RuntimeException(t('account.error_discord_unlink_first'));
             }
 
             $code = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
@@ -82,10 +82,10 @@ if (method_is_post()) {
                                             discord_link_requested_at = NULL
                                         WHERE id = :id');
                 $clear->execute([':id' => (int) $user['id']]);
-                throw new RuntimeException('Could not DM that Discord account. Check the ID, DM privacy settings, and bot access.');
+                throw new RuntimeException(t('account.error_discord_dm'));
             }
 
-            flash('success', 'Discord DM code sent.');
+            flash('success', t('account.success_discord_dm'));
         } catch (Throwable $throwable) {
             flash('error', $throwable->getMessage());
         }
@@ -93,13 +93,13 @@ if (method_is_post()) {
         redirect('account.php');
     } elseif ($action === 'verify_discord_link') {
         if (!users_has_discord_link_columns()) {
-            flash('error', 'Discord link columns are missing. Please run the database schema update.');
+            flash('error', t('account.error_discord_columns'));
             redirect('account.php');
         }
 
         $code = preg_replace('/\D+/', '', (string) ($_POST['discord_code'] ?? ''));
         if (!is_string($code) || preg_match('/^[0-9]{4}$/', $code) !== 1) {
-            flash('error', 'Enter the 4-digit Discord verification code.');
+            flash('error', t('account.error_discord_code_format'));
             redirect('account.php');
         }
 
@@ -116,14 +116,14 @@ if (method_is_post()) {
             $stmt->execute([':id' => (int) $user['id']]);
             $target = $stmt->fetch();
             if ($target === false) {
-                throw new RuntimeException('Account not found.');
+                throw new RuntimeException(t('account.error_not_found'));
             }
 
             $pendingDiscordId = normalize_discord_user_id((string) ($target['discord_link_pending_user_id'] ?? ''));
             $codeHash = (string) ($target['discord_link_code_hash'] ?? '');
             $expiresAt = strtotime((string) ($target['discord_link_code_expires_at'] ?? '')) ?: 0;
             if ($pendingDiscordId === '' || $codeHash === '') {
-                throw new RuntimeException('No active Discord verification code. Send a new code first.');
+                throw new RuntimeException(t('account.error_no_discord_code'));
             }
             if ($expiresAt < time()) {
                 $clear = $pdo->prepare('UPDATE users
@@ -133,10 +133,10 @@ if (method_is_post()) {
                                             discord_link_requested_at = NULL
                                         WHERE id = :id');
                 $clear->execute([':id' => (int) $user['id']]);
-                throw new RuntimeException('Discord verification code expired. Send a new code.');
+                throw new RuntimeException(t('account.error_discord_code_expired'));
             }
             if (!password_verify($code, $codeHash)) {
-                throw new RuntimeException('Discord verification code is incorrect.');
+                throw new RuntimeException(t('account.error_discord_code_wrong'));
             }
 
             $linkedCheck = $pdo->prepare('SELECT id FROM users WHERE discord_user_id = :discord_user_id AND id != :id LIMIT 1');
@@ -145,7 +145,7 @@ if (method_is_post()) {
                 ':id' => (int) $user['id'],
             ]);
             if ($linkedCheck->fetch() !== false) {
-                throw new RuntimeException('That Discord account is already linked to another list account.');
+                throw new RuntimeException(t('account.error_discord_taken'));
             }
 
             $discordLabel = discord_user_label_from_api($pendingDiscordId);
@@ -165,7 +165,7 @@ if (method_is_post()) {
 
             $linkedDiscordId = $pendingDiscordId;
             $pdo->commit();
-            flash('success', 'Discord account linked successfully.');
+            flash('success', t('account.success_discord_linked'));
         } catch (Throwable $throwable) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
@@ -180,7 +180,7 @@ if (method_is_post()) {
         redirect('account.php');
     } elseif ($action === 'unlink_discord') {
         if (!users_has_discord_link_columns()) {
-            flash('error', 'Discord link columns are missing. Please run the database schema update.');
+            flash('error', t('account.error_discord_columns'));
             redirect('account.php');
         }
 
@@ -197,7 +197,7 @@ if (method_is_post()) {
         if ($oldDiscordId !== '') {
             send_discord_direct_message($oldDiscordId, app_name() . ': Discord unlinked.');
         }
-        flash('success', 'Discord account unlinked.');
+        flash('success', t('account.success_discord_unlinked'));
         redirect('account.php');
     } elseif ($action === 'update_profile') {
         $displayNameInput = normalize_display_name((string) ($_POST['display_name'] ?? ''));
@@ -205,11 +205,11 @@ if (method_is_post()) {
         $countryPicker = trim((string) ($_POST['country_picker'] ?? ''));
 
         if ($displayNameInput !== '' && !validate_display_name($displayNameInput)) {
-            flash('error', 'Display name must be between 1 and 40 characters.');
+            flash('error', t('account.error_display_name'));
             redirect('account.php');
         }
 
-        if (strcasecmp($countryPicker, 'Not set') === 0) {
+        if (strcasecmp($countryPicker, t('common.not_set')) === 0 || strcasecmp($countryPicker, 'Not set') === 0) {
             $countryPicker = '';
         }
 
@@ -220,7 +220,7 @@ if (method_is_post()) {
         $countryCode = normalize_country_code($countryInput === '' ? null : $countryInput);
 
         if (($countryInput !== '' || $countryPicker !== '') && $countryCode === null) {
-            flash('error', 'Invalid country selection.');
+            flash('error', t('account.error_country'));
             redirect('account.php');
         }
 
@@ -255,17 +255,17 @@ if (method_is_post()) {
             ]);
         }
 
-        flash('success', 'Profile updated.');
+        flash('success', t('account.success_profile'));
         redirect('account.php');
     } elseif ($action === 'update_email') {
         $newEmail = trim((string) ($_POST['email'] ?? ''));
 
         if ($newEmail === '') {
-            $errors[] = 'Email cannot be empty.';
+            $errors[] = t('account.error_email_empty');
         } elseif (filter_var($newEmail, FILTER_VALIDATE_EMAIL) === false) {
-            $errors[] = 'Email format is invalid.';
+            $errors[] = t('auth.register.error_email');
         } elseif ($newEmail === (string) ($user['email'] ?? '')) {
-            $errors[] = 'New email is the same as current email.';
+            $errors[] = t('account.error_email_same');
         }
 
         if ($errors === []) {
@@ -273,10 +273,10 @@ if (method_is_post()) {
                 $stmt = db()->prepare('SELECT id FROM users WHERE email = :email AND id != :id LIMIT 1');
                 $stmt->execute([':email' => $newEmail, ':id' => (int) $user['id']]);
                 if ($stmt->fetch() !== false) {
-                    $errors[] = 'This email is already in use.';
+                    $errors[] = t('account.error_email_taken');
                 }
             } catch (Throwable) {
-                $errors[] = 'Failed to update email.';
+                $errors[] = t('account.error_email_failed');
             }
         }
 
@@ -286,7 +286,7 @@ if (method_is_post()) {
                 ':email' => $newEmail,
                 ':id' => (int) $user['id'],
             ]);
-            flash('success', 'Email updated successfully.');
+            flash('success', t('account.success_email'));
             redirect('account.php');
         } else {
             flash('error', implode(' ', $errors));
@@ -296,9 +296,9 @@ if (method_is_post()) {
         $newUsername = normalize_username((string) ($_POST['username'] ?? ''));
 
         if (!validate_username($newUsername)) {
-            $errors[] = 'Username must be 3-24 characters using letters, numbers, or underscore.';
+            $errors[] = t('auth.register.error_username');
         } elseif ($newUsername === (string) $user['username']) {
-            $errors[] = 'New username is the same as current username.';
+            $errors[] = t('account.error_username_same');
         }
 
         if ($errors === []) {
@@ -306,10 +306,10 @@ if (method_is_post()) {
                 $stmt = db()->prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(:username) AND id != :id LIMIT 1');
                 $stmt->execute([':username' => $newUsername, ':id' => (int) $user['id']]);
                 if ($stmt->fetch() !== false) {
-                    $errors[] = 'This username is already in use.';
+                    $errors[] = t('account.error_username_taken');
                 }
             } catch (Throwable) {
-                $errors[] = 'Failed to update username.';
+                $errors[] = t('account.error_username_failed');
             }
         }
 
@@ -330,7 +330,7 @@ if (method_is_post()) {
                     ':id' => (int) $user['id'],
                 ]);
             }
-            flash('success', 'Username updated successfully.');
+            flash('success', t('account.success_username'));
             redirect('account.php');
         } else {
             flash('error', implode(' ', $errors));
@@ -342,19 +342,19 @@ if (method_is_post()) {
         $newPasswordConfirm = (string) ($_POST['new_password_confirm'] ?? '');
 
         if ($currentPassword === '') {
-            $errors[] = 'Current password is required.';
+            $errors[] = t('account.error_current_password_required');
         } elseif (!password_verify($currentPassword, (string) $user['password_hash'])) {
-            $errors[] = 'Current password is incorrect.';
+            $errors[] = t('account.error_current_password_wrong');
         }
 
         if ($newPassword === '') {
-            $errors[] = 'New password is required.';
+            $errors[] = t('account.error_new_password_required');
         } elseif (strlen($newPassword) < 8) {
-            $errors[] = 'New password must be at least 8 characters.';
+            $errors[] = t('account.error_new_password_short');
         } elseif ($newPassword !== $newPasswordConfirm) {
-            $errors[] = 'New password confirmation does not match.';
+            $errors[] = t('account.error_new_password_match');
         } elseif (password_verify($newPassword, (string) $user['password_hash'])) {
-            $errors[] = 'New password must be different from current password.';
+            $errors[] = t('account.error_new_password_same');
         }
 
         if ($errors === []) {
@@ -363,7 +363,7 @@ if (method_is_post()) {
                 ':password_hash' => password_hash($newPassword, PASSWORD_DEFAULT),
                 ':id' => (int) $user['id'],
             ]);
-            flash('success', 'Password updated successfully.');
+            flash('success', t('account.success_password'));
             redirect('account.php');
         } else {
             flash('error', implode(' ', $errors));
@@ -399,35 +399,35 @@ $discordPendingExpiresAt = $discordColumnsReady ? (strtotime((string) ($user['di
 $discordPendingActive = $discordPendingId !== '' && $discordPendingExpiresAt >= time();
 $discordPendingExpiresText = $discordPendingActive ? date('H:i:s', $discordPendingExpiresAt) : '';
 
-render_header('Account', 'account');
+render_header(t('account.title'), 'account');
 ?>
 <section class="panel fade">
     <div class="panel-head">
-        <h1>My Account</h1>
-        <p>Signed in as <b><?= e($userDisplayName) ?></b><?php if ($hasCustomDisplayName): ?> <span class="muted">(@<?= e((string) $user['username']) ?>)</span><?php endif; ?></p>
+        <h1><?= e(t('account.heading')) ?></h1>
+        <p><?= e(t('account.signed_in_as')) ?> <b><?= e($userDisplayName) ?></b><?php if ($hasCustomDisplayName): ?> <span class="muted">(@<?= e((string) $user['username']) ?>)</span><?php endif; ?></p>
     </div>
 
     <dl class="key-value" style="max-width: 640px; margin: 0 auto;">
-        <div><dt>Username</dt><dd><?= e((string) $user['username']) ?></dd></div>
-        <div><dt>Display Name</dt><dd><?= e($userDisplayName) ?></dd></div>
-        <div><dt>Email</dt><dd><?= e((string) ($user['email'] ?? '-')) ?></dd></div>
+        <div><dt><?= e(t('common.username')) ?></dt><dd><?= e((string) $user['username']) ?></dd></div>
+        <div><dt><?= e(t('account.display_name')) ?></dt><dd><?= e($userDisplayName) ?></dd></div>
+        <div><dt><?= e(t('common.email')) ?></dt><dd><?= e((string) ($user['email'] ?? '-')) ?></dd></div>
         <?php if ($isStaff): ?>
-            <div><dt>YouTube Channel</dt><dd><?= e((string) ($user['youtube_channel'] ?? '-')) ?></dd></div>
+            <div><dt><?= e(t('account.youtube_channel')) ?></dt><dd><?= e((string) ($user['youtube_channel'] ?? '-')) ?></dd></div>
         <?php endif; ?>
-        <div><dt>Country</dt><dd><?= $countryFlag !== '' ? $countryFlag : '-' ?></dd></div>
+        <div><dt><?= e(t('account.country')) ?></dt><dd><?= $countryFlag !== '' ? $countryFlag : '-' ?></dd></div>
         <?php if ($discordColumnsReady): ?>
-            <div><dt>Discord</dt><dd><?= $discordLinkedId !== '' ? e($discordLinkedLabel !== '' ? $discordLinkedLabel : $discordLinkedId) : '-' ?></dd></div>
+            <div><dt><?= e(t('account.discord')) ?></dt><dd><?= $discordLinkedId !== '' ? e($discordLinkedLabel !== '' ? $discordLinkedLabel : $discordLinkedId) : '-' ?></dd></div>
         <?php endif; ?>
-        <div><dt>Role</dt><dd><?= e(role_label((string) ($user['role'] ?? 'player'))) ?></dd></div>
-        <div><dt>Points</dt><dd><?= e(number_format((float) ($user['points'] ?? 0.0), 2)) ?></dd></div>
-        <div><dt>Joined</dt><dd><?= e(date('Y-m-d', strtotime((string) $user['created_at']))) ?></dd></div>
+        <div><dt><?= e(t('common.role')) ?></dt><dd><?= e(role_label((string) ($user['role'] ?? 'player'))) ?></dd></div>
+        <div><dt><?= e(t('common.points')) ?></dt><dd><?= e(number_format((float) ($user['points'] ?? 0.0), 2)) ?></dd></div>
+        <div><dt><?= e(t('common.joined')) ?></dt><dd><?= e(date('Y-m-d', strtotime((string) $user['created_at']))) ?></dd></div>
     </dl>
 </section>
 
 <section class="panel fade panel-narrow">
     <div class="panel-head">
-        <h2>Profile Settings</h2>
-        <p><?php if ($isStaff): ?>Set your display name, country, and YouTube channel for public pages.<?php else: ?>Set your display name and country for public player pages.<?php endif; ?></p>
+        <h2><?= e(t('account.profile_settings')) ?></h2>
+        <p><?= e($isStaff ? t('account.profile_staff_intro') : t('account.profile_player_intro')) ?></p>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(base_url('account.php')) ?>">
@@ -435,7 +435,7 @@ render_header('Account', 'account');
         <input type="hidden" name="action" value="update_profile">
 
         <label class="field">
-            <span>Display Name</span>
+            <span><?= e(t('account.display_name')) ?></span>
             <input
                 type="text"
                 name="display_name"
@@ -444,11 +444,11 @@ render_header('Account', 'account');
                 placeholder="<?= e((string) $user['username']) ?>"
                 autocomplete="nickname"
             >
-            <small class="muted">Shown publicly across the site. Leave blank to use your username.</small>
+            <small class="muted"><?= e(t('account.display_name_help')) ?></small>
         </label>
 
         <label class="field">
-            <span>Country</span>
+            <span><?= e(t('account.country')) ?></span>
             <input type="hidden" name="country_code" id="country-code-input" value="<?= e((string) ($countryCode ?? '')) ?>">
             <input
                 type="text"
@@ -457,12 +457,12 @@ render_header('Account', 'account');
                 value="<?= e($countryPickerText) ?>"
                 data-suggest-list="country-list"
                 data-suggest-hidden="country-code-input"
-                placeholder="Type country code or country name..."
+                placeholder="<?= e(t('account.country_placeholder')) ?>"
                 autocomplete="off"
             >
-            <small class="muted">Type to search. Select an item to use its flag. Clear this field to unset country.</small>
+            <small class="muted"><?= e(t('account.country_help')) ?></small>
             <datalist id="country-list">
-                <option value="Not set" label="No country" data-code=""></option>
+                <option value="<?= e(t('common.not_set')) ?>" label="<?= e(t('common.no_country')) ?>" data-code=""></option>
                 <?php foreach ($countryOptions as $code => $name): ?>
                     <?php $flagUrl = country_flag_asset_url($code); ?>
                     <option
@@ -477,56 +477,56 @@ render_header('Account', 'account');
 
         <?php if ($isStaff): ?>
             <label class="field">
-                <span>YouTube Channel</span>
+                <span><?= e(t('account.youtube_channel')) ?></span>
                 <input
                     type="text"
                     name="youtube_channel"
                     value="<?= e((string) ($user['youtube_channel'] ?? '')) ?>"
-                    placeholder="e.g., https://www.youtube.com/@YourChannel"
+                    placeholder="<?= e(t('account.youtube_placeholder')) ?>"
                     autocomplete="off"
                 >
-                <small class="muted">Enter your YouTube channel URL (optional). Only YouTube channels are supported.</small>
+                <small class="muted"><?= e(t('account.youtube_help')) ?></small>
             </label>
         <?php endif; ?>
 
-        <button class="button blue hover" type="submit">Save Profile</button>
+        <button class="button blue hover" type="submit"><?= e(t('account.save_profile')) ?></button>
     </form>
 </section>
 
 <section class="panel fade panel-narrow">
     <div class="panel-head">
-        <h2>Discord Link</h2>
-        <p>Link your Discord account to receive private bot notifications about your records and levels.</p>
+        <h2><?= e(t('account.discord_link')) ?></h2>
+        <p><?= e(t('account.discord_intro')) ?></p>
     </div>
 
     <?php if (!$discordColumnsReady): ?>
-        <div class="info-red">Discord linking needs a database update. Run <code>update_db_schema.php</code>, then reload this page.</div>
+        <div class="info-red"><?= e(t('account.discord_db_missing')) ?></div>
     <?php elseif (!$discordBotReady): ?>
-        <div class="info-red">Discord bot token is not configured yet.</div>
+        <div class="info-red"><?= e(t('account.discord_bot_missing')) ?></div>
     <?php elseif ($discordLinkedId !== ''): ?>
         <dl class="key-value compact" style="margin-bottom: 12px;">
-            <div><dt>Status</dt><dd>Linked</dd></div>
-            <div><dt>Discord</dt><dd><?= e($discordLinkedLabel !== '' ? $discordLinkedLabel : $discordLinkedId) ?></dd></div>
-            <div><dt>User ID</dt><dd><?= e($discordLinkedId) ?></dd></div>
+            <div><dt><?= e(t('common.status')) ?></dt><dd><?= e(t('account.linked')) ?></dd></div>
+            <div><dt><?= e(t('account.discord')) ?></dt><dd><?= e($discordLinkedLabel !== '' ? $discordLinkedLabel : $discordLinkedId) ?></dd></div>
+            <div><dt><?= e(t('account.user_id')) ?></dt><dd><?= e($discordLinkedId) ?></dd></div>
         </dl>
         <form class="stack-form" method="post" action="<?= e(base_url('account.php')) ?>">
             <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
             <input type="hidden" name="action" value="unlink_discord">
-            <button class="button red hover" type="submit" data-confirm="Unlink your Discord account?">Unlink Discord</button>
+            <button class="button red hover" type="submit" data-confirm="<?= e(t('account.unlink_confirm')) ?>"><?= e(t('account.unlink_discord')) ?></button>
         </form>
     <?php else: ?>
         <?php if ($discordPendingActive): ?>
             <div class="info-green">
-                Code sent to Discord user ID <?= e($discordPendingId) ?>. Expires at <?= e($discordPendingExpiresText) ?>.
+                <?= e(t('account.code_sent', ['id' => $discordPendingId, 'time' => $discordPendingExpiresText])) ?>
             </div>
             <form class="stack-form" method="post" action="<?= e(base_url('account.php')) ?>">
                 <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="action" value="verify_discord_link">
                 <label class="field">
-                    <span>Verification Code</span>
+                    <span><?= e(t('account.verification_code')) ?></span>
                     <input type="text" name="discord_code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="1234" required>
                 </label>
-                <button class="button blue hover" type="submit">Verify Discord</button>
+                <button class="button blue hover" type="submit"><?= e(t('account.verify_discord')) ?></button>
             </form>
         <?php endif; ?>
 
@@ -534,18 +534,18 @@ render_header('Account', 'account');
             <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
             <input type="hidden" name="action" value="start_discord_link">
             <label class="field">
-                <span>Discord User ID or Mention</span>
-                <input type="text" name="discord_user" placeholder="123456789012345678 or @mention" autocomplete="off" required>
-                <small class="muted">Username alone is not reliable for bot DMs. Copy your Discord User ID, or paste an @mention.</small>
+                <span><?= e(t('account.discord_user')) ?></span>
+                <input type="text" name="discord_user" placeholder="<?= e(t('account.discord_user_placeholder')) ?>" autocomplete="off" required>
+                <small class="muted"><?= e(t('account.discord_user_help')) ?></small>
             </label>
-            <button class="button blue hover" type="submit"><?= $discordPendingActive ? 'Send New Code' : 'Send DM Code' ?></button>
+            <button class="button blue hover" type="submit"><?= e($discordPendingActive ? t('account.send_new_code') : t('account.send_dm_code')) ?></button>
         </form>
     <?php endif; ?>
 </section>
 
 <section class="panel fade panel-narrow">
     <div class="panel-head">
-        <h2>Change Username</h2>
+        <h2><?= e(t('account.change_username')) ?></h2>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(base_url('account.php')) ?>">
@@ -553,23 +553,23 @@ render_header('Account', 'account');
         <input type="hidden" name="action" value="update_username">
 
         <label class="field">
-            <span>New Username</span>
+            <span><?= e(t('account.new_username')) ?></span>
             <input
                 type="text"
                 name="username"
-                placeholder="Enter your new username"
+                placeholder="<?= e(t('account.new_username_placeholder')) ?>"
                 required
             >
-            <small class="muted">3-24 characters, letters, numbers, and underscore only.</small>
+            <small class="muted"><?= e(t('account.username_help')) ?></small>
         </label>
 
-        <button class="button blue hover" type="submit">Change Username</button>
+        <button class="button blue hover" type="submit"><?= e(t('account.change_username')) ?></button>
     </form>
 </section>
 
 <section class="panel fade panel-narrow">
     <div class="panel-head">
-        <h2>Change Email</h2>
+        <h2><?= e(t('account.change_email')) ?></h2>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(base_url('account.php')) ?>">
@@ -577,24 +577,24 @@ render_header('Account', 'account');
         <input type="hidden" name="action" value="update_email">
 
         <label class="field">
-            <span>New Email</span>
+            <span><?= e(t('account.new_email')) ?></span>
             <input
                 type="email"
                 name="email"
                 value="<?= e((string) ($user['email'] ?? '')) ?>"
-                placeholder="Enter your new email"
+                placeholder="<?= e(t('account.new_email_placeholder')) ?>"
                 required
             >
-            <small class="muted">You will receive a confirmation at your new email address.</small>
+            <small class="muted"><?= e(t('account.email_help')) ?></small>
         </label>
 
-        <button class="button blue hover" type="submit">Change Email</button>
+        <button class="button blue hover" type="submit"><?= e(t('account.change_email')) ?></button>
     </form>
 </section>
 
 <section class="panel fade panel-narrow">
     <div class="panel-head">
-        <h2>Change Password</h2>
+        <h2><?= e(t('account.change_password')) ?></h2>
     </div>
 
     <form class="stack-form" method="post" action="<?= e(base_url('account.php')) ?>">
@@ -602,46 +602,46 @@ render_header('Account', 'account');
         <input type="hidden" name="action" value="update_password">
 
         <label class="field">
-            <span>Current Password</span>
+            <span><?= e(t('account.current_password')) ?></span>
             <input
                 type="password"
                 name="current_password"
-                placeholder="Enter your current password"
+                placeholder="<?= e(t('account.current_password_placeholder')) ?>"
                 required
                 autocomplete="current-password"
             >
         </label>
 
         <label class="field">
-            <span>New Password</span>
+            <span><?= e(t('account.new_password')) ?></span>
             <input
                 type="password"
                 name="new_password"
-                placeholder="Enter your new password"
+                placeholder="<?= e(t('account.new_password_placeholder')) ?>"
                 required
                 autocomplete="new-password"
             >
-            <small class="muted">Must be at least 8 characters.</small>
+            <small class="muted"><?= e(t('account.password_help')) ?></small>
         </label>
 
         <label class="field">
-            <span>Confirm New Password</span>
+            <span><?= e(t('account.confirm_new_password')) ?></span>
             <input
                 type="password"
                 name="new_password_confirm"
-                placeholder="Confirm your new password"
+                placeholder="<?= e(t('account.confirm_password_placeholder')) ?>"
                 required
                 autocomplete="new-password"
             >
         </label>
 
-        <button class="button blue hover" type="submit">Change Password</button>
+        <button class="button blue hover" type="submit"><?= e(t('account.change_password')) ?></button>
     </form>
 </section>
 
 <section class="panel fade">
     <div class="panel-head">
-        <h2>My Submission History</h2>
+        <h2><?= e(t('account.submission_history')) ?></h2>
     </div>
 
     <div class="table-wrap">
@@ -649,16 +649,16 @@ render_header('Account', 'account');
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Type</th>
-                    <th>Demon</th>
-                    <th>Progress</th>
-                    <th>Status</th>
-                    <th>Created</th>
+                    <th><?= e(t('common.type')) ?></th>
+                    <th><?= e(t('common.demon')) ?></th>
+                    <th><?= e(t('common.progress')) ?></th>
+                    <th><?= e(t('common.status')) ?></th>
+                    <th><?= e(t('common.created')) ?></th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ($submissions === []): ?>
-                    <tr><td colspan="6" class="muted">No submissions yet.</td></tr>
+                    <tr><td colspan="6" class="muted"><?= e(t('account.no_submissions')) ?></td></tr>
                 <?php endif; ?>
                 <?php foreach ($submissions as $item): ?>
                     <tr>
@@ -668,7 +668,7 @@ render_header('Account', 'account');
                         <td><?= $item['progress'] !== null ? (int) $item['progress'] . '%' : '-' ?></td>
                         <td>
                             <span class="badge <?= $item['status'] === 'approved' ? 'success' : ($item['status'] === 'rejected' ? 'error' : '') ?>">
-                                <?= e((string) $item['status']) ?>
+                                <?= e(status_label((string) $item['status'])) ?>
                             </span>
                         </td>
                         <td><?= e(date('Y-m-d H:i', strtotime((string) $item['created_at']))) ?></td>

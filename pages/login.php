@@ -19,11 +19,15 @@ if (method_is_post()) {
     $password = (string) ($_POST['password'] ?? '');
 
     if (!validate_csrf($_POST['_token'] ?? null)) {
-        $errors[] = 'Invalid form token. Please refresh and try again.';
+        $errors[] = t('auth.login.error_token');
+    }
+
+    if (!recaptcha_verify_response($_POST['g-recaptcha-response'] ?? null, (string) ($_SERVER['REMOTE_ADDR'] ?? ''), 'login')) {
+        $errors[] = t('common.recaptcha_failed');
     }
 
     if ($username === '' || $password === '') {
-        $errors[] = 'Username and password are required.';
+        $errors[] = t('auth.login.error_required');
     }
 
     if ($errors === []) {
@@ -43,32 +47,32 @@ if (method_is_post()) {
                 : 0;
 
             if ($lockSecondsRemaining > 0) {
-                $errors[] = 'Too many failed attempts. Try again in ' . (int) ceil($lockSecondsRemaining / 60) . ' minute(s).';
+                $errors[] = t('auth.login.error_locked', ['minutes' => (int) ceil($lockSecondsRemaining / 60)]);
             } elseif ($user === false || !password_verify($password, (string) $user['password_hash'])) {
                 if ($user !== false && $lockoutReady) {
                     login_register_failed_attempt((int) $user['id'], (int) $user['failed_login_attempts']);
                 }
-                $errors[] = 'Invalid username or password.';
+                $errors[] = t('auth.login.error_invalid');
             } else {
                 if ($lockoutReady) {
                     login_clear_failed_attempts((int) $user['id']);
                 }
                 login_user($user);
-                flash('success', 'Welcome back, ' . user_display_name_from_row($user) . '.');
+                flash('success', t('auth.login.welcome', ['name' => user_display_name_from_row($user)]));
                 redirect($nextPath);
             }
         } catch (Throwable) {
-            $errors[] = 'Login failed. Make sure you imported the latest db/schema.sql.';
+            $errors[] = t('auth.login.error_failed');
         }
     }
 }
 
-render_header('Login', 'login');
+render_header(t('auth.login.title'), 'login');
 ?>
 <section class="panel panel-narrow fade">
     <div class="panel-head">
-        <h1>Player Login</h1>
-        <p>Login to submit completion records.</p>
+        <h1><?= e(t('auth.login.heading')) ?></h1>
+        <p><?= e(t('auth.login.intro')) ?></p>
     </div>
 
     <?php if ($errors !== []): ?>
@@ -80,20 +84,22 @@ render_header('Login', 'login');
         <input type="hidden" name="next" value="<?= e($nextPath) ?>">
 
         <label class="field">
-            <span>Username</span>
+            <span><?= e(t('common.username')) ?></span>
             <input type="text" name="username" value="<?= e($username) ?>" autocomplete="username" required>
         </label>
 
         <label class="field">
-            <span>Password</span>
+            <span><?= e(t('common.password')) ?></span>
             <input type="password" name="password" autocomplete="current-password" required>
         </label>
 
-        <button class="button blue hover" type="submit">Login</button>
+        <?= recaptcha_widget_html('login') ?>
+
+        <button class="button blue hover" type="submit"><?= e(t('auth.login.button')) ?></button>
     </form>
 
     <p class="muted" style="margin-top: 12px;">
-        New player? <a class="link" href="<?= e($hasNext ? base_url('register.php?next=' . rawurlencode($nextPath)) : base_url('register.php')) ?>">Create account</a>
+        <?= e(t('auth.login.new_player')) ?> <a class="link" href="<?= e($hasNext ? base_url('register.php?next=' . rawurlencode($nextPath)) : base_url('register.php')) ?>"><?= e(t('auth.login.create_account')) ?></a>
     </p>
 </section>
 <?php render_footer(); ?>
