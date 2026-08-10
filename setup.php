@@ -219,16 +219,24 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $confirm = (string) ($_POST['owner_password_confirm'] ?? '');
 
     try {
-        if (!setup_recaptcha_site_key_valid($values['recaptcha_site_key']) || $values['recaptcha_secret_key'] === '') {
-            throw new RuntimeException(setup_t($copy, 'setup.error.recaptcha_keys'));
-        }
-        if (!setup_recaptcha_verify(
-            $values['recaptcha_secret_key'],
-            (string) ($_POST['g-recaptcha-response'] ?? ''),
-            'https://www.google.com/recaptcha/api/siteverify',
-            (string) ($_SERVER['REMOTE_ADDR'] ?? '')
-        )) {
-            throw new RuntimeException(setup_t($copy, 'setup.error.recaptcha'));
+        $recaptchaSiteKey = trim($values['recaptcha_site_key']);
+        $recaptchaSecretKey = trim($values['recaptcha_secret_key']);
+        $recaptchaConfigured = $recaptchaSiteKey !== '' || $recaptchaSecretKey !== '';
+
+        // reCAPTCHA is optional, but if one key is supplied, both keys are required.
+        if ($recaptchaConfigured) {
+            if ($recaptchaSiteKey === '' || $recaptchaSecretKey === '' || !setup_recaptcha_site_key_valid($recaptchaSiteKey)) {
+                throw new RuntimeException(setup_t($copy, 'setup.error.recaptcha_keys'));
+            }
+
+            if (!setup_recaptcha_verify(
+                $recaptchaSecretKey,
+                (string) ($_POST['g-recaptcha-response'] ?? ''),
+                'https://www.google.com/recaptcha/api/siteverify',
+                (string) ($_SERVER['REMOTE_ADDR'] ?? '')
+            )) {
+                throw new RuntimeException(setup_t($copy, 'setup.error.recaptcha'));
+            }
         }
 
         if ($values['name'] === '' || $values['db_name'] === '' || $values['db_user'] === '' || $values['owner_name'] === '') {
@@ -317,14 +325,14 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'server_theme' => $values['discord_server_theme'],
             ],
             'security' => [
-                'captcha_enabled' => true,
-                'setup_captcha_enabled' => true,
-                'captcha_login_enabled' => true,
-                'captcha_register_enabled' => true,
-                'captcha_submit_enabled' => true,
+                'captcha_enabled' => $recaptchaConfigured,
+                'setup_captcha_enabled' => $recaptchaConfigured,
+                'captcha_login_enabled' => $recaptchaConfigured,
+                'captcha_register_enabled' => $recaptchaConfigured,
+                'captcha_submit_enabled' => $recaptchaConfigured,
                 'captcha_driver' => 'google_recaptcha_v2',
-                'recaptcha_site_key' => $values['recaptcha_site_key'],
-                'recaptcha_secret_key' => $values['recaptcha_secret_key'],
+                'recaptcha_site_key' => $recaptchaConfigured ? $recaptchaSiteKey : '',
+                'recaptcha_secret_key' => $recaptchaConfigured ? $recaptchaSecretKey : '',
                 'recaptcha_verify_url' => 'https://www.google.com/recaptcha/api/siteverify',
                 'csrf_enabled' => true,
                 'session_cookie_httponly' => true,
@@ -362,7 +370,7 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
         label{display:block;margin:10px 0 4px}input,select,button{box-sizing:border-box;width:100%;padding:10px;border-radius:6px;border:1px solid #607895;font:inherit}
         button{background:#3585d4;color:white;border:0;margin-top:20px;font-weight:700;cursor:pointer}
         a{color:#87c5ff}.error{background:#6c2630;padding:12px;border-radius:6px}.lang{float:right;width:auto}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-        .hint{color:#b8c8da;font-size:.9em;margin:.25rem 0 0}.recaptcha-box{margin-top:12px;min-height:78px}@media(max-width:720px){.grid{grid-template-columns:1fr}.box{margin:0;min-height:100vh;border-radius:0}}
+        .hint{color:#b8c8da;font-size:.9em;margin:.25rem 0 0}.optional-label{color:#b8c8da;font-size:.85em;font-weight:400}.recaptcha-box{margin-top:12px;min-height:78px}@media(max-width:720px){.grid{grid-template-columns:1fr}.box{margin:0;min-height:100vh;border-radius:0}}
     </style>
 </head>
 <body>
@@ -423,7 +431,7 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
             </fieldset>
 
             <fieldset>
-                <legend><?= setup_e(setup_t($copy, 'setup.section_discord')) ?></legend>
+                <legend><?= setup_e(setup_t($copy, 'setup.section_discord')) ?> <span class="optional-label">(Optional)</span></legend>
                 <p class="hint"><?= setup_e(setup_t($copy, 'setup.discord_hint')) ?></p>
                 <label><?= setup_e(setup_t($copy, 'setup.discord_webhook_url')) ?><input type="url" name="discord_webhook_url" value="<?= setup_e($values['discord_webhook_url']) ?>"></label>
                 <label><?= setup_e(setup_t($copy, 'setup.discord_bot_token')) ?><input type="password" name="discord_bot_token" value="<?= setup_e($values['discord_bot_token']) ?>"></label>
@@ -453,7 +461,7 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
             </fieldset>
 
             <fieldset>
-                <legend><?= setup_e(setup_t($copy, 'setup.section_security')) ?></legend>
+                <legend><?= setup_e(setup_t($copy, 'setup.section_security')) ?> <span class="optional-label">(Optional)</span></legend>
                 <p class="hint"><?= setup_e(setup_t($copy, 'setup.recaptcha_hint')) ?></p>
                 <div class="grid">
                     <label>
@@ -463,7 +471,6 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             name="recaptcha_site_key"
                             value="<?= setup_e($values['recaptcha_site_key']) ?>"
                             autocomplete="off"
-                            required
                         >
                     </label>
                     <label>
@@ -473,7 +480,6 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             name="recaptcha_secret_key"
                             value="<?= setup_e($values['recaptcha_secret_key']) ?>"
                             autocomplete="off"
-                            required
                         >
                     </label>
                 </div>
@@ -486,6 +492,46 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
             </fieldset>
 
             <script>
+                const setupRecaptchaForm = document.querySelector('form[method="post"]');
+                const setupRecaptchaSiteKeyInput = document.getElementById('recaptcha-site-key');
+                const setupRecaptchaSecretKeyInput = document.querySelector('input[name="recaptcha_secret_key"]');
+
+                function setupValidateRecaptchaPair() {
+                    if (!setupRecaptchaSiteKeyInput || !setupRecaptchaSecretKeyInput) {
+                        return true;
+                    }
+
+                    const siteKey = setupRecaptchaSiteKeyInput.value.trim();
+                    const secretKey = setupRecaptchaSecretKeyInput.value.trim();
+
+                    setupRecaptchaSiteKeyInput.setCustomValidity('');
+                    setupRecaptchaSecretKeyInput.setCustomValidity('');
+
+                    if (siteKey !== '' && secretKey === '') {
+                        setupRecaptchaSecretKeyInput.setCustomValidity('Please enter the reCAPTCHA secret key.');
+                        return false;
+                    }
+
+                    if (secretKey !== '' && siteKey === '') {
+                        setupRecaptchaSiteKeyInput.setCustomValidity('Please enter the reCAPTCHA site key.');
+                        return false;
+                    }
+
+                    return true;
+                }
+
+                if (setupRecaptchaForm) {
+                    setupRecaptchaForm.addEventListener('submit', setupValidateRecaptchaPair);
+                }
+
+                if (setupRecaptchaSiteKeyInput) {
+                    setupRecaptchaSiteKeyInput.addEventListener('input', setupValidateRecaptchaPair);
+                }
+
+                if (setupRecaptchaSecretKeyInput) {
+                    setupRecaptchaSecretKeyInput.addEventListener('input', setupValidateRecaptchaPair);
+                }
+
                 let setupRecaptchaWidgetId = null;
                 let setupRecaptchaRenderedKey = '';
                 let setupRecaptchaReady = false;
