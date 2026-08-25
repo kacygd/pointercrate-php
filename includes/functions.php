@@ -2725,7 +2725,7 @@ function supported_countries(): array
         $entries = scandir($flagsDir);
         if (is_array($entries)) {
             foreach ($entries as $entry) {
-                if (preg_match('/^([a-z]{2})\.svg$/i', $entry, $match) !== 1) {
+                if (preg_match('/^([a-z]{2}(?:-[a-z]{3})?)\.svg$/i', $entry, $match) !== 1) {
                     continue;
                 }
 
