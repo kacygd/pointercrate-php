@@ -2689,7 +2689,7 @@ function country_name_map(): array
             $map = [];
             foreach ($loaded as $code => $name) {
                 $normalizedCode = strtoupper(trim((string) $code));
-                if (preg_match('/^[A-Z]{2}$/', $normalizedCode) !== 1) {
++                if (preg_match('/^[A-Z]{2}(?:-[A-Z]{3})?$/', $normalizedCode) !== 1) {
                     continue;
                 }
 
