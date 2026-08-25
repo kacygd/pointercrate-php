@@ -175,7 +175,7 @@ return [
     'NL' => 'Netherlands',
     'NO' => 'Norway',
     'NP' => 'Nepal',
-    'NR' => 'Nauru',
+    'NR' => 'Naoero',
     'NU' => 'Niue',
     'NZ' => 'New Zealand',
     'OM' => 'Oman',
