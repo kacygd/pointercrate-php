@@ -2689,7 +2689,7 @@ function country_name_map(): array
             $map = [];
             foreach ($loaded as $code => $name) {
                 $normalizedCode = strtoupper(trim((string) $code));
-                if (preg_match('/^[A-Z]{2}$/', $normalizedCode) !== 1) {
++                if (preg_match('/^[A-Z]{2}(?:-[A-Z]{3})?$/', $normalizedCode) !== 1) {
                     continue;
                 }
 
@@ -2725,7 +2725,7 @@ function supported_countries(): array
         $entries = scandir($flagsDir);
         if (is_array($entries)) {
             foreach ($entries as $entry) {
-                if (preg_match('/^([a-z]{2})\.svg$/i', $entry, $match) !== 1) {
+                if (preg_match('/^([a-z]{2}(?:-[a-z]{3})?)\.svg$/i', $entry, $match) !== 1) {
                     continue;
                 }
 

@@ -1365,10 +1365,18 @@ if (method_is_post()) {
         }
 
         $pdo = db();
+        $transactionStarted = false;
 
         try {
+            // All DDL / schema ensures MUST run before beginTransaction().
+            // MySQL implicitly commits on DDL, which would otherwise leave
+            // the later commit() throwing "There is no active transaction".
             ensure_demon_claim_columns($pdo);
-            $pdo->beginTransaction();
+
+            if (!$pdo->inTransaction()) {
+                $pdo->beginTransaction();
+                $transactionStarted = true;
+            }
 
             $dupStmt = $pdo->prepare('SELECT id FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1');
             $dupStmt->execute([':name' => $name]);
@@ -1474,14 +1482,12 @@ if (method_is_post()) {
                 'comments_disabled' => $commentsDisabled,
             ];
 
-            $pdo->commit();
+            admin_safe_transaction_commit($pdo, $transactionStarted, true);
             admin_notify_level_added($createdLevelData);
 
             flash('success', 'Level added at position #' . $position . '.');
         } catch (Throwable $throwable) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
+            admin_safe_transaction_commit($pdo, $transactionStarted, false);
             flash('error', $throwable->getMessage());
         }
 
@@ -1863,9 +1869,13 @@ if (method_is_post()) {
         }
 
         $pdo = db();
+        $transactionStarted = false;
 
         try {
-            $pdo->beginTransaction();
+            if (!$pdo->inTransaction()) {
+                $pdo->beginTransaction();
+                $transactionStarted = true;
+            }
 
             $targetStmt = $pdo->prepare('SELECT * FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1 FOR UPDATE');
             $targetStmt->execute([':name' => $targetNameInput]);
@@ -1941,14 +1951,12 @@ if (method_is_post()) {
                 'records_removed' => $recordsRemoved,
             ];
 
-            $pdo->commit();
+            admin_safe_transaction_commit($pdo, $transactionStarted, true);
             admin_notify_level_deleted($deletedLevelData);
 
             flash('success', 'Deleted #' . $oldPosition . ' - ' . $demonName . ' and shifted later positions down.');
         } catch (Throwable $throwable) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
+            admin_safe_transaction_commit($pdo, $transactionStarted, false);
             flash('error', $throwable->getMessage());
         }
 
@@ -1972,9 +1980,13 @@ if (method_is_post()) {
         }
 
         $pdo = db();
+        $transactionStarted = false;
 
         try {
-            $pdo->beginTransaction();
+            if (!$pdo->inTransaction()) {
+                $pdo->beginTransaction();
+                $transactionStarted = true;
+            }
 
             if ($demonId < 1) {
                 $exactByName = $pdo->prepare('SELECT id FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1');
@@ -2081,7 +2093,7 @@ if (method_is_post()) {
                 );
             }
 
-            $pdo->commit();
+            admin_safe_transaction_commit($pdo, $transactionStarted, true);
 
             if ($newPosition !== $oldPosition) {
                 admin_notify_level_moved((string) $target['name'], $demonId, $oldPosition, $newPosition, $note);
@@ -2093,9 +2105,7 @@ if (method_is_post()) {
                 flash('success', 'Moved ' . (string) $target['name'] . ' from #' . $oldPosition . ' to #' . $newPosition . '.');
             }
         } catch (Throwable $throwable) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
+            admin_safe_transaction_commit($pdo, $transactionStarted, false);
             flash('error', $throwable->getMessage());
         }
 
