@@ -61,6 +61,9 @@ require_once __DIR__ . '/includes/functions.php';
 if (isset($_GET['lang']) && is_string($_GET['lang']) && is_supported_language($_GET['lang'])) {
     $_SESSION['language'] = $_GET['lang'];
 }
+if (isset($_GET['theme']) && is_string($_GET['theme']) && is_supported_theme($_GET['theme'])) {
+    $_SESSION['theme'] = $_GET['theme'];
+}
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/schema_update.php';

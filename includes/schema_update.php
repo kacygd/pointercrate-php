@@ -121,7 +121,7 @@ function schema_apply_users_role_enum(PDO $pdo): void
 
 function schema_target_version(): string
 {
-    return '2026-06-default-badges';
+    return '2026-08-ui-theme-legacy-scoring';
 }
 
 function schema_seed_default_badges(PDO $pdo): int
@@ -240,6 +240,9 @@ function schema_needs_update(PDO $pdo): bool
         return true;
     }
     if (app_setting_get('schema.version', '') !== schema_target_version()) {
+        return true;
+    }
+    if (app_setting_get('scoring.legacy_counts', null) === null) {
         return true;
     }
     if (!schema_col_exists($pdo, 'demons', 'comments_disabled')) {
@@ -708,7 +711,8 @@ function run_schema_update(PDO $pdo): array
             ('list.show_legacy', '1'),
             ('list.main_max_rank', '75'),
             ('list.extended_max_rank', '150'),
-            ('level_comments.enabled', '1')"
+            ('level_comments.enabled', '1'),
+            ('scoring.legacy_counts', '0')"
     );
     $logs[] = '[OK] Ensured default list settings (Main 1-75, Extended 76-150, Legacy remaining): '
         . $seededListSettings

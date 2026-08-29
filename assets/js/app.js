@@ -13,7 +13,7 @@
   };
 
   const closeAllDropdowns = () => {
-    document.querySelectorAll('.dropdown').forEach((dropdown) => {
+    document.querySelectorAll('.dropdown, .nav-tool-dropdown').forEach((dropdown) => {
       dropdown.style.display = 'none';
     });
 

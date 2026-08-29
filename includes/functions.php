@@ -19,7 +19,7 @@ function config(string $key, mixed $default = null): mixed
     return $value;
 }
 
-/** @return array<string, array{name: string}> */
+/** @return array<string, array{name: string, flag_code: string}> */
 function supported_languages(): array
 {
     static $languages = null;
@@ -36,11 +36,39 @@ function supported_languages(): array
         }
         $translation = require $file;
         if (is_array($translation)) {
-            $languages[$code] = ['name' => (string) ($translation['_name'] ?? $code)];
+            $languages[$code] = [
+                'name' => (string) ($translation['_name'] ?? $code),
+                'flag_code' => language_flag_code($code),
+            ];
         }
     }
 
     return $languages;
+}
+
+function language_flag_code(string $language): string
+{
+    return match (strtolower(trim($language))) {
+        'br' => 'br',
+        'by' => 'by',
+        'cn' => 'cn',
+        'de' => 'de',
+        'du' => 'nl',
+        'en' => 'gb',
+        'fr' => 'fr',
+        'id' => 'id',
+        'it' => 'it',
+        'jp' => 'jp',
+        'kr' => 'kr',
+        'pl' => 'pl',
+        'pt' => 'pt',
+        'ru' => 'ru',
+        'sp' => 'es',
+        'tr' => 'tr',
+        'ua' => 'ua',
+        'vi' => 'vn',
+        default => '',
+    };
 }
 
 function is_supported_language(string $language): bool
@@ -53,6 +81,18 @@ function current_language(): string
     $configured = (string) config('app.default_language', 'en');
     $selected = isset($_SESSION['language']) ? (string) $_SESSION['language'] : $configured;
     return is_supported_language($selected) ? $selected : 'en';
+}
+
+function is_supported_theme(string $theme): bool
+{
+    return in_array($theme, ['light', 'dark'], true);
+}
+
+function current_theme(): string
+{
+    $configured = strtolower(trim((string) config('app.theme', 'light')));
+    $selected = isset($_SESSION['theme']) ? strtolower(trim((string) $_SESSION['theme'])) : $configured;
+    return is_supported_theme($selected) ? $selected : 'light';
 }
 
 function t(string $key, array $replace = []): string
@@ -102,6 +142,16 @@ function language_url(string $language): string
     $path = (string) ($parts['path'] ?? base_url(''));
     parse_str((string) ($parts['query'] ?? ''), $query);
     $query['lang'] = $language;
+    return $path . '?' . http_build_query($query);
+}
+
+function theme_url(string $theme): string
+{
+    $uri = (string) ($_SERVER['REQUEST_URI'] ?? base_url(''));
+    $parts = parse_url($uri);
+    $path = (string) ($parts['path'] ?? base_url(''));
+    parse_str((string) ($parts['query'] ?? ''), $query);
+    $query['theme'] = $theme;
     return $path . '?' . http_build_query($query);
 }
 
@@ -832,6 +882,24 @@ function demonlist_set_show_extended_list(bool $enabled): bool
 function demonlist_set_show_legacy_list(bool $enabled): bool
 {
     return app_setting_set('list.show_legacy', $enabled ? '1' : '0');
+}
+
+function demonlist_legacy_scoring_default(): bool
+{
+    return false;
+}
+
+function demonlist_legacy_counts_for_score(): bool
+{
+    return app_setting_truthy(
+        app_setting_get('scoring.legacy_counts', null),
+        demonlist_legacy_scoring_default()
+    );
+}
+
+function demonlist_set_legacy_counts_for_score(bool $enabled): bool
+{
+    return app_setting_set('scoring.legacy_counts', $enabled ? '1' : '0');
 }
 
 function demonlist_list_limit_min(): int
@@ -1674,6 +1742,16 @@ function demonlist_is_ranked_entry(int $position, bool $legacy): bool
 {
     if ($position < 1) {
         return false;
+    }
+
+    if (!demonlist_legacy_counts_for_score()) {
+        if ($legacy) {
+            return false;
+        }
+
+        if ($position > demonlist_extended_list_limit()) {
+            return false;
+        }
     }
 
     return demonlist_list_bucket($position, $legacy) !== 'legacy';
@@ -2689,7 +2767,7 @@ function country_name_map(): array
             $map = [];
             foreach ($loaded as $code => $name) {
                 $normalizedCode = strtoupper(trim((string) $code));
-                if (preg_match('/^[A-Z]{2}$/', $normalizedCode) !== 1) {
+                if (preg_match('/^[A-Z]{2}(?:-[A-Z]{3})?$/', $normalizedCode) !== 1) {
                     continue;
                 }
 
@@ -2725,7 +2803,7 @@ function supported_countries(): array
         $entries = scandir($flagsDir);
         if (is_array($entries)) {
             foreach ($entries as $entry) {
-                if (preg_match('/^([a-z]{2})\.svg$/i', $entry, $match) !== 1) {
+                if (preg_match('/^([a-z]{2}(?:-[a-z]{3})?)\.svg$/i', $entry, $match) !== 1) {
                     continue;
                 }
 

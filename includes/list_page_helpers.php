@@ -390,6 +390,12 @@ function roulette_item_from_demon(array $demon, string $bucket, bool $shown): ar
     $verifierLabel = user_public_name_by_id((int) ($demon['verifier_user_id'] ?? 0), $verifier) ?? $verifier;
     $creator = demon_creator_name($demon);
     $levelId = trim((string) ($demon['level_id'] ?? ''));
+    $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
+    $score = '';
+    if (demonlist_is_ranked_entry($position, $isLegacy)) {
+        $score = number_format(pointercrate_score($position, $requirement, $requirement), 2) . ' (' . $requirement . '%) - '
+            . number_format(pointercrate_score($position, $requirement, 100), 2) . ' (100%) ' . t('list.points');
+    }
 
     return [
         'id' => (int) ($demon['id'] ?? 0),
@@ -404,7 +410,6 @@ function roulette_item_from_demon(array $demon, string $bucket, bool $shown): ar
         'thumb' => card_thumbnail_url($demon),
         'levelId' => $levelId,
         'byline' => t('list.published_by') . ' ' . $publisherLabel . ($verifierLabel !== '' ? ', ' . t('list.verified_by') . ' ' . $verifierLabel : ''),
-        'score' => number_format(pointercrate_score($position, $requirement, $requirement), 2) . ' (' . $requirement . '%) - '
-            . number_format(pointercrate_score($position, $requirement, 100), 2) . ' (100%) ' . t('list.points'),
+        'score' => $score,
     ];
 }

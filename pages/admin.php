@@ -306,16 +306,24 @@ function admin_webhook_changes_text(array $changes, int $limit = 8): string
 
 function admin_notify_level_added(array $level): void
 {
+    $videoUrl = trim((string) ($level['video_url'] ?? ''));
     $embed = [
         'title' => 'Level added',
         'color' => 5814783,
         'fields' => [
             ['name' => 'Level', 'value' => '#' . (int) $level['position'] . ' - ' . admin_webhook_text($level['name']), 'inline' => false],
             ['name' => 'Info', 'value' => admin_webhook_list_label((int) $level['legacy']) . ' / ' . (int) $level['requirement'] . '%', 'inline' => true],
+            ['name' => 'Creator(s)', 'value' => admin_webhook_text($level['creator_display'] ?? $level['creator'] ?? null), 'inline' => true],
+            ['name' => 'Publisher', 'value' => admin_webhook_text($level['publisher'] ?? null), 'inline' => true],
+            ['name' => 'Verifier', 'value' => admin_webhook_text($level['verifier'] ?? null), 'inline' => true],
             ['name' => 'By', 'value' => admin_webhook_actor_label(), 'inline' => true],
         ],
         'timestamp' => gmdate('c'),
     ];
+
+    if ($videoUrl !== '') {
+        $embed['fields'][] = ['name' => 'Verification Video', 'value' => $videoUrl, 'inline' => false];
+    }
 
     if ((int) ($level['id'] ?? 0) > 0) {
         $embed['url'] = absolute_url((string) (int) $level['position']);
@@ -691,7 +699,11 @@ if (method_is_post()) {
         }
 
         $topOnePoints = round((float) $topOneInput, 2);
-        if (!demonlist_set_top1_points($topOnePoints)) {
+        $legacyCountsForScore = isset($_POST['legacy_counts_for_score']);
+        if (
+            !demonlist_set_top1_points($topOnePoints)
+            || !demonlist_set_legacy_counts_for_score($legacyCountsForScore)
+        ) {
             flash(
                 'error',
                 'Top #1 points must be between '
@@ -719,6 +731,8 @@ if (method_is_post()) {
             'success',
             'Updated top #1 points to '
             . number_format($topOnePoints, 2)
+            . '. Legacy scoring: '
+            . ($legacyCountsForScore ? 'enabled' : 'disabled')
             . $syncMessage
         );
         redirect(admin_section_url('admin-scoring'));
@@ -1365,10 +1379,14 @@ if (method_is_post()) {
         }
 
         $pdo = db();
+        $transactionStarted = false;
 
         try {
             ensure_demon_claim_columns($pdo);
-            $pdo->beginTransaction();
+            if (!$pdo->inTransaction()) {
+                $pdo->beginTransaction();
+                $transactionStarted = true;
+            }
 
             $dupStmt = $pdo->prepare('SELECT id FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1');
             $dupStmt->execute([':name' => $name]);
@@ -1474,14 +1492,12 @@ if (method_is_post()) {
                 'comments_disabled' => $commentsDisabled,
             ];
 
-            $pdo->commit();
+            admin_safe_transaction_commit($pdo, $transactionStarted, true);
             admin_notify_level_added($createdLevelData);
 
             flash('success', 'Level added at position #' . $position . '.');
         } catch (Throwable $throwable) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
+            admin_safe_transaction_commit($pdo, $transactionStarted, false);
             flash('error', $throwable->getMessage());
         }
 
@@ -1941,14 +1957,12 @@ if (method_is_post()) {
                 'records_removed' => $recordsRemoved,
             ];
 
-            $pdo->commit();
+            admin_safe_transaction_commit($pdo, $transactionStarted, true);
             admin_notify_level_deleted($deletedLevelData);
 
             flash('success', 'Deleted #' . $oldPosition . ' - ' . $demonName . ' and shifted later positions down.');
         } catch (Throwable $throwable) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
+            admin_safe_transaction_commit($pdo, $transactionStarted, false);
             flash('error', $throwable->getMessage());
         }
 
@@ -1974,7 +1988,10 @@ if (method_is_post()) {
         $pdo = db();
 
         try {
-            $pdo->beginTransaction();
+            if (!$pdo->inTransaction()) {
+                $pdo->beginTransaction();
+                $transactionStarted = true;
+            }
 
             if ($demonId < 1) {
                 $exactByName = $pdo->prepare('SELECT id FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1');
@@ -2081,7 +2098,7 @@ if (method_is_post()) {
                 );
             }
 
-            $pdo->commit();
+            admin_safe_transaction_commit($pdo, $transactionStarted, true);
 
             if ($newPosition !== $oldPosition) {
                 admin_notify_level_moved((string) $target['name'], $demonId, $oldPosition, $newPosition, $note);
@@ -2093,9 +2110,7 @@ if (method_is_post()) {
                 flash('success', 'Moved ' . (string) $target['name'] . ' from #' . $oldPosition . ' to #' . $newPosition . '.');
             }
         } catch (Throwable $throwable) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
+            admin_safe_transaction_commit($pdo, $transactionStarted, false);
             flash('error', $throwable->getMessage());
         }
 
@@ -2601,11 +2616,13 @@ $topOnePoints = 0.0;
 $topOnePointsInput = '';
 $topOnePointsMinInput = '';
 $topOnePointsMaxInput = '';
+$legacyCountsForScore = false;
 if ($activeSection === 'admin-scoring') {
     $topOnePoints = demonlist_top1_points();
     $topOnePointsInput = number_format($topOnePoints, 2, '.', '');
     $topOnePointsMinInput = number_format(demonlist_top1_points_min(), 2, '.', '');
     $topOnePointsMaxInput = number_format(demonlist_top1_points_max(), 2, '.', '');
+    $legacyCountsForScore = demonlist_legacy_counts_for_score();
 }
 
 $showExtendedList = false;
@@ -3173,6 +3190,15 @@ render_header(t('admin.title'), 'admin');
                 'max' => $topOnePointsMaxInput,
                 'current' => number_format(demonlist_score(1, 100, 100), 2),
             ])) ?>
+        </small>
+
+        <label class="cb-container" style="text-align: left;">
+            <input type="checkbox" name="legacy_counts_for_score" value="1" <?= $legacyCountsForScore ? 'checked' : '' ?>>
+            <span class="checkmark"></span>
+            <?= e(t('admin.legacy_counts_for_score')) ?>
+        </label>
+        <small class="muted" style="text-align: left;">
+            <?= e(t('admin.legacy_counts_for_score_help')) ?>
         </small>
 
         <button class="button blue hover" type="submit"><?= e(t('admin.save_scoring')) ?></button>

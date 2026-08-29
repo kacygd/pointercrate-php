@@ -140,6 +140,7 @@ render_header(t('time.title'), 'time_machine', [
             $minimumScore = number_format(pointercrate_score($position, $requirement, $requirement), 2);
             $fullScore = number_format(pointercrate_score($position, $requirement, 100), 2);
             $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
+            $showDemonPoints = demonlist_is_ranked_entry($position, $isLegacy);
             $bucket = $isTimeMachineView
                 ? historical_list_bucket($position)
                 : demonlist_list_bucket($position, $isLegacy);
@@ -166,9 +167,11 @@ render_header(t('time.title'), 'time_machine', [
                         <h3 class="demon-card-byline" style="text-align: left; margin-bottom: 0;">
                             <?= e(t('list.published_by')) ?> <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
                         </h3>
-                        <div class="demon-points" style="text-align: left; font-size: 0.8em;">
-                            <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) <?= e(t('list.points')) ?>
-                        </div>
+                        <?php if ($showDemonPoints): ?>
+                            <div class="demon-points" style="text-align: left; font-size: 0.8em;">
+                                <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) <?= e(t('list.points')) ?>
+                            </div>
+                        <?php endif; ?>
                         <?php if ($isTimeMachineView): ?>
                             <div class="muted" style="text-align: left; font-size: 0.85em; margin-top: 4px;">
                                 <?= historical_list_bucket($currentPosition) === 'legacy' ? e(t('list.currently_legacy')) : e(t('list.currently_rank', ['rank' => $currentPosition])) ?>

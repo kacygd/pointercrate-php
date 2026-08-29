@@ -84,6 +84,9 @@ return [
     'nav.login' => 'Đăng nhập',
     'nav.logout' => 'Đăng xuất',
     'nav.language' => 'Ngôn ngữ',
+    'nav.theme_light' => 'Sáng',
+    'nav.theme_dark' => 'Tối',
+    'nav.theme_toggle' => 'Đổi giao diện',
 
     'footer.navigation' => 'Điều hướng',
     'footer.account' => 'Tài khoản',
@@ -647,6 +650,8 @@ return [
     'admin.scoring_intro' => 'Đặt điểm số tối đa cho danh sách.',
     'admin.top1_points' => 'Điểm Top 1 (hoàn thành 100%)',
     'admin.scoring_help' => 'Phạm vi cho phép: {min} đến {max}. Điểm #1 hiện tại: {current} điểm.',
+    'admin.legacy_counts_for_score' => 'Tính điểm cho màn Legacy',
+    'admin.legacy_counts_for_score_help' => 'Khi tắt, completion và bonus verifier từ các màn Legacy sẽ cộng 0 điểm.',
     'admin.save_scoring' => 'Lưu Thang Điểm',
     'admin.level_info_rows_intro' => 'Chọn các dòng có sẵn hoặc thêm dòng tùy chỉnh cho hộp Thông tin Màn chơi trên mỗi trang màn chơi.',
     'admin.built_in_field' => 'Trường có sẵn',

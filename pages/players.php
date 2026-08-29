@@ -745,7 +745,7 @@ foreach ($players as $player) {
 
 render_header(t('stats.title'), 'players');
 ?>
-<section class="panel fade stats-viewer-panel">
+<section class="panel fade stats-viewer-panel stats-viewer-panel-<?= e($view) ?>">
     <div class="panel-head">
         <h1><?= e(t('stats.title')) ?></h1>
         <p><?= e(t('stats.intro')) ?></p>
@@ -805,7 +805,7 @@ render_header(t('stats.title'), 'players');
                             <h3><?= e(t('stats.players')) ?></h3>
                             <p><?= (int) $selectedCountry['player_count'] ?></p>
                         </article>
-                        <article class="stats-viewer-summary-card">
+                        <article class="stats-viewer-summary-card stats-viewer-summary-card-best">
                             <h3><?= e(t('stats.best_player')) ?></h3>
                             <p><?= $selectedCountry['best_player'] !== null ? e((string) $selectedCountry['best_player']) : e(t('common.none')) ?></p>
                         </article>

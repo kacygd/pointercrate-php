@@ -984,7 +984,9 @@ $position = (int) $demon['position'];
 $requirement = (int) $demon['requirement'];
 $minimumScore = number_format(pointercrate_score($position, $requirement, $requirement), 2);
 $fullScore = number_format(pointercrate_score($position, $requirement, 100), 2);
-$currentBucket = demonlist_list_bucket($position, (int) ($demon['legacy'] ?? 0) === 1);
+$isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
+$showDemonPoints = demonlist_is_ranked_entry($position, $isLegacy);
+$currentBucket = demonlist_list_bucket($position, $isLegacy);
 $category = match ($currentBucket) {
     'extended' => t('list.extended'),
     'legacy' => t('list.legacy'),
@@ -1046,7 +1048,7 @@ $metaDescription = t('demon.meta_description', [
     'publisher' => $publisher !== '' ? $publisher : t('common.unknown'),
     'verified' => $verifiedMetaSuffix,
     'requirement' => $requirement,
-    'points' => $fullScore,
+    'points' => $showDemonPoints ? $fullScore : '0.00',
 ]);
 
 render_header((string) $demon['name'], 'list', [
@@ -1088,9 +1090,11 @@ render_header((string) $demon['name'], 'list', [
                     <p class="demon-hero-byline">
                         <?= e(t('demon.byline_by')) ?> <?= render_creator_credit($demon) ?>, <?= e(t('list.published_by')) ?> <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
                     </p>
-                    <p class="demon-hero-score">
-                        <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) <?= e(t('list.points')) ?>
-                    </p>
+                    <?php if ($showDemonPoints): ?>
+                        <p class="demon-hero-score">
+                            <?= $minimumScore ?> (<?= $requirement ?>%) &#8212; <?= $fullScore ?> (100%) <?= e(t('list.points')) ?>
+                        </p>
+                    <?php endif; ?>
                     <div class="demon-hero-actions">
                         <?php if ($prevId !== null): ?>
                             <a class="button white hover small" href="<?= e(base_url((string) $prevId)) ?>"><i class="fa fa-chevron-left"></i> <?= e(t('demon.prev')) ?></a>

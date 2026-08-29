@@ -84,6 +84,9 @@ return [
     'nav.login' => 'Login',
     'nav.logout' => 'Logout',
     'nav.language' => 'Language',
+    'nav.theme_light' => 'Light',
+    'nav.theme_dark' => 'Dark',
+    'nav.theme_toggle' => 'Toggle theme',
 
     'footer.navigation' => 'Navigation',
     'footer.account' => 'Account',
@@ -647,6 +650,8 @@ return [
     'admin.scoring_intro' => 'Set the maximum score for the list.',
     'admin.top1_points' => 'Top 1 points (100% completion)',
     'admin.scoring_help' => 'Allowed range: {min} to {max}. Current #1 score: {current} points.',
+    'admin.legacy_counts_for_score' => 'Count Legacy levels for score',
+    'admin.legacy_counts_for_score_help' => 'When disabled, completions and verifier bonuses from Legacy levels add 0 points.',
     'admin.save_scoring' => 'Save Scoring Scale',
     'admin.level_info_rows_intro' => 'Choose built-in rows or add custom rows for the Level Info box on each level page.',
     'admin.built_in_field' => 'Built-in Field',

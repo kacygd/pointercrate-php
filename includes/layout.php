@@ -1,24 +1,40 @@
 <?php
 declare(strict_types=1);
 
-function render_language_menu_form(string $class = 'nav-profile-language-form'): void
+function render_language_menu_form(string $class = 'nav-language-switcher', string $dropdownId = 'nav-language-dropdown', bool $showCode = false): void
 {
+    $current = current_language();
+    $languages = supported_languages();
+    $currentLanguage = $languages[$current] ?? ['name' => $current, 'flag_code' => ''];
+    $currentFlag = country_flag_html((string) ($currentLanguage['flag_code'] ?? ''), true);
     ?>
-    <form method="get" action="<?= e(current_path()) ?>" class="<?= e($class) ?>">
-        <?php foreach ($_GET as $key => $value): ?>
-            <?php if ($key !== 'lang' && is_scalar($value)): ?>
-                <input type="hidden" name="<?= e((string) $key) ?>" value="<?= e((string) $value) ?>">
-            <?php endif; ?>
-        <?php endforeach; ?>
-        <label>
-            <span><?= e(t('nav.language')) ?></span>
-            <select name="lang" onchange="this.form.submit()" aria-label="<?= e(t('nav.language')) ?>">
-                <?php foreach (supported_languages() as $code => $language): ?>
-                    <option value="<?= e($code) ?>" <?= current_language() === $code ? 'selected' : '' ?>><?= e($language['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-    </form>
+    <div class="nav-group nav-tool-group <?= e($class) ?>">
+        <button class="nav-item hover white nav-tool-trigger js-toggle" type="button" aria-label="<?= e(t('nav.language')) ?>" title="<?= e((string) $currentLanguage['name']) ?>" data-dropdown-id="<?= e($dropdownId) ?>">
+            <?= $currentFlag ?><?php if ($showCode): ?><span class="nav-language-code"><?= e(strtoupper($current)) ?></span><?php endif; ?><i class="fas fa-chevron-down" aria-hidden="true"></i>
+        </button>
+        <div id="<?= e($dropdownId) ?>" class="white dropdown nav-tool-dropdown">
+            <?php foreach ($languages as $code => $language): ?>
+                <?php $flag = country_flag_html((string) ($language['flag_code'] ?? ''), true); ?>
+                <a class="<?= $code === $current ? 'active' : '' ?>" href="<?= e(language_url($code)) ?>" title="<?= e((string) $language['name']) ?>" aria-label="<?= e((string) $language['name']) ?>">
+                    <?= $flag ?><span class="nav-language-name"><?= e((string) $language['name']) ?></span>
+                </a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php
+}
+
+function render_theme_switcher(string $class = 'nav-theme-switcher'): void
+{
+    $theme = current_theme();
+    $nextTheme = $theme === 'dark' ? 'light' : 'dark';
+    $label = $theme === 'dark' ? t('nav.theme_dark') : t('nav.theme_light');
+    ?>
+    <div class="nav-group nav-tool-group <?= e($class) ?>">
+        <a class="nav-item hover white nav-theme-toggle" href="<?= e(theme_url($nextTheme)) ?>" aria-label="<?= e(t('nav.theme_toggle')) ?>" title="<?= e($label) ?>">
+            <i class="<?= $theme === 'dark' ? 'fas fa-moon' : 'fas fa-sun' ?>" aria-hidden="true"></i>
+        </a>
+    </div>
     <?php
 }
 
@@ -96,7 +112,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
     $styleHref = base_url('assets/css/style.css?v=' . rawurlencode($styleVersion));
 ?>
 <!doctype html>
-<html lang="<?= e(current_language()) ?>">
+<html lang="<?= e(current_language()) ?>" data-theme="<?= e(current_theme()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -160,13 +176,17 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
             </div>
         <?php endif; ?>
 
+        <div class="nav-right-cluster">
+            <div class="nav-tools nav-tools-right">
+                <?php render_language_menu_form(); ?>
+                <?php render_theme_switcher(); ?>
+            </div>
         <?php if ($user !== null): ?>
-            <div class="nav-group nav-group-right nav-auth-status">
+            <div class="nav-group nav-auth-status nav-profile-group">
                 <div class="nav-item hover white <?= $profileActive ? 'active' : '' ?>"><?= e(user_display_name_from_row($user)) ?></div>
                 <div class="nav-hover-dropdown white nav-profile-dropdown">
                     <a href="<?= e(base_url('account.php')) ?>"><?= e(t('nav.profile')) ?></a>
                     <a href="<?= e(base_url('submit.php')) ?>"><?= e(t('nav.submit')) ?></a>
-                    <?php render_language_menu_form(); ?>
                     <form method="post" action="<?= e(base_url('logout.php')) ?>" class="nav-profile-logout">
                         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                         <button type="submit"><?= e(t('nav.logout')) ?></button>
@@ -174,10 +194,14 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
                 </div>
             </div>
         <?php else: ?>
-            <div class="nav-group nav-group-right nav-auth-status">
+            <div class="nav-group nav-auth-status">
                 <a class="nav-item nav-login-link hover white <?= in_array($activeNav, ['login', 'register'], true) ? 'active' : '' ?>" href="<?= e($loginUrl) ?>"><?= e(t('nav.login')) ?></a>
             </div>
         <?php endif; ?>
+        </div>
+
+        <?php render_language_menu_form('nav-mobile-header-language-switcher nav-nohide', 'nav-language-dropdown-mobile-header'); ?>
+        <?php render_theme_switcher('nav-mobile-header-theme-switcher nav-nohide'); ?>
 
         <div class="nav-item collapse-button nav-nohide">
             <div class="hamburger hover" aria-label="Toggle navigation">
@@ -193,21 +217,18 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
             <a class="nav-item hover white" href="<?= e(base_url('submit.php')) ?>"><?= e(t('nav.submit')) ?></a>
             <a class="nav-item hover white" href="<?= e(base_url('roulette.php')) ?>"><?= e(t('nav.roulette')) ?></a>
             <a class="nav-item hover white" href="<?= e(base_url('time-machine.php')) ?>"><?= e(t('nav.time_machine')) ?></a>
-            <div class="nav-mobile-divider" aria-hidden="true"></div>
             <a class="nav-item hover white" href="<?= e(base_url('players.php')) ?>"><?= e(t('nav.stats')) ?></a>
             <?php if ($showAdminLink): ?>
                 <a class="nav-item hover white" href="<?= e(base_url('admin.php')) ?>"><?= e(t('nav.admin')) ?></a>
             <?php endif; ?>
             <?php if ($user !== null): ?>
                 <a class="nav-item hover white" href="<?= e(base_url('account.php')) ?>"><?= e(t('nav.profile')) ?></a>
-                <?php render_language_menu_form('nav-mobile-language-form'); ?>
                 <form method="post" action="<?= e(base_url('logout.php')) ?>" class="nav-mobile-form">
                     <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                     <button type="submit" class="nav-item hover white"><?= e(t('nav.logout')) ?></button>
                 </form>
             <?php else: ?>
                 <a class="nav-item hover white" href="<?= e($loginUrl) ?>"><?= e(t('nav.login')) ?></a>
-                <?php render_language_menu_form('nav-mobile-language-form'); ?>
             <?php endif; ?>
         </div>
     </nav>
@@ -301,9 +322,3 @@ function render_footer(): void
 </html>
 <?php
 }
-
-
-
-
-
-
