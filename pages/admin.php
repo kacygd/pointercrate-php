@@ -1382,6 +1382,9 @@ if (method_is_post()) {
         $transactionStarted = false;
 
         try {
+            // All DDL / schema ensures MUST run before beginTransaction().
+            // MySQL implicitly commits on DDL, which would otherwise leave
+            // the later commit() throwing "There is no active transaction".
             ensure_demon_claim_columns($pdo);
             if (!$pdo->inTransaction()) {
                 $pdo->beginTransaction();
@@ -1879,9 +1882,13 @@ if (method_is_post()) {
         }
 
         $pdo = db();
+        $transactionStarted = false;
 
         try {
-            $pdo->beginTransaction();
+            if (!$pdo->inTransaction()) {
+                $pdo->beginTransaction();
+                $transactionStarted = true;
+            }
 
             $targetStmt = $pdo->prepare('SELECT * FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1 FOR UPDATE');
             $targetStmt->execute([':name' => $targetNameInput]);
@@ -1986,6 +1993,7 @@ if (method_is_post()) {
         }
 
         $pdo = db();
+        $transactionStarted = false;
 
         try {
             if (!$pdo->inTransaction()) {

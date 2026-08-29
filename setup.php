@@ -305,7 +305,7 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'timezone' => $values['timezone'],
                 'default_language' => $defaultLanguage,
                 'debug' => false,
-                'updated' => 1,
+                'updated' => 0,
                 'installation_complete' => true,
             ],
             'db' => [
