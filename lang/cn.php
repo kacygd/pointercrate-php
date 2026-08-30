@@ -1,6 +1,6 @@
 <?php
 return [
-    '_name' => '中文',
+    '_name' => '中文 （简体）',
 
     'common.none' => '无',
     'common.yes' => '是',
@@ -84,6 +84,9 @@ return [
     'nav.login' => '登录',
     'nav.logout' => '登出',
     'nav.language' => '语言',
+    'nav.theme_light' => '浅色',
+    'nav.theme_dark' => '深色',
+    'nav.theme_toggle' => '切换主题',
 
     'footer.navigation' => '导航',
     'footer.account' => '账户',
@@ -647,6 +650,8 @@ return [
     'admin.scoring_intro' => '设置列表的最大积分。',
     'admin.top1_points' => '第 1 名积分（100% 通关）',
     'admin.scoring_help' => '允许范围：{min} 至 {max}。当前第 1 名积分：{current} 分。',
+    'admin.legacy_counts_for_score' => '计算 Legacy 等级得分',
+    'admin.legacy_counts_for_score_help' => '禁用后，传统关卡的完成奖励和验证者奖励将不增加积分。',
     'admin.save_scoring' => '保存计分比例',
     'admin.level_info_rows_intro' => '为每个关卡页面上的关卡信息框选择内置行或添加自定义行。',
     'admin.built_in_field' => '内置字段',

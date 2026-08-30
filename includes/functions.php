@@ -3096,15 +3096,48 @@ if (!function_exists('youtube_video_id')) {
         if (str_contains($host, 'youtube.com') && !empty($parts['query'])) {
             parse_str((string) $parts['query'], $query);
             if (!empty($query['v']) && is_string($query['v'])) {
-                return trim($query['v']);
+                $id = trim($query['v']);
+                return preg_match('/^[A-Za-z0-9_-]{11}$/', $id) === 1 ? $id : null;
             }
         }
 
         if (str_contains($host, 'youtu.be') && !empty($parts['path'])) {
-            return trim((string) $parts['path'], '/');
+            $id = trim((string) $parts['path'], '/');
+            return preg_match('/^[A-Za-z0-9_-]{11}$/', $id) === 1 ? $id : null;
+        }
+
+        if (str_contains($host, 'youtube.com') && !empty($parts['path'])) {
+            $segments = array_values(array_filter(explode('/', trim((string) $parts['path'], '/'))));
+            $embedKeys = ['embed', 'shorts', 'live'];
+            if (count($segments) >= 2 && in_array($segments[0], $embedKeys, true)) {
+                $id = trim((string) $segments[1]);
+                return preg_match('/^[A-Za-z0-9_-]{11}$/', $id) === 1 ? $id : null;
+            }
         }
 
         return null;
+    }
+}
+
+if (!function_exists('youtube_embed_url')) {
+    function youtube_embed_url(string $url): ?string
+    {
+        $id = youtube_video_id($url);
+        if ($id === null || $id === '') {
+            return null;
+        }
+
+        $query = [
+            'rel' => '0',
+            'modestbranding' => '1',
+            'playsinline' => '1',
+        ];
+        $origin = app_public_url() ?? request_origin();
+        if ($origin !== null) {
+            $query['origin'] = rtrim($origin, '/');
+        }
+
+        return 'https://www.youtube.com/embed/' . rawurlencode($id) . '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
     }
 }
 

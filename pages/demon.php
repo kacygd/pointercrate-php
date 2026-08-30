@@ -13,34 +13,6 @@ function pointercrate_score(int $position, int $requirement, int $progress): flo
     return demonlist_score($position, $requirement, $progress);
 }
 
-function youtube_video_id(string $url): ?string
-{
-    $parts = parse_url($url);
-    if (!is_array($parts) || empty($parts['host'])) {
-        return null;
-    }
-
-    $host = strtolower((string) $parts['host']);
-    if (str_contains($host, 'youtube.com') && !empty($parts['query'])) {
-        parse_str((string) $parts['query'], $query);
-        if (!empty($query['v']) && is_string($query['v'])) {
-            return trim($query['v']);
-        }
-    }
-
-    if (str_contains($host, 'youtu.be') && !empty($parts['path'])) {
-        return trim((string) $parts['path'], '/');
-    }
-
-    return null;
-}
-
-function youtube_embed_url(string $url): ?string
-{
-    $id = youtube_video_id($url);
-    return $id !== null && $id !== '' ? 'https://www.youtube.com/embed/' . rawurlencode($id) : null;
-}
-
 function card_thumbnail_url(array $demon): string
 {
     $configured = trim((string) ($demon['thumbnail_url'] ?? ''));
@@ -1142,7 +1114,14 @@ render_header((string) $demon['name'], 'list', [
                 <div class="panel-head">
                     <h2><?= e(t('demon.verification_preview')) ?></h2>
                 </div>
-                <iframe class="ratio-16-9 demon-preview-frame" allowfullscreen src="<?= e($embed) ?>" title="<?= e(t('demon.video_iframe_title', ['name' => (string) $demon['name']])) ?>"></iframe>
+                <iframe
+                    class="ratio-16-9 demon-preview-frame"
+                    src="<?= e($embed) ?>"
+                    title="<?= e(t('demon.video_iframe_title', ['name' => (string) $demon['name']])) ?>"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen
+                    referrerpolicy="strict-origin-when-cross-origin"
+                ></iframe>
             </section>
         <?php endif; ?>
 
