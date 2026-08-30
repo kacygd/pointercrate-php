@@ -94,6 +94,7 @@ return [
     'footer.my_account' => 'My Account',
     'footer.submit_record' => 'Submit Record',
     'footer.rights' => 'All rights reserved {app} and the {app} are in no way affiliated with RobTopGamesAB.',
+    'footer.created_by' => 'Created by kacygd',
 
     'list.main' => 'Main List',
     'list.extended' => 'Extended List',

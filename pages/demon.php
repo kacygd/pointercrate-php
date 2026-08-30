@@ -954,10 +954,10 @@ $thumbStyle = css_background_image($thumbUrl);
 
 $position = (int) $demon['position'];
 $requirement = (int) $demon['requirement'];
-$minimumScore = number_format(pointercrate_score($position, $requirement, $requirement), 2);
-$fullScore = number_format(pointercrate_score($position, $requirement, 100), 2);
 $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
 $showDemonPoints = demonlist_is_ranked_entry($position, $isLegacy);
+$minimumScore = $showDemonPoints ? number_format(pointercrate_score($position, $requirement, $requirement), 2) : '0.00';
+$fullScore = $showDemonPoints ? number_format(pointercrate_score($position, $requirement, 100), 2) : '0.00';
 $currentBucket = demonlist_list_bucket($position, $isLegacy);
 $category = match ($currentBucket) {
     'extended' => t('list.extended'),

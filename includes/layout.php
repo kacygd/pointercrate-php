@@ -313,7 +313,7 @@ function render_footer(): void
             <a class="link" href="<?= e(base_url('account.php')) ?>"><?= e(t('footer.my_account')) ?></a>
         </nav>
     </div>
-    <span class="muted" style="margin-top: 8px;">Created by kacygd</span>
+    <span class="muted" style="margin-top: 8px;"><?= e(t('footer.created_by')) ?></span>
 </footer>
 
 <script>window.DEMONLIST_I18N = <?= json_encode($jsTranslations, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>

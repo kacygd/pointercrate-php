@@ -94,6 +94,7 @@ return [
     'footer.my_account' => 'Tài khoản của tôi',
     'footer.submit_record' => 'Gửi Record',
     'footer.rights' => 'Bảo lưu mọi quyền {app} và {app} không có bất kỳ liên kết nào với RobTopGamesAB.',
+    'footer.created_by' => 'Tạo bởi kacygd',
 
     'list.main' => 'Danh sách Chính',
     'list.extended' => 'Danh sách Mở rộng',
