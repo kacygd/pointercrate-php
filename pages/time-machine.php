@@ -68,12 +68,12 @@ render_header(t('time.title'), 'time_machine', [
 ?>
 
 <nav class="flex wrap m-center fade" id="lists" style="text-align: center;">
-                    <?php render_list_dropdown('mainlist', t('list.main'), $mainListDescription, $main); ?>
+                    <?php render_list_dropdown('mainlist', t('list.main'), $mainListDescription, $main, $isTimeMachineView); ?>
     <?php if ($showExtendedList): ?>
-        <?php render_list_dropdown('extended', t('list.extended'), $extendedListDescription, $extended); ?>
+        <?php render_list_dropdown('extended', t('list.extended'), $extendedListDescription, $extended, $isTimeMachineView); ?>
     <?php endif; ?>
     <?php if ($showLegacyList): ?>
-        <?php render_list_dropdown('legacy', t('list.legacy'), $legacyListDescription, $legacy); ?>
+        <?php render_list_dropdown('legacy', t('list.legacy'), $legacyListDescription, $legacy, $isTimeMachineView); ?>
     <?php endif; ?>
 </nav>
 
@@ -144,6 +144,8 @@ render_header(t('time.title'), 'time_machine', [
             $bucket = $isTimeMachineView
                 ? historical_list_bucket($position)
                 : demonlist_list_bucket($position, $isLegacy);
+            $demonUrl = demon_detail_url($demon, $isTimeMachineView);
+            $positionedName = demonlist_positioned_name($position, $bucket === 'legacy', (string) ($demon['name'] ?? ''));
             ?>
             <section
                 class="panel fade flex mobile-col"
@@ -154,14 +156,14 @@ render_header(t('time.title'), 'time_machine', [
             >
                 <a
                     class="thumb ratio-16-9"
-                    href="<?= e(base_url((string) $position)) ?>"
+                    href="<?= e($demonUrl) ?>"
                     style="position: relative; <?= e($thumbStyle) ?>"
                 ></a>
                 <div class="flex demon-info" style="align-items: center;">
                     <div class="demon-byline">
                         <h2 style="text-align: left; margin-bottom: 0;">
-                            <a href="<?= e(base_url((string) $position)) ?>">
-                                #<?= $position ?> &#8211; <?= e((string) ($demon['name'] ?? '')) ?>
+                            <a href="<?= e($demonUrl) ?>">
+                                <?= e($positionedName) ?>
                             </a>
                         </h2>
                         <h3 class="demon-card-byline" style="text-align: left; margin-bottom: 0;">

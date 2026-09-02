@@ -1704,6 +1704,21 @@ function demonlist_list_bucket(int $position, bool $legacy): string
     return demonlist_show_legacy_list() ? 'legacy' : 'main';
 }
 
+function demonlist_position_label(int $position, bool $legacyList): string
+{
+    if ($legacyList && !demonlist_legacy_counts_for_score()) {
+        return '';
+    }
+
+    return '#' . $position;
+}
+
+function demonlist_positioned_name(int $position, bool $legacyList, string $name): string
+{
+    $positionLabel = demonlist_position_label($position, $legacyList);
+    return $positionLabel === '' ? $name : $positionLabel . ' - ' . $name;
+}
+
 function demonlist_main_list_dropdown_description(bool $showExtendedList, bool $showLegacyList): string
 {
     return match (true) {
@@ -1744,14 +1759,16 @@ function demonlist_is_ranked_entry(int $position, bool $legacy): bool
         return false;
     }
 
-    if (!demonlist_legacy_counts_for_score()) {
-        if ($legacy) {
-            return false;
-        }
+    if (demonlist_legacy_counts_for_score()) {
+        return true;
+    }
 
-        if ($position > demonlist_extended_list_limit()) {
-            return false;
-        }
+    if ($legacy) {
+        return false;
+    }
+
+    if ($position > demonlist_extended_list_limit()) {
+        return false;
     }
 
     return demonlist_list_bucket($position, $legacy) !== 'legacy';

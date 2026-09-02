@@ -118,14 +118,16 @@ function render_list_dropdown(string $id, string $title, string $description, ar
 
                 <?php foreach ($demons as $demon): ?>
                     <?php
+                    $positionLabel = demonlist_position_label((int) $demon['position'], $id === 'legacy');
+                    $positionedName = demonlist_positioned_name((int) $demon['position'], $id === 'legacy', (string) $demon['name']);
                     $dropdownVerifier = trim((string) ($demon['verifier'] ?? ''));
                     $dropdownPublisher = trim((string) ($demon['publisher'] ?? ''));
                     $dropdownPublisherLabel = user_public_name_by_id((int) ($demon['publisher_user_id'] ?? 0), $dropdownPublisher) ?? $dropdownPublisher;
                     $dropdownVerifierLabel = user_public_name_by_id((int) ($demon['verifier_user_id'] ?? 0), $dropdownVerifier) ?? $dropdownVerifier;
                     ?>
-                    <li class="hover white" title="#<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>">
+                    <li class="hover white" title="<?= e($positionedName) ?>">
                         <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
-                            #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
+                            <?= e($positionedName) ?>
                             <br>
                             <i><?= e(t('list.published_by')) ?> <?= e($dropdownPublisherLabel) ?><?php if ($dropdownVerifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= e($dropdownVerifierLabel) ?><?php endif; ?></i>
                         </a>
@@ -318,12 +320,19 @@ function roulette_item_from_demon(array $demon, string $bucket, bool $shown): ar
     $verifierLabel = user_public_name_by_id((int) ($demon['verifier_user_id'] ?? 0), $verifier) ?? $verifier;
     $creator = demon_creator_name($demon);
     $levelId = trim((string) ($demon['level_id'] ?? ''));
+    $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
+    $score = '';
+    if (demonlist_is_ranked_entry($position, $isLegacy)) {
+        $score = number_format(pointercrate_score($position, $requirement, $requirement), 2) . ' (' . $requirement . '%) - '
+            . number_format(pointercrate_score($position, $requirement, 100), 2) . ' (100%) points';
+    }
 
     return [
         'id' => (int) ($demon['id'] ?? 0),
         'bucket' => $bucket,
         'shown' => $shown,
         'position' => $position,
+        'positionLabel' => demonlist_position_label($position, $bucket === 'legacy'),
         'currentPosition' => (int) ($demon['current_position'] ?? $position),
         'name' => (string) ($demon['name'] ?? ''),
         'creator' => $creator !== '' ? $creator : $publisherLabel,
@@ -332,8 +341,7 @@ function roulette_item_from_demon(array $demon, string $bucket, bool $shown): ar
         'thumb' => card_thumbnail_url($demon),
         'levelId' => $levelId,
         'byline' => t('list.published_by') . ' ' . $publisherLabel . ($verifierLabel !== '' ? ', ' . t('list.verified_by') . ' ' . $verifierLabel : ''),
-        'score' => number_format(pointercrate_score($position, $requirement, $requirement), 2) . ' (' . $requirement . '%) - '
-            . number_format(pointercrate_score($position, $requirement, 100), 2) . ' (100%) points',
+        'score' => $score,
     ];
 }
 
@@ -484,6 +492,7 @@ render_header(t('home.title'), 'list', [
             $bucket = $isTimeMachineView
                 ? historical_list_bucket($position)
                 : demonlist_list_bucket($position, $isLegacy);
+            $positionedName = demonlist_positioned_name($position, $bucket === 'legacy', (string) $demon['name']);
             ?>
             <section
                 class="panel fade flex mobile-col"
@@ -501,7 +510,7 @@ render_header(t('home.title'), 'list', [
                     <div class="demon-byline">
                         <h2 style="text-align: left; margin-bottom: 0;">
                             <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
-                                #<?= $position ?> &#8211; <?= e((string) $demon['name']) ?>
+                                <?= e($positionedName) ?>
                             </a>
                         </h2>
                         <h3 class="demon-card-byline" style="text-align: left; margin-bottom: 0;">

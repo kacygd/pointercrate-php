@@ -143,9 +143,16 @@ function render_demon_dropdown(string $id, string $title, string $description, a
                 <?php endif; ?>
 
                 <?php foreach ($demons as $demon): ?>
-                    <li class="hover white" title="#<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>">
+                    <?php
+                    $positionedName = demonlist_positioned_name(
+                        (int) $demon['position'],
+                        $id === 'legacy',
+                        (string) $demon['name']
+                    );
+                    ?>
+                    <li class="hover white" title="<?= e($positionedName) ?>">
                         <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
-                            #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
+                            <?= e($positionedName) ?>
                             <br>
                             <i><?= e(t('list.published_by')) ?> <?= e((string) $demon['publisher']) ?></i>
                         </a>
@@ -339,27 +346,7 @@ if ($requestedRank < 1 && $requestedId < 1) {
     redirect('index.php');
 }
 
-if ($requestedRank < 1 && $requestedId > 0) {
-    $legacyStmt = db()->prepare('SELECT position FROM demons WHERE id = :id LIMIT 1');
-    $legacyStmt->execute([':id' => $requestedId]);
-    $legacyPosition = (int) ($legacyStmt->fetchColumn() ?: 0);
-    if ($legacyPosition < 1) {
-        http_response_code(404);
-        render_header(t('demon.not_found_title'), 'list');
-        ?>
-        <section class="panel fade">
-            <h1><?= e(t('demon.not_found_title')) ?></h1>
-            <p class="muted"><?= e(t('demon.not_found_text')) ?></p>
-            <a class="button blue hover" href="<?= e(base_url('index.php')) ?>"><?= e(t('common.back_to_list')) ?></a>
-        </section>
-        <?php
-        render_footer();
-        exit;
-    }
-
-    redirect((string) $legacyPosition);
-}
-
+$viewingById = $requestedRank < 1 && $requestedId > 0;
 $rank = $requestedRank;
 
 $hasUserBannedColumn = users_has_is_banned_column();
@@ -378,15 +365,15 @@ $demonSelectSql = $hasUserBannedColumn
        LEFT JOIN users banned_users
          ON LOWER(banned_users.username) = LOWER(c.player)
         AND COALESCE(banned_users.is_banned, 0) = 1
-       WHERE d.position = :rank
+       WHERE ' . ($viewingById ? 'd.id = :id' : 'd.position = :rank') . '
        GROUP BY d.id'
     : 'SELECT d.*, COUNT(c.id) AS completion_count
        FROM demons d
        LEFT JOIN completions c ON c.demon_id = d.id
-       WHERE d.position = :rank
+       WHERE ' . ($viewingById ? 'd.id = :id' : 'd.position = :rank') . '
        GROUP BY d.id';
 $stmt = db()->prepare($demonSelectSql);
-$stmt->execute([':rank' => $rank]);
+$stmt->execute($viewingById ? [':id' => $requestedId] : [':rank' => $rank]);
 $demon = $stmt->fetch();
 
 if ($demon !== false) {
@@ -409,6 +396,7 @@ if ($demon === false) {
     exit;
 }
 
+$rank = (int) ($demon['position'] ?? $rank);
 $levelCommentsDisabledMessage = level_comments_disabled_message($demon);
 $demonPosition = (int) ($demon['position'] ?? 0);
 $levelCommentActionPage = max(1, (int) ($_POST['comment_page'] ?? $_GET['comment_page'] ?? 1));
@@ -805,7 +793,7 @@ $completions = $completionsStmt->fetchAll();
 $historyStmt = db()->prepare('SELECT created_at, old_position, new_position, note
                               FROM demon_position_history
                               WHERE demon_id = :demon_id
-                              ORDER BY created_at DESC
+                              ORDER BY created_at ASC
                               LIMIT 50');
 $historyStmt->execute([':demon_id' => $id]);
 $positionHistory = $historyStmt->fetchAll();
@@ -959,6 +947,9 @@ $showDemonPoints = demonlist_is_ranked_entry($position, $isLegacy);
 $minimumScore = $showDemonPoints ? number_format(pointercrate_score($position, $requirement, $requirement), 2) : '0.00';
 $fullScore = $showDemonPoints ? number_format(pointercrate_score($position, $requirement, 100), 2) : '0.00';
 $currentBucket = demonlist_list_bucket($position, $isLegacy);
+$legacyRankContext = $currentBucket === 'legacy' || $isLegacy;
+$positionLabel = demonlist_position_label($position, $legacyRankContext);
+$positionedName = demonlist_positioned_name($position, $legacyRankContext, (string) $demon['name']);
 $category = match ($currentBucket) {
     'extended' => t('list.extended'),
     'legacy' => t('list.legacy'),
@@ -977,6 +968,7 @@ $levelInfoCustomValues = demon_level_info_custom_values(db(), $id);
 $renderLevelInfoValue = static function (array $row) use (
     $demon,
     $position,
+    $positionLabel,
     $category,
     $requirement,
     $creator,
@@ -998,7 +990,7 @@ $renderLevelInfoValue = static function (array $row) use (
 
     $field = (string) ($row['field'] ?? '');
     return match ($field) {
-        'position' => '#' . $position,
+        'position' => $positionLabel !== '' ? e($positionLabel) : '-',
         'category' => e($category),
         'difficulty' => e((string) ($demon['difficulty'] ?? '-')),
         'requirement' => $requirement . '%',
@@ -1024,9 +1016,9 @@ $metaDescription = t('demon.meta_description', [
 ]);
 
 render_header((string) $demon['name'], 'list', [
-    'title' => '#' . $position . ' - ' . (string) $demon['name'],
+    'title' => $positionedName,
     'description' => $metaDescription,
-    'url' => base_url((string) $position),
+    'url' => $viewingById ? base_url('id=' . $id) : base_url((string) $position),
     'image' => $thumbUrl,
 ]);
 ?>
@@ -1057,7 +1049,7 @@ render_header((string) $demon['name'], 'list', [
                 </a>
                 <div class="demon-hero-content">
                     <h1 class="demon-hero-title">
-                        #<?= $position ?> &#8211; <?= e((string) $demon['name']) ?>
+                        <?= e($positionedName) ?>
                     </h1>
                     <p class="demon-hero-byline">
                         <?= e(t('demon.byline_by')) ?> <?= render_creator_credit($demon) ?>, <?= e(t('list.published_by')) ?> <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
@@ -1085,7 +1077,7 @@ render_header((string) $demon['name'], 'list', [
                 </blockquote>
             <?php endif; ?>
 
-            <div class="detail-grid demon-detail-grid">
+            <div class="detail-grid demon-detail-grid <?= !$showDemonPoints ? 'demon-detail-grid-single' : '' ?>">
                 <div class="panel subtle">
                     <h3><?= e(t('demon.level_info')) ?></h3>
                     <?php if ($levelInfoRows === []): ?>
@@ -1093,11 +1085,13 @@ render_header((string) $demon['name'], 'list', [
                     <?php else: ?>
                         <dl class="key-value compact">
                             <?php foreach ($levelInfoRows as $row): ?>
+                                <?php if ((string) ($row['field'] ?? '') === 'position' && $positionLabel === '') { continue; } ?>
                                 <div><dt><?= e((string) ($row['label'] ?? '')) ?></dt><dd><?= $renderLevelInfoValue($row) ?></dd></div>
                             <?php endforeach; ?>
                         </dl>
                     <?php endif; ?>
                 </div>
+                <?php if ($showDemonPoints): ?>
                 <div class="panel subtle">
                     <h3><?= e(t('demon.scoring')) ?></h3>
                     <dl class="key-value compact">
@@ -1106,6 +1100,7 @@ render_header((string) $demon['name'], 'list', [
                         <div><dt><?= e(t('demon.completions')) ?></dt><dd><?= (int) $demon['completion_count'] ?></dd></div>
                     </dl>
                 </div>
+                <?php endif; ?>
             </div>
         </section>
 
@@ -1174,34 +1169,50 @@ render_header((string) $demon['name'], 'list', [
             <?php endif; ?>
         </section>
 
-        <section class="panel fade">
+        <section class="panel fade position-history-panel">
             <details class="history-toggle">
                 <summary><?= e(t('demon.position_history')) ?></summary>
                 <div class="history-toggle-content">
                     <div class="history-toggle-inner">
                         <div class="table-wrap">
-                            <table class="data-table">
+                            <table class="data-table position-history-table" id="history-table">
                                 <thead>
                                     <tr>
-                                        <th><?= e(t('demon.date_change')) ?></th>
+                                        <th><?= e(t('demon.date')) ?></th>
+                                        <th><?= e(t('demon.change')) ?></th>
                                         <th><?= e(t('demon.new_position')) ?></th>
                                         <th><?= e(t('demon.reason')) ?></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php if ($positionHistory === []): ?>
-                                        <tr><td colspan="3" class="muted"><?= e(t('demon.no_position_history')) ?></td></tr>
+                                        <tr><td colspan="4" class="muted"><?= e(t('demon.no_position_history')) ?></td></tr>
                                     <?php endif; ?>
                                     <?php foreach ($positionHistory as $event): ?>
                                         <?php
+                                        $oldPosition = $event['old_position'] !== null ? (int) $event['old_position'] : null;
+                                        $newPosition = (int) $event['new_position'];
+                                        $changeAmount = $oldPosition !== null ? abs($newPosition - $oldPosition) : 0;
+                                        $rowClass = 'history-added';
+                                        $changeLabel = '-';
+                                        if ($oldPosition !== null && $newPosition < $oldPosition) {
+                                            $rowClass = 'moved-up';
+                                            $changeLabel = '&uarr;' . $changeAmount;
+                                        } elseif ($oldPosition !== null && $newPosition > $oldPosition) {
+                                            $rowClass = 'moved-down';
+                                            $changeLabel = '&darr;' . $changeAmount;
+                                        }
                                         $reason = trim((string) ($event['note'] ?? ''));
                                         if ($reason === '') {
-                                            $reason = $event['old_position'] === null ? t('demon.initial_placement') : t('demon.position_updated');
+                                            $reason = $oldPosition === null ? t('demon.added_to_list') : t('demon.position_updated');
                                         }
+                                        $createdAt = strtotime((string) $event['created_at']);
+                                        $dateText = $createdAt !== false ? date('Y-m-d', $createdAt) : (string) $event['created_at'];
                                         ?>
-                                        <tr>
-                                            <td><?= e(date('Y-m-d H:i', strtotime((string) $event['created_at']))) ?></td>
-                                            <td>#<?= (int) $event['new_position'] ?></td>
+                                        <tr class="<?= e($rowClass) ?>">
+                                            <td><span class="history-date"><?= e($dateText) ?></span></td>
+                                            <td><span class="history-change"><?= $changeLabel ?></span></td>
+                                            <td><span class="history-new-position"><?= $newPosition ?></span></td>
                                             <td><?= e($reason) ?></td>
                                         </tr>
                                     <?php endforeach; ?>

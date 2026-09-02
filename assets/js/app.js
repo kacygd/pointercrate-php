@@ -602,6 +602,7 @@
         bucket,
         shown: Boolean(item.shown),
         position,
+        positionLabel: Object.prototype.hasOwnProperty.call(item, 'positionLabel') ? String(item.positionLabel).trim() : `#${position}`,
         currentPosition: Number.isFinite(currentPosition) && currentPosition > 0 ? currentPosition : position,
         name,
         creator: String(item.creator || '').trim(),
@@ -791,7 +792,7 @@
       const title = document.createElement('h3');
       const link = document.createElement('a');
       link.href = demon.url;
-      link.textContent = `#${demon.position} - ${demon.name}`;
+      link.textContent = demon.positionLabel === '' ? demon.name : `${demon.positionLabel} - ${demon.name}`;
       title.appendChild(link);
       body.appendChild(title);
 

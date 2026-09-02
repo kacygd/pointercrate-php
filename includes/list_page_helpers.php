@@ -56,7 +56,17 @@ function render_player_role_link(string $name, ?int $userId = null): string
     return $label;
 }
 
-function render_list_dropdown(string $id, string $title, string $description, array $demons): void
+function demon_detail_url(array $demon, bool $usePermalink = false): string
+{
+    $id = (int) ($demon['id'] ?? 0);
+    if ($usePermalink && $id > 0) {
+        return base_url('id=' . $id);
+    }
+
+    return base_url((string) ((int) ($demon['position'] ?? 0)));
+}
+
+function render_list_dropdown(string $id, string $title, string $description, array $demons, bool $usePermalinks = false): void
 {
     ?>
     <div>
@@ -76,14 +86,17 @@ function render_list_dropdown(string $id, string $title, string $description, ar
 
                 <?php foreach ($demons as $demon): ?>
                     <?php
+                    $positionLabel = demonlist_position_label((int) $demon['position'], $id === 'legacy');
+                    $positionedName = demonlist_positioned_name((int) $demon['position'], $id === 'legacy', (string) $demon['name']);
                     $dropdownVerifier = trim((string) ($demon['verifier'] ?? ''));
                     $dropdownPublisher = trim((string) ($demon['publisher'] ?? ''));
                     $dropdownPublisherLabel = user_public_name_by_id((int) ($demon['publisher_user_id'] ?? 0), $dropdownPublisher) ?? $dropdownPublisher;
                     $dropdownVerifierLabel = user_public_name_by_id((int) ($demon['verifier_user_id'] ?? 0), $dropdownVerifier) ?? $dropdownVerifier;
+                    $demonUrl = demon_detail_url($demon, $usePermalinks);
                     ?>
-                    <li class="hover white" title="#<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>">
-                        <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
-                            #<?= (int) $demon['position'] ?> - <?= e((string) $demon['name']) ?>
+                    <li class="hover white" title="<?= e($positionedName) ?>">
+                        <a href="<?= e($demonUrl) ?>">
+                            <?= e($positionedName) ?>
                             <br>
                             <i><?= e(t('list.published_by')) ?> <?= e($dropdownPublisherLabel) ?><?php if ($dropdownVerifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= e($dropdownVerifierLabel) ?><?php endif; ?></i>
                         </a>
@@ -402,10 +415,11 @@ function roulette_item_from_demon(array $demon, string $bucket, bool $shown): ar
         'bucket' => $bucket,
         'shown' => $shown,
         'position' => $position,
+        'positionLabel' => demonlist_position_label($position, $bucket === 'legacy'),
         'currentPosition' => (int) ($demon['current_position'] ?? $position),
         'name' => (string) ($demon['name'] ?? ''),
         'creator' => $creator !== '' ? $creator : $publisherLabel,
-        'url' => base_url((string) $position),
+        'url' => demon_detail_url($demon),
         'videoUrl' => (string) ($demon['video_url'] ?? ''),
         'thumb' => card_thumbnail_url($demon),
         'levelId' => $levelId,
