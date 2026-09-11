@@ -813,8 +813,11 @@ function api_score(PDO $pdo, int $position, int $requirement, int $progress, boo
 
 function api_records_for_demon(PDO $pdo, int $demonId): array
 {
+    $enjoymentSelect = api_schema_col_exists($pdo, 'completions', 'enjoyment')
+        ? 'c.enjoyment'
+        : 'NULL AS enjoyment';
     $stmt = $pdo->prepare(
-        'SELECT c.id, c.progress, c.video_url, c.player
+        'SELECT c.id, c.progress, ' . $enjoymentSelect . ', c.video_url, c.player
          FROM completions c
          WHERE c.demon_id = :id
          ORDER BY c.progress DESC, c.created_at ASC, c.id ASC'
@@ -824,6 +827,7 @@ function api_records_for_demon(PDO $pdo, int $demonId): array
     return array_map(static fn(array $row): array => [
         'id' => (int) $row['id'],
         'progress' => (int) $row['progress'],
+        'enjoyment' => $row['enjoyment'] !== null ? (int) $row['enjoyment'] : null,
         'video' => api_nullable_url($row['video_url'] ?? null),
         'status' => 'approved',
         'player' => api_player_for_name((string) $row['player']),
@@ -883,7 +887,10 @@ function api_paginate_records(PDO $pdo): array
         $params[':video'] = $video;
     }
 
-    $sql = 'SELECT c.id, c.progress, c.video_url, c.player,
+    $enjoymentSelect = api_schema_col_exists($pdo, 'completions', 'enjoyment')
+        ? 'c.enjoyment'
+        : 'NULL AS enjoyment';
+    $sql = 'SELECT c.id, c.progress, ' . $enjoymentSelect . ', c.video_url, c.player,
                    d.id AS demon_id, d.name AS demon_name, d.position
             FROM completions c
             INNER JOIN demons d ON d.id = c.demon_id
@@ -892,6 +899,7 @@ function api_paginate_records(PDO $pdo): array
     return api_paginated_sql($pdo, $sql, $params, 'c.id', static fn(array $row): array => [
         'id' => (int) $row['id'],
         'progress' => (int) $row['progress'],
+        'enjoyment' => $row['enjoyment'] !== null ? (int) $row['enjoyment'] : null,
         'video' => api_nullable_url($row['video_url'] ?? null),
         'status' => 'approved',
         'demon' => [
@@ -905,8 +913,11 @@ function api_paginate_records(PDO $pdo): array
 
 function api_full_record(PDO $pdo, int $recordId): array
 {
+    $enjoymentSelect = api_schema_col_exists($pdo, 'completions', 'enjoyment')
+        ? 'c.enjoyment'
+        : 'NULL AS enjoyment';
     $stmt = $pdo->prepare(
-        'SELECT c.id, c.progress, c.video_url, c.player,
+        'SELECT c.id, c.progress, ' . $enjoymentSelect . ', c.video_url, c.player,
                 d.id AS demon_id, d.name AS demon_name, d.position
          FROM completions c
          INNER JOIN demons d ON d.id = c.demon_id
@@ -923,6 +934,7 @@ function api_full_record(PDO $pdo, int $recordId): array
     return [
         'id' => (int) $row['id'],
         'progress' => (int) $row['progress'],
+        'enjoyment' => $row['enjoyment'] !== null ? (int) $row['enjoyment'] : null,
         'video' => api_nullable_url($row['video_url'] ?? null),
         'status' => 'approved',
         'player' => api_player_for_name((string) $row['player']),
@@ -1005,8 +1017,11 @@ function api_build_players(PDO $pdo): array
         $players[$verifierKey]['verified'][$demonId] = $minimal;
     }
 
+    $enjoymentSelect = api_schema_col_exists($pdo, 'completions', 'enjoyment')
+        ? 'c.enjoyment'
+        : 'NULL AS enjoyment';
     $records = $pdo->query(
-        'SELECT c.id, c.demon_id, c.player, c.video_url, c.progress
+        'SELECT c.id, c.demon_id, c.player, c.video_url, c.progress, ' . $enjoymentSelect . '
          FROM completions c
          ORDER BY c.created_at DESC, c.id DESC'
     )->fetchAll();
@@ -1030,6 +1045,7 @@ function api_build_players(PDO $pdo): array
         $players[$key]['records'][] = [
             'id' => (int) $record['id'],
             'progress' => $progress,
+            'enjoyment' => $record['enjoyment'] !== null ? (int) $record['enjoyment'] : null,
             'video' => api_nullable_url($record['video_url'] ?? null),
             'status' => 'approved',
             'demon' => api_minimal_demon($demon),

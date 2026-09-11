@@ -3477,18 +3477,24 @@ header nav .nav-profile-dropdown button {
 
 .records .records-table th:nth-child(1),
 .records .records-table td:nth-child(1) {
-  width: 50%;
+  width: 44%;
   position: relative;
 }
 
 .records .records-table th:nth-child(2),
 .records .records-table td:nth-child(2) {
-  width: 20%;
+  width: 18%;
 }
 
 .records .records-table th:nth-child(3),
 .records .records-table td:nth-child(3) {
-  width: 30%;
+  width: 14%;
+  text-align: center;
+}
+
+.records .records-table th:nth-child(4),
+.records .records-table td:nth-child(4) {
+  width: 24%;
 }
 
 .records .player-inline {
@@ -3526,7 +3532,7 @@ header nav .nav-profile-dropdown button {
   font-weight: 700;
 }
 
-.records .records-table td:nth-child(3) .link {
+.records .records-table td:nth-child(4) .link {
   color: #001fff;
   font-weight: 700;
   white-space: nowrap;
@@ -4825,7 +4831,7 @@ a.stats-demon-link:after {
 }
 
 .admin-user-table {
-  min-width: 1220px;
+  min-width: 1380px;
 }
 
 .admin-user-action-cell {
@@ -5177,30 +5183,35 @@ a.stats-demon-link:after {
 
 .admin-user-table th:nth-child(4),
 .admin-user-table td:nth-child(4) {
-  width: 92px;
+  width: 150px;
 }
 
 .admin-user-table th:nth-child(5),
-.admin-user-table td:nth-child(5),
+.admin-user-table td:nth-child(5) {
+  width: 92px;
+}
+
 .admin-user-table th:nth-child(6),
-.admin-user-table td:nth-child(6) {
-  width: 98px;
-}
-
+.admin-user-table td:nth-child(6),
 .admin-user-table th:nth-child(7),
-.admin-user-table td:nth-child(7),
-.admin-user-table th:nth-child(8),
-.admin-user-table td:nth-child(8) {
+.admin-user-table td:nth-child(7) {
   width: 98px;
 }
 
+.admin-user-table th:nth-child(8),
+.admin-user-table td:nth-child(8),
 .admin-user-table th:nth-child(9),
 .admin-user-table td:nth-child(9) {
-  width: 112px;
+  width: 98px;
 }
 
 .admin-user-table th:nth-child(10),
 .admin-user-table td:nth-child(10) {
+  width: 112px;
+}
+
+.admin-user-table th:nth-child(11),
+.admin-user-table td:nth-child(11) {
   width: 300px;
 }
 .admin-user-table td:nth-child(3) {
@@ -5208,9 +5219,14 @@ a.stats-demon-link:after {
   word-break: break-word;
 }
 
-.admin-user-table td:nth-child(4) .badge,
+.admin-user-table td:nth-child(4) {
+  max-width: 150px;
+  word-break: break-all;
+}
+
 .admin-user-table td:nth-child(5) .badge,
-.admin-user-table td:nth-child(6) .badge {
+.admin-user-table td:nth-child(6) .badge,
+.admin-user-table td:nth-child(7) .badge {
   min-width: 68px;
   text-align: center;
 }
@@ -6365,7 +6381,7 @@ html[data-theme="dark"] .link,
 html[data-theme="dark"] .player-link,
 html[data-theme="dark"] .level-comment-reply-box > summary,
 html[data-theme="dark"] .level-comment-edit-box > summary,
-html[data-theme="dark"] .records .records-table td:nth-child(3) .link {
+html[data-theme="dark"] .records .records-table td:nth-child(4) .link {
   color: var(--color-link) !important;
 }
 

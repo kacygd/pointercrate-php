@@ -175,6 +175,7 @@ $ensurePlayer = static function (string $rawName) use (&$playersByKey): ?string 
             'score' => 0.0,
             'rank' => null,
             'total_records' => 0,
+            'total_progress_records' => 0,
             'total_completions' => 0,
             'completion_scores' => [],
             'main_records' => 0,
@@ -326,16 +327,16 @@ foreach ($records as $record) {
     }
 
     $listBucket = demonlist_list_bucket($position, $legacy);
-    if ($listBucket === 'main') {
-        $playersByKey[$key]['main_records']++;
-    } elseif ($listBucket === 'extended') {
-        $playersByKey[$key]['extended_records']++;
-    } else {
-        $playersByKey[$key]['legacy_records']++;
-    }
-
     if ($progress >= 100) {
         $playersByKey[$key]['total_completions']++;
+        if ($listBucket === 'main') {
+            $playersByKey[$key]['main_records']++;
+        } elseif ($listBucket === 'extended') {
+            $playersByKey[$key]['extended_records']++;
+        } else {
+            $playersByKey[$key]['legacy_records']++;
+        }
+
         $completionItem = [
             'id' => $demonId,
             'name' => $demonName,
@@ -356,6 +357,7 @@ foreach ($records as $record) {
             $updateHardest($playersByKey[$key], $demonName, $position, $completionHardestScore);
         }
     } else {
+        $playersByKey[$key]['total_progress_records']++;
         $playersByKey[$key]['progress_on'][$demonId] = [
             'id' => $demonId,
             'name' => $demonName,
@@ -560,6 +562,7 @@ foreach ($players as $player) {
             'main_records' => 0,
             'extended_records' => 0,
             'legacy_records' => 0,
+            'progress_records' => 0,
             'total_completions' => 0,
             'best_player' => null,
             'best_points' => 0.0,
@@ -575,6 +578,7 @@ foreach ($players as $player) {
     $countryStats[$countryCode]['main_records'] += (int) $player['main_records'];
     $countryStats[$countryCode]['extended_records'] += (int) $player['extended_records'];
     $countryStats[$countryCode]['legacy_records'] += (int) $player['legacy_records'];
+    $countryStats[$countryCode]['progress_records'] += (int) $player['total_progress_records'];
     $countryStats[$countryCode]['total_completions'] += (int) $player['total_completions'];
 
     if ($points > $countryStats[$countryCode]['best_points']) {
@@ -714,6 +718,7 @@ foreach ($players as $player) {
         'rank' => $player['rank'] !== null ? (int) $player['rank'] : null,
         'points' => $points,
         'total_records' => (int) $player['total_records'],
+        'total_progress_records' => (int) $player['total_progress_records'],
         'total_completions' => (int) $player['total_completions'],
         'main_records' => (int) $player['main_records'],
         'extended_records' => (int) $player['extended_records'],
@@ -815,7 +820,7 @@ render_header(t('stats.title'), 'players');
                         </article>
                         <article class="stats-viewer-summary-card stats-viewer-summary-card-breakdown">
                             <h3><?= e(t('stats.demonlist_stats')) ?></h3>
-                            <p><?= e(t('stats.breakdown', ['main' => (int) $selectedCountry['main_records'], 'extended' => (int) $selectedCountry['extended_records'], 'legacy' => (int) $selectedCountry['legacy_records']])) ?></p>
+                            <p><?= e(t('stats.breakdown', ['main' => (int) $selectedCountry['main_records'], 'extended' => (int) $selectedCountry['extended_records'], 'legacy' => (int) $selectedCountry['legacy_records'], 'progress' => (int) $selectedCountry['progress_records']])) ?></p>
                         </article>
                     </div>
                 </section>
@@ -908,7 +913,7 @@ render_header(t('stats.title'), 'players');
                     </article>
                     <article class="stats-viewer-summary-card stats-viewer-summary-card-breakdown">
                         <h3><?= e(t('stats.demonlist_stats')) ?></h3>
-                        <p id="stats-breakdown"><?= e(t('stats.breakdown', ['main' => (int) $selectedPlayer['main_records'], 'extended' => (int) $selectedPlayer['extended_records'], 'legacy' => (int) $selectedPlayer['legacy_records']])) ?></p>
+                        <p id="stats-breakdown"><?= e(t('stats.breakdown', ['main' => (int) $selectedPlayer['main_records'], 'extended' => (int) $selectedPlayer['extended_records'], 'legacy' => (int) $selectedPlayer['legacy_records'], 'progress' => (int) $selectedPlayer['total_progress_records']])) ?></p>
                     </article>
                 </div>
 
@@ -1172,6 +1177,7 @@ render_header(t('stats.title'), 'players');
                         main: player.main_records,
                         extended: player.extended_records,
                         legacy: player.legacy_records,
+                        progress: player.total_progress_records,
                     });
                 }
                 if (hardestEl instanceof HTMLElement) {

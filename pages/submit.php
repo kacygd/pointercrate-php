@@ -3,6 +3,18 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
 
+if (current_request_ip_banned()) {
+    render_header(t('submit.title'), 'submit');
+    ?>
+    <section class="panel panel-narrow fade">
+        <div class="info-red"><?= e(t('auth.error_ip_banned')) ?></div>
+        <a class="button blue hover" href="<?= e(base_url('index.php')) ?>"><?= e(t('common.back_to_main_list')) ?></a>
+    </section>
+    <?php
+    render_footer();
+    exit;
+}
+
 require_login();
 
 $user = current_user();
@@ -15,6 +27,7 @@ $form = [
     'video_url' => '',
     'raw_footage_url' => '',
     'progress' => '100',
+    'enjoyment' => '',
     'platform' => 'PC',
     'refresh_rate' => '240',
     'notes' => '',
@@ -73,6 +86,7 @@ if (method_is_post()) {
     $form['video_url'] = trim((string) ($_POST['video_url'] ?? ''));
     $form['raw_footage_url'] = trim((string) ($_POST['raw_footage_url'] ?? ''));
     $form['progress'] = trim((string) ($_POST['progress'] ?? '100'));
+    $form['enjoyment'] = trim((string) ($_POST['enjoyment'] ?? ''));
     $form['platform'] = trim((string) ($_POST['platform'] ?? 'PC'));
     $form['refresh_rate'] = trim((string) ($_POST['refresh_rate'] ?? '240'));
     $form['notes'] = trim((string) ($_POST['notes'] ?? ''));
@@ -118,6 +132,18 @@ if (method_is_post()) {
         }
     }
 
+    $enjoyment = null;
+    if ($form['enjoyment'] !== '') {
+        if (!ctype_digit($form['enjoyment'])) {
+            $errors[] = t('submit.error_enjoyment');
+        } else {
+            $enjoyment = (int) $form['enjoyment'];
+            if ($enjoyment < 0 || $enjoyment > 10) {
+                $errors[] = t('submit.error_enjoyment');
+            }
+        }
+    }
+
     $platforms = ['PC', 'Mobile', 'Tablet', 'Other'];
     if (!in_array($form['platform'], $platforms, true)) {
         $errors[] = t('submit.error_platform');
@@ -131,9 +157,9 @@ if (method_is_post()) {
     if ($errors === [] && $demon !== null) {
         $pdo = db();
         $insert = $pdo->prepare('INSERT INTO submissions
-            (type, demon_name, difficulty, publisher, player, submitted_by_user_id, video_url, raw_footage_url, platform, refresh_rate, progress, notes, status)
+            (type, demon_name, difficulty, publisher, player, submitted_by_user_id, video_url, raw_footage_url, platform, refresh_rate, progress, enjoyment, notes, status)
             VALUES
-            ("completion", :demon_name, NULL, NULL, :player, :submitted_by_user_id, :video_url, :raw_footage_url, :platform, :refresh_rate, :progress, :notes, "pending")');
+            ("completion", :demon_name, NULL, NULL, :player, :submitted_by_user_id, :video_url, :raw_footage_url, :platform, :refresh_rate, :progress, :enjoyment, :notes, "pending")');
 
         $insert->execute([
             ':demon_name' => (string) $demon['name'],
@@ -144,6 +170,7 @@ if (method_is_post()) {
             ':platform' => $form['platform'],
             ':refresh_rate' => $refreshRate,
             ':progress' => $progress,
+            ':enjoyment' => $enjoyment,
             ':notes' => $form['notes'] !== '' ? $form['notes'] : null,
         ]);
 
@@ -155,6 +182,7 @@ if (method_is_post()) {
                 ['name' => t('common.player'), 'value' => (string) $user['username'], 'inline' => true],
                 ['name' => t('common.demon'), 'value' => '#' . (int) $demon['position'] . ' - ' . (string) $demon['name'], 'inline' => true],
                 ['name' => t('common.progress'), 'value' => $progress . '%', 'inline' => true],
+                ['name' => t('common.enjoyment'), 'value' => $enjoyment !== null ? ($enjoyment . '/10') : '-', 'inline' => true],
                 ['name' => t('demon.video_proof'), 'value' => (string) $form['video_url'], 'inline' => false],
             ],
             'timestamp' => gmdate('c'),
@@ -194,6 +222,12 @@ render_header(t('submit.title'), 'submit');
         <label class="field">
             <span><?= e(t('submit.progress')) ?></span>
             <input type="number" min="1" max="100" name="progress" value="<?= e($form['progress']) ?>" required>
+        </label>
+
+        <label class="field">
+            <span><?= e(t('submit.enjoyment')) ?></span>
+            <input type="number" min="0" max="10" name="enjoyment" value="<?= e($form['enjoyment']) ?>" placeholder="<?= e(t('submit.enjoyment_placeholder')) ?>">
+            <small class="muted"><?= e(t('submit.enjoyment_help')) ?></small>
         </label>
 
         <label class="field">

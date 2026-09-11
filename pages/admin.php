@@ -2265,6 +2265,63 @@ if (method_is_post()) {
 
         redirect($redirectTarget);
     }
+
+    if ($action === 'create_ip_ban' && can_manage_users()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', t('flash.invalid_token'));
+            redirect(admin_section_url('admin-ip-bans'));
+        }
+
+        $ipAddress = normalize_ip_address((string) ($_POST['ip_address'] ?? ''));
+        $reason = trim((string) ($_POST['reason'] ?? ''));
+        if ($ipAddress === '') {
+            flash('error', t('admin.ip_ban_error_invalid'));
+            redirect(admin_section_url('admin-ip-bans'));
+        }
+        if ($ipAddress === current_request_ip()) {
+            flash('error', t('admin.ip_ban_error_own_ip'));
+            redirect(admin_section_url('admin-ip-bans'));
+        }
+        if (strlen($reason) > 255) {
+            $reason = substr($reason, 0, 255);
+        }
+
+        try {
+            $insert = db()->prepare(
+                'INSERT INTO ip_bans (ip_address, reason, created_by_user_id)
+                 VALUES (:ip_address, :reason, :created_by_user_id)'
+            );
+            $insert->execute([
+                ':ip_address' => $ipAddress,
+                ':reason' => $reason !== '' ? $reason : null,
+                ':created_by_user_id' => current_user_id(),
+            ]);
+            flash('success', t('admin.ip_ban_added', ['ip' => $ipAddress]));
+        } catch (PDOException $exception) {
+            flash('error', $exception->getCode() === '23000' ? t('admin.ip_ban_error_exists') : t('admin.ip_ban_error_failed'));
+        }
+
+        redirect(admin_section_url('admin-ip-bans'));
+    }
+
+    if ($action === 'delete_ip_ban' && can_manage_users()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', t('flash.invalid_token'));
+            redirect(admin_section_url('admin-ip-bans'));
+        }
+
+        $banId = (int) ($_POST['ban_id'] ?? 0);
+        if ($banId < 1) {
+            flash('error', t('admin.ip_ban_error_invalid'));
+            redirect(admin_section_url('admin-ip-bans'));
+        }
+
+        $delete = db()->prepare('DELETE FROM ip_bans WHERE id = :id');
+        $delete->execute([':id' => $banId]);
+        flash('success', t('admin.ip_ban_removed'));
+        redirect(admin_section_url('admin-ip-bans'));
+    }
+
     if ($action === 'reset_password' && can_reset_passwords()) {
         $usersQueryRedirect = trim((string) ($_POST['users_q'] ?? ''));
         $redirectTarget = admin_section_url(
@@ -2372,10 +2429,11 @@ if (method_is_post()) {
                 }
 
                 $progress = max(1, min(100, (int) ($submission['progress'] ?? 100)));
+                $submittedEnjoyment = $submission['enjoyment'] !== null ? max(0, min(10, (int) $submission['enjoyment'])) : null;
                 $submittedVideo = (string) ($submission['video_url'] ?: '#');
                 $submittedNotes = trim((string) ($submission['notes'] ?? ''));
 
-                $existingStmt = $pdo->prepare('SELECT id, progress, video_url, notes, placement FROM completions WHERE demon_id = :demon_id AND player = :player LIMIT 1');
+                $existingStmt = $pdo->prepare('SELECT id, progress, enjoyment, video_url, notes, placement FROM completions WHERE demon_id = :demon_id AND player = :player LIMIT 1');
                 $existingStmt->execute([
                     ':demon_id' => (int) $demonId,
                     ':player' => $submissionPlayer,
@@ -2385,18 +2443,22 @@ if (method_is_post()) {
                 if ($existing !== false) {
                     $oldProgress = (int) ($existing['progress'] ?? 0);
                     $newProgress = max($oldProgress, $progress);
+                    $oldEnjoyment = $existing['enjoyment'] !== null ? (int) $existing['enjoyment'] : null;
+                    $newEnjoyment = $submittedEnjoyment !== null ? $submittedEnjoyment : $oldEnjoyment;
                     $oldVideo = (string) ($existing['video_url'] ?? '#');
                     $oldNotes = trim((string) ($existing['notes'] ?? ''));
 
                     $updateRecord = $pdo->prepare('UPDATE completions
                         SET video_url = :video_url,
                             progress = :progress,
+                            enjoyment = :enjoyment,
                             notes = :notes
                         WHERE id = :id');
 
                     $updateRecord->execute([
                         ':video_url' => $submittedVideo,
                         ':progress' => $newProgress,
+                        ':enjoyment' => $newEnjoyment,
                         ':notes' => $submittedNotes !== '' ? $submittedNotes : null,
                         ':id' => (int) $existing['id'],
                     ]);
@@ -2417,6 +2479,15 @@ if (method_is_post()) {
                         $recordWebhookFields[] = [
                             'name' => 'Completion Progress',
                             'value' => $oldProgress . '% -> ' . $newProgress . '%',
+                            'inline' => true,
+                        ];
+                        $hasCompletionFieldChange = true;
+                    }
+
+                    if ($newEnjoyment !== $oldEnjoyment) {
+                        $recordWebhookFields[] = [
+                            'name' => 'Enjoyment',
+                            'value' => ($oldEnjoyment !== null ? $oldEnjoyment . '/10' : '-') . ' -> ' . ($newEnjoyment !== null ? $newEnjoyment . '/10' : '-'),
                             'inline' => true,
                         ];
                         $hasCompletionFieldChange = true;
@@ -2457,15 +2528,16 @@ if (method_is_post()) {
                     $nextPlacement = (int) $placementStmt->fetchColumn();
 
                     $insertCompletion = $pdo->prepare('INSERT INTO completions
-                        (demon_id, player, video_url, progress, placement, notes)
+                        (demon_id, player, video_url, progress, enjoyment, placement, notes)
                         VALUES
-                        (:demon_id, :player, :video_url, :progress, :placement, :notes)');
+                        (:demon_id, :player, :video_url, :progress, :enjoyment, :placement, :notes)');
 
                     $insertCompletion->execute([
                         ':demon_id' => (int) $demonId,
                         ':player' => $submissionPlayer,
                         ':video_url' => $submittedVideo,
                         ':progress' => $progress,
+                        ':enjoyment' => $submittedEnjoyment,
                         ':placement' => $nextPlacement,
                         ':notes' => $submittedNotes !== '' ? $submittedNotes : null,
                     ]);
@@ -2484,6 +2556,11 @@ if (method_is_post()) {
                     $recordWebhookFields[] = [
                         'name' => 'Completion Progress',
                         'value' => $progress . '%',
+                        'inline' => true,
+                    ];
+                    $recordWebhookFields[] = [
+                        'name' => 'Enjoyment',
+                        'value' => $submittedEnjoyment !== null ? $submittedEnjoyment . '/10' : '-',
                         'inline' => true,
                     ];
                 }
@@ -2536,6 +2613,7 @@ $adminPdo = db();
 $hasBonusPoints = admin_column_exists($adminPdo, 'users', 'bonus_points');
 $hasUserBanned = admin_column_exists($adminPdo, 'users', 'is_banned');
 $hasUserCommentsDisabled = admin_column_exists($adminPdo, 'users', 'comments_disabled');
+$hasUserLastIp = admin_column_exists($adminPdo, 'users', 'last_ip');
 
 $stats = [
     'pending' => (int) $adminPdo->query('SELECT COUNT(*) FROM submissions WHERE status = "pending"')->fetchColumn(),
@@ -2548,6 +2626,9 @@ $stats = [
 ];
 $stats['banned'] = $hasUserBanned
     ? (int) $adminPdo->query('SELECT COUNT(*) FROM users WHERE COALESCE(is_banned, 0) = 1')->fetchColumn()
+    : 0;
+$stats['ip_bans'] = table_exists('ip_bans', $adminPdo)
+    ? (int) $adminPdo->query('SELECT COUNT(*) FROM ip_bans')->fetchColumn()
     : 0;
 
 $adminRoleLabel = role_label(current_user_role());
@@ -2583,6 +2664,7 @@ $sectionCapability = [
     'admin-edit-level'           => $canManageLevels,
     'admin-delete-level'         => $canManageLevels,
     'admin-user-management'      => $canManageUsers,
+    'admin-ip-bans'              => $canManageUsers,
     'admin-pending-submissions'  => $canReviewSubmissions,
     'admin-reviewed-submissions' => $canReviewSubmissions,
     'admin-badges'               => $canManageBadges,
@@ -2687,6 +2769,7 @@ if ($activeSection === 'admin-user-management' && $usersQuery !== '') {
         'username',
         'email',
         'country_code',
+        $hasUserLastIp ? 'last_ip' : 'NULL AS last_ip',
         'role',
         'points',
         $hasBonusPoints ? 'bonus_points' : '0.00 AS bonus_points',
@@ -2702,6 +2785,16 @@ if ($activeSection === 'admin-user-management' && $usersQuery !== '') {
     $usersStmt = $adminPdo->prepare($usersSql);
     $usersStmt->execute([':users_query' => '%' . $usersQuery . '%']);
     $users = $usersStmt->fetchAll();
+}
+
+$ipBans = [];
+if ($activeSection === 'admin-ip-bans') {
+    $ipBans = $adminPdo->query(
+        'SELECT b.*, u.username AS created_by_username
+         FROM ip_bans b
+         LEFT JOIN users u ON u.id = b.created_by_user_id
+         ORDER BY b.created_at DESC, b.id DESC'
+    )->fetchAll();
 }
 
 $levelInfoFieldDefinitions = [];
@@ -2860,6 +2953,10 @@ render_header(t('admin.title'), 'admin');
                         <a class="admin-action-tile<?= $activeSection === 'admin-user-management' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-user-management')) ?>">
                             <span class="admin-action-title"><?= e(t('admin.user_management')) ?><?php if ($stats['banned'] > 0): ?> <span class="admin-action-badge"><?= (int) $stats['banned'] ?></span><?php endif; ?></span>
                             <small><?= e(t('admin.user_management_desc')) ?></small>
+                        </a>
+                        <a class="admin-action-tile<?= $activeSection === 'admin-ip-bans' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-ip-bans')) ?>">
+                            <span class="admin-action-title"><?= e(t('admin.ip_bans')) ?><?php if ($stats['ip_bans'] > 0): ?> <span class="admin-action-badge"><?= (int) $stats['ip_bans'] ?></span><?php endif; ?></span>
+                            <small><?= e(t('admin.ip_bans_desc')) ?></small>
                         </a>
                     <?php endif; ?>
                     <?php if ($canClaimContributors): ?>
@@ -3792,6 +3889,7 @@ render_header(t('admin.title'), 'admin');
                     <th>ID</th>
                     <th><?= e(t('common.user')) ?></th>
                     <th><?= e(t('common.email')) ?></th>
+                    <th>IP</th>
                     <th><?= e(t('common.role')) ?></th>
                     <th><?= e(t('common.banned')) ?></th>
                     <th><?= e(t('common.comments')) ?></th>
@@ -3803,9 +3901,9 @@ render_header(t('admin.title'), 'admin');
             </thead>
             <tbody id="admin-user-table-body">
                 <?php if ($usersQuery === ''): ?>
-                    <tr><td colspan="10" class="muted"><?= e(t('admin.load_users_hint')) ?></td></tr>
+                    <tr><td colspan="11" class="muted"><?= e(t('admin.load_users_hint')) ?></td></tr>
                 <?php elseif ($users === []): ?>
-                    <tr><td colspan="10" class="muted"><?= e(t('admin.no_users_found', ['query' => $usersQuery])) ?></td></tr>
+                    <tr><td colspan="11" class="muted"><?= e(t('admin.no_users_found', ['query' => $usersQuery])) ?></td></tr>
                 <?php endif; ?>
 
                 <?php foreach ($users as $member): ?>
@@ -3820,7 +3918,7 @@ render_header(t('admin.title'), 'admin');
                     $countryCode = normalize_country_code((string) ($member['country_code'] ?? ''));
                     $countryText = country_flag_html($countryCode);
                     ?>
-                    <tr data-user-row data-search-value="<?= e(strtolower((string) $member['username'] . ' ' . (string) ($member['email'] ?? '') . ' ' . (string) $member['role'] . ' ' . ($isBanned ? 'banned' : 'active') . ' ' . ($commentsDisabledForUser ? 'comments disabled' : 'comments enabled'))) ?>">
+                    <tr data-user-row data-search-value="<?= e(strtolower((string) $member['username'] . ' ' . (string) ($member['email'] ?? '') . ' ' . (string) ($member['last_ip'] ?? '') . ' ' . (string) $member['role'] . ' ' . ($isBanned ? 'banned' : 'active') . ' ' . ($commentsDisabledForUser ? 'comments disabled' : 'comments enabled'))) ?>">
                         <td>#<?= (int) $member['id'] ?></td>
                         <td>
                             <div class="admin-user-identity">
@@ -3831,6 +3929,7 @@ render_header(t('admin.title'), 'admin');
                             </div>
                         </td>
                         <td><?= e((string) ($member['email'] ?: '-')) ?></td>
+                        <td><?= e((string) ($member['last_ip'] ?: '-')) ?></td>
                         <td><span class="badge <?= $memberIsOwner ? 'approved' : '' ?>"><?= e(strtoupper($memberRoleLabel)) ?></span></td>
                         <td><span class="badge <?= $isBanned ? 'error' : 'success' ?>"><?= e($isBanned ? t('common.banned') : t('common.active')) ?></span></td>
                         <td><span class="badge <?= $commentsDisabledForUser ? 'error' : 'success' ?>"><?= e($commentsDisabledForUser ? t('common.disabled') : t('common.enabled')) ?></span></td>
@@ -3905,6 +4004,68 @@ render_header(t('admin.title'), 'admin');
 </section>
 <?php endif; ?>
 
+<?php if ($activeSection === 'admin-ip-bans'): ?>
+<section class="panel fade admin-tool-section admin-list-section" id="admin-ip-bans">
+    <div class="panel-head">
+        <h2><?= e(t('admin.ip_bans')) ?></h2>
+        <p><?= e(t('admin.ip_bans_intro')) ?></p>
+    </div>
+
+    <form class="stack-form panel-narrow" method="post" action="<?= e(admin_section_url('admin-ip-bans')) ?>">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="create_ip_ban">
+
+        <label class="field">
+            <span><?= e(t('admin.ip_address')) ?></span>
+            <input type="text" name="ip_address" value="<?= e(current_request_ip()) ?>" placeholder="203.0.113.10" required>
+        </label>
+
+        <label class="field">
+            <span><?= e(t('admin.reason_optional')) ?></span>
+            <input type="text" name="reason" maxlength="255" placeholder="<?= e(t('admin.ip_ban_reason_placeholder')) ?>">
+        </label>
+
+        <small class="muted" style="text-align: left;"><?= e(t('admin.ip_bans_help')) ?></small>
+        <button class="button red hover" type="submit"><?= e(t('admin.ban_ip')) ?></button>
+    </form>
+
+    <div class="table-wrap">
+        <table class="data-table admin-ip-ban-table">
+            <thead>
+                <tr>
+                    <th><?= e(t('admin.ip_address')) ?></th>
+                    <th><?= e(t('demon.reason')) ?></th>
+                    <th><?= e(t('admin.created_by')) ?></th>
+                    <th><?= e(t('common.created')) ?></th>
+                    <th><?= e(t('admin.adjust')) ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if ($ipBans === []): ?>
+                    <tr><td colspan="5" class="muted"><?= e(t('admin.no_ip_bans')) ?></td></tr>
+                <?php endif; ?>
+                <?php foreach ($ipBans as $ban): ?>
+                    <tr>
+                        <td><b><?= e((string) $ban['ip_address']) ?></b></td>
+                        <td><?= e((string) ($ban['reason'] ?: '-')) ?></td>
+                        <td><?= e((string) ($ban['created_by_username'] ?: '-')) ?></td>
+                        <td><?= e(date('Y-m-d H:i', strtotime((string) $ban['created_at']))) ?></td>
+                        <td>
+                            <form method="post" action="<?= e(admin_section_url('admin-ip-bans')) ?>">
+                                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="action" value="delete_ip_ban">
+                                <input type="hidden" name="ban_id" value="<?= (int) $ban['id'] ?>">
+                                <button class="button ghost hover small" type="submit"><?= e(t('admin.unban_ip')) ?></button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</section>
+<?php endif; ?>
+
 <?php if ($activeSection === 'admin-pending-submissions'): ?>
 <section class="panel fade admin-tool-section admin-list-section" id="admin-pending-submissions">
     <div class="panel-head">
@@ -3927,6 +4088,7 @@ render_header(t('admin.title'), 'admin');
                 <div><dt><?= e(t('common.submitter')) ?></dt><dd><?= e((string) ($item['submitter_username'] ?: $item['player'] ?: t('common.unknown'))) ?></dd></div>
                 <div><dt><?= e(t('common.demon')) ?></dt><dd><?= e((string) $item['demon_name']) ?></dd></div>
                 <div><dt><?= e(t('common.progress')) ?></dt><dd><?= $item['progress'] !== null ? (int) $item['progress'] . '%' : '-' ?></dd></div>
+                <div><dt><?= e(t('common.enjoyment')) ?></dt><dd><?= $item['enjoyment'] !== null ? (int) $item['enjoyment'] . '/10' : '-' ?></dd></div>
                 <div><dt><?= e(t('common.platform')) ?></dt><dd><?= e((string) ($item['platform'] ?: '-')) ?></dd></div>
                 <div><dt><?= e(t('admin.refresh')) ?></dt><dd><?= $item['refresh_rate'] !== null ? (int) $item['refresh_rate'] . 'Hz' : '-' ?></dd></div>
                 <div><dt><?= e(t('common.proof')) ?></dt><dd><a class="link" target="_blank" rel="noreferrer" href="<?= e((string) ($item['video_url'] ?: '#')) ?>"><?= e(t('common.open')) ?></a></dd></div>

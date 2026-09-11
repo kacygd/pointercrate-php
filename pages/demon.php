@@ -359,7 +359,8 @@ $allDemons = db()->query('SELECT id, position, name, publisher, legacy
 
 $demonSelectSql = $hasUserBannedColumn
     ? 'SELECT d.*,
-              COUNT(CASE WHEN banned_users.id IS NULL THEN c.id END) AS completion_count
+              COUNT(CASE WHEN banned_users.id IS NULL AND c.progress >= 100 THEN c.id END) AS completion_count,
+              AVG(CASE WHEN banned_users.id IS NULL THEN c.enjoyment END) AS average_enjoyment
        FROM demons d
        LEFT JOIN completions c ON c.demon_id = d.id
        LEFT JOIN users banned_users
@@ -367,7 +368,9 @@ $demonSelectSql = $hasUserBannedColumn
         AND COALESCE(banned_users.is_banned, 0) = 1
        WHERE ' . ($viewingById ? 'd.id = :id' : 'd.position = :rank') . '
        GROUP BY d.id'
-    : 'SELECT d.*, COUNT(c.id) AS completion_count
+    : 'SELECT d.*,
+              COUNT(CASE WHEN c.progress >= 100 THEN c.id END) AS completion_count,
+              AVG(c.enjoyment) AS average_enjoyment
        FROM demons d
        LEFT JOIN completions c ON c.demon_id = d.id
        WHERE ' . ($viewingById ? 'd.id = :id' : 'd.position = :rank') . '
@@ -946,6 +949,9 @@ $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
 $showDemonPoints = demonlist_is_ranked_entry($position, $isLegacy);
 $minimumScore = $showDemonPoints ? number_format(pointercrate_score($position, $requirement, $requirement), 2) : '0.00';
 $fullScore = $showDemonPoints ? number_format(pointercrate_score($position, $requirement, 100), 2) : '0.00';
+$averageEnjoyment = $demon['average_enjoyment'] !== null
+    ? number_format((float) $demon['average_enjoyment'], 2)
+    : null;
 $currentBucket = demonlist_list_bucket($position, $isLegacy);
 $legacyRankContext = $currentBucket === 'legacy' || $isLegacy;
 $positionLabel = demonlist_position_label($position, $legacyRankContext);
@@ -1077,7 +1083,7 @@ render_header((string) $demon['name'], 'list', [
                 </blockquote>
             <?php endif; ?>
 
-            <div class="detail-grid demon-detail-grid <?= !$showDemonPoints ? 'demon-detail-grid-single' : '' ?>">
+            <div class="detail-grid demon-detail-grid">
                 <div class="panel subtle">
                     <h3><?= e(t('demon.level_info')) ?></h3>
                     <?php if ($levelInfoRows === []): ?>
@@ -1091,16 +1097,17 @@ render_header((string) $demon['name'], 'list', [
                         </dl>
                     <?php endif; ?>
                 </div>
-                <?php if ($showDemonPoints): ?>
                 <div class="panel subtle">
-                    <h3><?= e(t('demon.scoring')) ?></h3>
+                    <h3><?= e($showDemonPoints ? t('demon.scoring') : t('demon.record_stats')) ?></h3>
                     <dl class="key-value compact">
+                        <?php if ($showDemonPoints): ?>
                         <div><dt><?= e(t('demon.at_requirement')) ?></dt><dd><?= $minimumScore ?> pts</dd></div>
                         <div><dt><?= e(t('demon.at_100')) ?></dt><dd><?= $fullScore ?> pts</dd></div>
+                        <?php endif; ?>
                         <div><dt><?= e(t('demon.completions')) ?></dt><dd><?= (int) $demon['completion_count'] ?></dd></div>
+                        <div><dt><?= e(t('demon.average_enjoyment')) ?></dt><dd><?= $averageEnjoyment !== null ? e($averageEnjoyment . '/10') : '-' ?></dd></div>
                     </dl>
                 </div>
-                <?php endif; ?>
             </div>
         </section>
 
@@ -1136,6 +1143,7 @@ render_header((string) $demon['name'], 'list', [
                             <tr>
                                 <th class="blue"><?= e(t('demon.record_holder')) ?></th>
                                 <th class="blue"><?= e(t('common.progress')) ?></th>
+                                <th class="blue"><?= e(t('common.enjoyment')) ?></th>
                                 <th class="blue"><?= e(t('demon.video_proof')) ?></th>
                             </tr>
                         </thead>
@@ -1156,6 +1164,7 @@ render_header((string) $demon['name'], 'list', [
                                         </span>
                                     </td>
                                     <td><?= $progress ?>%</td>
+                                    <td><?= $completion['enjoyment'] !== null ? (int) $completion['enjoyment'] . '/10' : '-' ?></td>
                                     <td>
                                         <a class="link" target="_blank" rel="noreferrer" href="<?= e((string) $completion['video_url']) ?>">
                                             <?= e(video_host_label((string) $completion['video_url'])) ?>

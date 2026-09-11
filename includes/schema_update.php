@@ -121,7 +121,7 @@ function schema_apply_users_role_enum(PDO $pdo): void
 
 function schema_target_version(): string
 {
-    return '2026-08-ui-theme-legacy-scoring';
+    return '2026-09-users-last-ip';
 }
 
 function schema_seed_default_badges(PDO $pdo): int
@@ -143,6 +143,12 @@ function schema_seed_default_badges(PDO $pdo): int
 
 function schema_needs_update(PDO $pdo): bool
 {
+    if (!schema_col_exists($pdo, 'users', 'last_ip')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'users', 'idx_users_last_ip')) {
+        return true;
+    }
     if (!schema_col_exists($pdo, 'users', 'youtube_channel')) {
         return true;
     }
@@ -189,6 +195,9 @@ function schema_needs_update(PDO $pdo): bool
         return true;
     }
     if (!schema_idx_exists($pdo, 'users', 'idx_users_points')) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'ip_bans')) {
         return true;
     }
     if (!schema_idx_exists($pdo, 'users', 'idx_users_bonus_points')) {
@@ -243,6 +252,12 @@ function schema_needs_update(PDO $pdo): bool
         return true;
     }
     if (app_setting_get('scoring.legacy_counts', null) === null) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'completions', 'enjoyment')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'submissions', 'enjoyment')) {
         return true;
     }
     if (!schema_col_exists($pdo, 'demons', 'comments_disabled')) {
@@ -303,6 +318,17 @@ function schema_needs_update(PDO $pdo): bool
 function run_schema_update(PDO $pdo): array
 {
     $logs = [];
+
+    if (!schema_col_exists($pdo, 'users', 'last_ip')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN last_ip VARCHAR(45) NULL AFTER country_code');
+        $logs[] = '[OK] Added users.last_ip';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN last_ip VARCHAR(45) NULL');
+
+    if (!schema_idx_exists($pdo, 'users', 'idx_users_last_ip')) {
+        $pdo->exec('ALTER TABLE users ADD INDEX idx_users_last_ip (last_ip)');
+        $logs[] = '[OK] Added idx_users_last_ip';
+    }
 
     if (!schema_col_exists($pdo, 'users', 'youtube_channel')) {
         $pdo->exec('ALTER TABLE users ADD COLUMN youtube_channel VARCHAR(255) NULL AFTER country_code');
@@ -393,6 +419,25 @@ function run_schema_update(PDO $pdo): array
     if (!schema_idx_exists($pdo, 'users', 'idx_users_bonus_points')) {
         $pdo->exec('ALTER TABLE users ADD INDEX idx_users_bonus_points (bonus_points)');
         $logs[] = '[OK] Added idx_users_bonus_points';
+    }
+
+    if (!schema_table_exists($pdo, 'ip_bans')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS ip_bans (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                ip_address VARCHAR(45) NOT NULL,
+                reason VARCHAR(255) NULL,
+                created_by_user_id INT UNSIGNED NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_ip_bans_ip_address (ip_address),
+                KEY idx_ip_bans_created_by (created_by_user_id),
+                CONSTRAINT fk_ip_bans_created_by
+                    FOREIGN KEY (created_by_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $logs[] = '[OK] Added ip_bans table';
     }
 
     if (!schema_users_role_enum_ready($pdo)) {
@@ -492,6 +537,18 @@ function run_schema_update(PDO $pdo): array
         $pdo->exec('ALTER TABLE demons ADD INDEX idx_demons_comments_disabled (comments_disabled)');
         $logs[] = '[OK] Added idx_demons_comments_disabled';
     }
+
+    if (!schema_col_exists($pdo, 'completions', 'enjoyment')) {
+        $pdo->exec('ALTER TABLE completions ADD COLUMN enjoyment TINYINT UNSIGNED NULL AFTER progress');
+        $logs[] = '[OK] Added completions.enjoyment';
+    }
+    $pdo->exec('ALTER TABLE completions MODIFY COLUMN enjoyment TINYINT UNSIGNED NULL');
+
+    if (!schema_col_exists($pdo, 'submissions', 'enjoyment')) {
+        $pdo->exec('ALTER TABLE submissions ADD COLUMN enjoyment TINYINT UNSIGNED NULL AFTER progress');
+        $logs[] = '[OK] Added submissions.enjoyment';
+    }
+    $pdo->exec('ALTER TABLE submissions MODIFY COLUMN enjoyment TINYINT UNSIGNED NULL');
 
     if (!schema_table_exists($pdo, 'demon_level_info_values')) {
         $pdo->exec(

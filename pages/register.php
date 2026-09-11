@@ -16,8 +16,13 @@ $form = [
     'email' => '',
 ];
 $errors = [];
+$ipBanned = current_request_ip_banned();
 
-if (method_is_post()) {
+if ($ipBanned) {
+    $errors[] = t('auth.error_ip_banned');
+}
+
+if (method_is_post() && !$ipBanned) {
     $form['username'] = normalize_username((string) ($_POST['username'] ?? ''));
     $form['email'] = trim((string) ($_POST['email'] ?? ''));
     $password = (string) ($_POST['password'] ?? '');
@@ -50,8 +55,13 @@ if (method_is_post()) {
     if ($errors === []) {
         try {
             $pdo = db();
+            $exists = $pdo->prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(:username) LIMIT 1');
+            $exists->execute([':username' => $form['username']]);
+            if ($exists->fetchColumn() !== false) {
+                $errors[] = t('auth.register.error_username_exists');
+            }
 
-            if (users_has_display_name_column($pdo)) {
+            if ($errors === [] && users_has_display_name_column($pdo)) {
                 $insert = $pdo->prepare('INSERT INTO users (username, display_name, email, password_hash, role)
                                          VALUES (:username, :display_name, :email, :password_hash, "player")');
                 $insert->execute([
@@ -60,7 +70,7 @@ if (method_is_post()) {
                     ':email' => $form['email'] !== '' ? $form['email'] : null,
                     ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
                 ]);
-            } else {
+            } elseif ($errors === []) {
                 $insert = $pdo->prepare('INSERT INTO users (username, email, password_hash, role)
                                          VALUES (:username, :email, :password_hash, "player")');
                 $insert->execute([
@@ -68,6 +78,10 @@ if (method_is_post()) {
                     ':email' => $form['email'] !== '' ? $form['email'] : null,
                     ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
                 ]);
+            }
+
+            if ($errors !== []) {
+                throw new RuntimeException('validation');
             }
 
             $userId = (int) db()->lastInsertId();
@@ -89,6 +103,10 @@ if (method_is_post()) {
             } else {
                 $errors[] = t('auth.register.error_failed');
             }
+        } catch (RuntimeException $exception) {
+            if ($exception->getMessage() !== 'validation') {
+                $errors[] = t('auth.register.error_failed');
+            }
         }
     }
 }
@@ -105,6 +123,7 @@ render_header(t('auth.register.title'), 'register');
         <div class="info-red"><?= e(implode(' ', $errors)) ?></div>
     <?php endif; ?>
 
+    <?php if (!$ipBanned): ?>
     <form class="stack-form" method="post" action="<?= e($hasNext ? base_url('register.php?next=' . rawurlencode($nextPath)) : base_url('register.php')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="next" value="<?= e($nextPath) ?>">
@@ -133,6 +152,7 @@ render_header(t('auth.register.title'), 'register');
 
         <button class="button blue hover" type="submit"><?= e(t('auth.register.button')) ?></button>
     </form>
+    <?php endif; ?>
 
     <p class="muted" style="margin-top: 12px;">
         <?= e(t('auth.register.already')) ?> <a class="link" href="<?= e($hasNext ? base_url('login.php?next=' . rawurlencode($nextPath)) : base_url('login.php')) ?>"><?= e(t('auth.register.login_now')) ?></a>

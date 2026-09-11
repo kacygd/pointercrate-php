@@ -358,6 +358,7 @@ if ($hasUserBannedColumn) {
                                     ON LOWER(banned_users.username) = LOWER(c.player)
                                    AND COALESCE(banned_users.is_banned, 0) = 1
                                   WHERE banned_users.id IS NULL
+                                    AND c.progress >= 100
                                   GROUP BY c.demon_id
                               ) cc ON cc.demon_id = d.id
                               ORDER BY d.position ASC')->fetchAll();
@@ -367,6 +368,7 @@ if ($hasUserBannedColumn) {
                               LEFT JOIN (
                                   SELECT c.demon_id, COUNT(*) AS completion_count
                                   FROM completions c
+                                  WHERE c.progress >= 100
                                   GROUP BY c.demon_id
                               ) cc ON cc.demon_id = d.id
                               ORDER BY d.position ASC')->fetchAll();

@@ -13,8 +13,13 @@ if (is_logged_in()) {
 
 $username = '';
 $errors = [];
+$ipBanned = current_request_ip_banned();
 
-if (method_is_post()) {
+if ($ipBanned) {
+    $errors[] = t('auth.error_ip_banned');
+}
+
+if (method_is_post() && !$ipBanned) {
     $username = normalize_username((string) ($_POST['username'] ?? ''));
     $password = (string) ($_POST['password'] ?? '');
 
@@ -79,6 +84,7 @@ render_header(t('auth.login.title'), 'login');
         <div class="info-red"><?= e(implode(' ', $errors)) ?></div>
     <?php endif; ?>
 
+    <?php if (!$ipBanned): ?>
     <form class="stack-form" method="post" action="<?= e($hasNext ? base_url('login.php?next=' . rawurlencode($nextPath)) : base_url('login.php')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="next" value="<?= e($nextPath) ?>">
@@ -97,9 +103,12 @@ render_header(t('auth.login.title'), 'login');
 
         <button class="button blue hover" type="submit"><?= e(t('auth.login.button')) ?></button>
     </form>
+    <?php endif; ?>
 
+    <?php if (!$ipBanned): ?>
     <p class="muted" style="margin-top: 12px;">
         <?= e(t('auth.login.new_player')) ?> <a class="link" href="<?= e($hasNext ? base_url('register.php?next=' . rawurlencode($nextPath)) : base_url('register.php')) ?>"><?= e(t('auth.login.create_account')) ?></a>
     </p>
+    <?php endif; ?>
 </section>
 <?php render_footer(); ?>

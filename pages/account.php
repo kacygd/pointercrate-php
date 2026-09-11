@@ -372,7 +372,7 @@ if (method_is_post()) {
     }
 }
 
-$stmt = db()->prepare('SELECT id, type, demon_name, progress, video_url, status, created_at, reviewed_at
+$stmt = db()->prepare('SELECT id, type, demon_name, progress, enjoyment, video_url, status, created_at, reviewed_at
                        FROM submissions
                        WHERE submitted_by_user_id = :user_id
                        ORDER BY created_at DESC
@@ -652,13 +652,14 @@ render_header(t('account.title'), 'account');
                     <th><?= e(t('common.type')) ?></th>
                     <th><?= e(t('common.demon')) ?></th>
                     <th><?= e(t('common.progress')) ?></th>
+                    <th><?= e(t('common.enjoyment')) ?></th>
                     <th><?= e(t('common.status')) ?></th>
                     <th><?= e(t('common.created')) ?></th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ($submissions === []): ?>
-                    <tr><td colspan="6" class="muted"><?= e(t('account.no_submissions')) ?></td></tr>
+                    <tr><td colspan="7" class="muted"><?= e(t('account.no_submissions')) ?></td></tr>
                 <?php endif; ?>
                 <?php foreach ($submissions as $item): ?>
                     <tr>
@@ -666,6 +667,7 @@ render_header(t('account.title'), 'account');
                         <td><?= e((string) $item['type']) ?></td>
                         <td><?= e((string) $item['demon_name']) ?></td>
                         <td><?= $item['progress'] !== null ? (int) $item['progress'] . '%' : '-' ?></td>
+                        <td><?= $item['enjoyment'] !== null ? (int) $item['enjoyment'] . '/10' : '-' ?></td>
                         <td>
                             <span class="badge <?= $item['status'] === 'approved' ? 'success' : ($item['status'] === 'rejected' ? 'error' : '') ?>">
                                 <?= e(status_label((string) $item['status'])) ?>

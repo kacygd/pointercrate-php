@@ -582,6 +582,85 @@ function users_has_login_lockout_columns(?PDO $pdo = null): bool
     return $result;
 }
 
+function table_exists(string $table, ?PDO $pdo = null): bool
+{
+    try {
+        $pdo = $pdo instanceof PDO ? $pdo : db();
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*)
+             FROM information_schema.tables
+             WHERE table_schema = DATABASE()
+               AND table_name = :table"
+        );
+        $stmt->execute([':table' => $table]);
+
+        return (int) $stmt->fetchColumn() > 0;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+function current_request_ip(): string
+{
+    return normalize_ip_address((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+}
+
+function normalize_ip_address(string $ip): string
+{
+    $normalized = trim($ip);
+    if ($normalized === '') {
+        return '';
+    }
+
+    if (str_contains($normalized, ':') && str_starts_with($normalized, '[') && str_ends_with($normalized, ']')) {
+        $normalized = trim($normalized, '[]');
+    }
+
+    if (filter_var($normalized, FILTER_VALIDATE_IP) === false) {
+        return '';
+    }
+
+    $packed = @inet_pton($normalized);
+    if ($packed === false) {
+        return $normalized;
+    }
+
+    $unpacked = @inet_ntop($packed);
+    return is_string($unpacked) && $unpacked !== '' ? $unpacked : $normalized;
+}
+
+function ip_bans_table_ready(?PDO $pdo = null): bool
+{
+    return table_exists('ip_bans', $pdo);
+}
+
+function is_ip_banned(?string $ip = null, ?PDO $pdo = null): bool
+{
+    $ip = normalize_ip_address($ip ?? current_request_ip());
+    if ($ip === '') {
+        return false;
+    }
+
+    try {
+        $pdo = $pdo instanceof PDO ? $pdo : db();
+        if (!ip_bans_table_ready($pdo)) {
+            return false;
+        }
+
+        $stmt = $pdo->prepare('SELECT id FROM ip_bans WHERE ip_address = :ip LIMIT 1');
+        $stmt->execute([':ip' => $ip]);
+
+        return $stmt->fetchColumn() !== false;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+function current_request_ip_banned(): bool
+{
+    return is_ip_banned(current_request_ip());
+}
+
 function login_max_failed_attempts(): int
 {
     return 5;
@@ -2925,6 +3004,11 @@ function current_user(): ?array
     $cached = true;
     unset($_SESSION['user_id']);
 
+    if (current_request_ip_banned()) {
+        logout_user();
+        return null;
+    }
+
     $userIdKey = app_session_key('user_id');
     $contextKey = app_session_key('auth_context');
     $expectedContext = app_session_scope();
@@ -3029,11 +3113,59 @@ function user_public_name_by_id(?int $userId, ?string $fallback = null): ?string
     }
 }
 
+function users_has_last_ip_column(?PDO $pdo = null): bool
+{
+    static $checked = false;
+    static $result = false;
+
+    if ($checked) {
+        return $result;
+    }
+
+    $checked = true;
+
+    try {
+        $pdo = $pdo instanceof PDO ? $pdo : db();
+        $stmt = $pdo->query(
+            "SELECT COUNT(*)
+             FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND table_name = 'users'
+               AND column_name = 'last_ip'"
+        );
+        $result = (int) $stmt->fetchColumn() > 0;
+    } catch (Throwable) {
+        $result = false;
+    }
+
+    return $result;
+}
+
+function users_record_last_ip(int $userId, ?string $ip = null): void
+{
+    if ($userId < 1 || !users_has_last_ip_column()) {
+        return;
+    }
+
+    $ip = normalize_ip_address($ip ?? current_request_ip());
+    if ($ip === '') {
+        return;
+    }
+
+    try {
+        $stmt = db()->prepare('UPDATE users SET last_ip = :ip WHERE id = :id');
+        $stmt->execute([':ip' => $ip, ':id' => $userId]);
+    } catch (Throwable) {
+    }
+}
+
 function login_user(array $user): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) {
         session_regenerate_id(true);
     }
+
+    users_record_last_ip((int) $user['id']);
 
     unset($_SESSION['user_id']);
     $_SESSION[app_session_key('auth_context')] = app_session_scope();
