@@ -121,7 +121,7 @@ function schema_apply_users_role_enum(PDO $pdo): void
 
 function schema_target_version(): string
 {
-    return '2026-09-users-last-ip';
+    return '2026-09-demon-name-case-sensitive';
 }
 
 function schema_seed_default_badges(PDO $pdo): int
@@ -246,6 +246,30 @@ function schema_needs_update(PDO $pdo): bool
         return true;
     }
     if (!schema_app_settings_value_text_ready($pdo)) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'user_badges')) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'demon_tags')) {
+        return true;
+    }
+    if (!schema_table_exists($pdo, 'demon_tag_links')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'demon_tags', 'gradient')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'demon_tags', 'gradient_color')) {
+        return true;
+    }
+    if (schema_idx_exists($pdo, 'demons', 'uq_demons_name')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'demons', 'name_cs')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'demons', 'uq_demons_name_cs')) {
         return true;
     }
     if (app_setting_get('schema.version', '') !== schema_target_version()) {
@@ -761,6 +785,77 @@ function run_schema_update(PDO $pdo): array
         $logs[] = '[OK] Added user_badges table';
     }
 
+    if (!schema_table_exists($pdo, 'demon_tags')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS demon_tags (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(60) NOT NULL,
+                color CHAR(7) NOT NULL DEFAULT '#465A7A',
+                created_by_user_id INT UNSIGNED NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_demon_tags_name (name),
+                KEY idx_demon_tags_created_by (created_by_user_id),
+                CONSTRAINT fk_demon_tags_created_by
+                    FOREIGN KEY (created_by_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $logs[] = '[OK] Added demon_tags table';
+    }
+
+    if (!schema_table_exists($pdo, 'demon_tag_links')) {
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS demon_tag_links (
+                demon_id INT UNSIGNED NOT NULL,
+                tag_id INT UNSIGNED NOT NULL,
+                assigned_by_user_id INT UNSIGNED NULL,
+                assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (demon_id, tag_id),
+                KEY idx_demon_tag_links_tag (tag_id),
+                KEY idx_demon_tag_links_assigned_by (assigned_by_user_id),
+                CONSTRAINT fk_demon_tag_links_demon
+                    FOREIGN KEY (demon_id)
+                    REFERENCES demons (id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_demon_tag_links_tag
+                    FOREIGN KEY (tag_id)
+                    REFERENCES demon_tags (id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_demon_tag_links_assigned_by
+                    FOREIGN KEY (assigned_by_user_id)
+                    REFERENCES users (id)
+                    ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $logs[] = '[OK] Added demon_tag_links table';
+    }
+
+    if (schema_table_exists($pdo, 'demon_tags') && !schema_col_exists($pdo, 'demon_tags', 'gradient_color')) {
+        $pdo->exec('ALTER TABLE demon_tags ADD COLUMN gradient_color CHAR(7) NULL AFTER gradient');
+        $logs[] = '[OK] Added demon_tags.gradient_color';
+    }
+
+    if (schema_idx_exists($pdo, 'demons', 'uq_demons_name')) {
+        $pdo->exec('ALTER TABLE demons DROP INDEX uq_demons_name');
+        $logs[] = '[OK] Dropped case-insensitive unique key uq_demons_name';
+    }
+    if (schema_col_exists($pdo, 'demons', 'name')
+        && !schema_col_exists($pdo, 'demons', 'name_cs')) {
+        $pdo->exec(
+            "ALTER TABLE demons
+             ADD COLUMN name_cs VARCHAR(120) BINARY
+                 GENERATED ALWAYS AS (name) STORED"
+        );
+        $logs[] = '[OK] Added demons.name_cs (case-sensitive shadow column)';
+    }
+    if (schema_col_exists($pdo, 'demons', 'name_cs')
+        && !schema_idx_exists($pdo, 'demons', 'uq_demons_name_cs')) {
+        $pdo->exec('ALTER TABLE demons ADD UNIQUE KEY uq_demons_name_cs (name_cs)');
+        $logs[] = '[OK] Added case-sensitive unique key uq_demons_name_cs';
+    }
+
     $seededListSettings = (int) $pdo->exec(
         "INSERT IGNORE INTO app_settings (setting_key, setting_value)
          VALUES
@@ -853,6 +948,8 @@ function run_schema_update(PDO $pdo): array
         'level_comment_reports',
         'badges',
         'user_badges',
+        'demon_tags',
+        'demon_tag_links',
     ];
     $optimizedTables = 0;
     foreach ($optimizeTables as $tableName) {

@@ -373,6 +373,66 @@ function api_bind(PDOStatement $stmt, array $params): void
     }
 }
 
+function api_demon_tags_map(PDO $pdo, array $demonIds): array
+{
+    $demonIds = array_values(array_filter(array_map('intval', $demonIds), static fn (int $id): bool => $id > 0));
+    if ($demonIds === [] || !api_table_exists($pdo, 'demon_tags') || !api_table_exists($pdo, 'demon_tag_links')) {
+        return [];
+    }
+
+    $placeholders = implode(', ', array_fill(0, count($demonIds), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT dtl.demon_id, dt.id, dt.name, dt.color
+         FROM demon_tag_links dtl
+         INNER JOIN demon_tags dt ON dt.id = dtl.tag_id
+         WHERE dtl.demon_id IN ({$placeholders})
+         ORDER BY dtl.demon_id ASC, dt.name ASC"
+    );
+    $stmt->execute($demonIds);
+
+    $map = [];
+    $gradientCol = api_schema_col_exists($pdo, 'demon_tags', 'gradient') ? ', dt.gradient' : '';
+    $gradientColorCol = api_schema_col_exists($pdo, 'demon_tags', 'gradient_color') ? ', dt.gradient_color' : '';
+    $stmt = $pdo->prepare(
+        "SELECT dtl.demon_id, dt.id, dt.name, dt.color{$gradientCol}{$gradientColorCol}
+         FROM demon_tag_links dtl
+         INNER JOIN demon_tags dt ON dt.id = dtl.tag_id
+         WHERE dtl.demon_id IN ({$placeholders})
+         ORDER BY dtl.demon_id ASC, dt.name ASC"
+    );
+    $stmt->execute($demonIds);
+
+    foreach ($stmt->fetchAll() as $row) {
+        $map[(int) $row['demon_id']][] = [
+            'id' => (int) $row['id'],
+            'name' => (string) $row['name'],
+            'color' => (string) $row['color'],
+            'gradient' => isset($row['gradient']) ? (bool) (int) $row['gradient'] : false,
+            'gradient_color' => isset($row['gradient_color']) && $row['gradient_color'] !== null && $row['gradient_color'] !== ''
+                ? (string) $row['gradient_color']
+                : null,
+        ];
+    }
+
+    return $map;
+}
+
+function api_demon_ids_from_items(array $items): array
+{
+    return array_map(static fn (array $item): int => (int) ($item['id'] ?? 0), $items);
+}
+
+function api_attach_demon_tags(array $items, array $tagsMap): array
+{
+    foreach ($items as $index => $item) {
+        $demonId = (int) ($item['id'] ?? 0);
+        $item['tags'] = $tagsMap[$demonId] ?? [];
+        $items[$index] = $item;
+    }
+
+    return $items;
+}
+
 function api_paginated_sql(PDO $pdo, string $sql, array $params, string $pageColumn, callable $mapper): array
 {
     $before = api_query_int('before');
@@ -529,10 +589,24 @@ function api_paginate_demons(PDO $pdo, bool $listed): array
         $params[':verifier_name'] = $verifierName;
     }
 
+    $tagFilter = api_query_string('tag');
+    if ($tagFilter !== null && $tagFilter !== ''
+        && api_table_exists($pdo, 'demon_tags') && api_table_exists($pdo, 'demon_tag_links')) {
+        $where[] = 'EXISTS (
+            SELECT 1 FROM demon_tag_links dtl
+            INNER JOIN demon_tags dt ON dt.id = dtl.tag_id
+            WHERE dtl.demon_id = d.id AND LOWER(dt.name) = LOWER(:tag_name)
+        )';
+        $params[':tag_name'] = $tagFilter;
+    }
+
     $sql = 'SELECT ' . $parts['select'] . $parts['from'] . ' WHERE ' . implode(' AND ', $where);
     $pageColumn = $listed ? 'd.position' : 'd.id';
 
-    return api_paginated_sql($pdo, $sql, $params, $pageColumn, static fn(array $row): array => api_format_demon($row));
+    $items = api_paginated_sql($pdo, $sql, $params, $pageColumn, static fn(array $row): array => api_format_demon($row));
+    $tagsMap = api_demon_tags_map($pdo, api_demon_ids_from_items($items));
+
+    return api_attach_demon_tags($items, $tagsMap);
 }
 
 function api_full_demon(PDO $pdo, int $demonId): array
@@ -552,6 +626,7 @@ function api_full_demon(PDO $pdo, int $demonId): array
         api_creator_names($row)
     );
     $demon['records'] = api_records_for_demon($pdo, (int) $row['id']);
+    $demon['tags'] = api_demon_tags_map($pdo, [(int) $row['id']])[(int) $row['id']] ?? [];
 
     return $demon;
 }
@@ -581,6 +656,7 @@ function api_level_by_level_id(PDO $pdo, string $levelId): array
         'publisher' => $demon['publisher'],
         'verifier' => $demon['verifier'],
         'creators' => array_map(static fn(string $name): array => api_player_for_name($name), $creators),
+        'tags' => api_demon_tags_map($pdo, [(int) $row['id']])[(int) $row['id']] ?? [],
     ];
 }
 

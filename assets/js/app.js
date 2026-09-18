@@ -1,5 +1,5 @@
 (() => {
-  console.info('list v2.0');
+  console.info('list v2.1');
 
   const i18n = window.DEMONLIST_I18N && typeof window.DEMONLIST_I18N === 'object'
     ? window.DEMONLIST_I18N
@@ -84,7 +84,7 @@
       return;
     }
 
-    if (!target.closest('#lists')) {
+    if (!target.closest('#lists') && !target.closest('.list-sort-dropdown')) {
       closeAllDropdowns();
     }
   });
@@ -93,6 +93,94 @@
   if (firstToggle instanceof HTMLElement) {
     firstToggle.classList.add('active');
   }
+
+  document.querySelectorAll('.list-sort-dropdown form').forEach((form) => {
+    form.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+  });
+
+  (() => {
+    const form = document.getElementById('list-enjoyment-filter');
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const lo = document.getElementById('list-enjoyment-lo');
+    const hi = document.getElementById('list-enjoyment-hi');
+    const fill = document.getElementById('list-enjoyment-fill');
+    const numMin = form.querySelector('input[name="enj_min"]');
+    const numMax = form.querySelector('input[name="enj_max"]');
+    if (!(lo instanceof HTMLInputElement) || !(hi instanceof HTMLInputElement)
+      || !(numMin instanceof HTMLInputElement) || !(numMax instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const clampNum = (raw, fallback) => {
+      const value = parseFloat(raw);
+      if (!Number.isFinite(value)) {
+        return fallback;
+      }
+      return Math.min(10, Math.max(0, Math.round(value * 2) / 2));
+    };
+
+    const paint = () => {
+      let low = clampNum(lo.value, 0);
+      let high = clampNum(hi.value, 10);
+      if (low > high) {
+        [low, high] = [high, low];
+      }
+      if (fill instanceof HTMLElement) {
+        fill.style.left = `${low * 10}%`;
+        fill.style.right = `${100 - high * 10}%`;
+      }
+    };
+
+    const syncFromSliders = () => {
+      let low = clampNum(lo.value, 0);
+      let high = clampNum(hi.value, 10);
+      if (low > high) {
+        [low, high] = [high, low];
+        lo.value = String(low);
+        hi.value = String(high);
+      }
+      if (document.activeElement !== numMin) {
+        numMin.value = low === 0 ? '' : String(low);
+      }
+      if (document.activeElement !== numMax) {
+        numMax.value = high === 10 ? '' : String(high);
+      }
+      paint();
+    };
+
+    const syncFromNumbers = () => {
+      const low = clampNum(numMin.value, parseFloat(lo.value) || 0);
+      const high = clampNum(numMax.value, parseFloat(hi.value) || 10);
+      lo.value = String(Math.min(low, high));
+      hi.value = String(Math.max(low, high));
+      paint();
+    };
+
+    lo.addEventListener('input', syncFromSliders);
+    hi.addEventListener('input', syncFromSliders);
+    numMin.addEventListener('input', syncFromNumbers);
+    numMax.addEventListener('input', syncFromNumbers);
+    syncFromSliders();
+  })();
+
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tag_reopen') === '1') {
+      params.delete('tag_reopen');
+      const clean = params.toString();
+      const cleanUrl = window.location.pathname + (clean ? `?${clean}` : '') + window.location.hash;
+      window.history.replaceState(null, '', cleanUrl);
+
+      const sortToggle = document.querySelector('.list-sort-button[data-dropdown-id="list-sort-menu"]');
+      if (sortToggle instanceof HTMLElement) {
+        openDropdown('list-sort-menu', sortToggle);
+      }
+    }
+  } catch (error) {}
 
   const navToggle = document.getElementById('mobile-nav-toggle');
   const mobileDropdown = document.getElementById('mobile-nav-dropdown');
@@ -141,6 +229,81 @@
       });
     });
   }
+
+  const cardSearchBar = cardSearchInput instanceof HTMLInputElement ? cardSearchInput.closest('.search') : null;
+  if (cardSearchBar instanceof HTMLElement) {
+    cardSearchBar.addEventListener('click', (event) => {
+      if (event.target !== cardSearchBar) {
+        return;
+      }
+
+      const rect = cardSearchBar.getBoundingClientRect();
+      if (event.clientX >= rect.right - 30) {
+        cardSearchInput.value = '';
+        cardSearchInput.dispatchEvent(new Event('input'));
+        cardSearchInput.focus();
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-tag-preview]').forEach((form) => {
+    const nameInput = form.querySelector('[data-tag-preview-name]');
+    const colorInput = form.querySelector('[data-tag-preview-color]');
+    const gradientInput = form.querySelector('[data-tag-preview-gradient]');
+    const gradientColorInput = form.querySelector('[data-tag-preview-gradient-color]');
+    const chip = form.querySelector('[data-tag-preview-chip]');
+    if (!nameInput || !colorInput || !gradientInput || !gradientColorInput || !chip) {
+      return;
+    }
+
+    const fallbackText = chip.getAttribute('data-tag-preview-fallback') || 'Tag';
+    const fallbackColor = '#465a7a';
+
+    const safeHex = (value, fallback) => (/^#[0-9a-fA-F]{6}$/.test((value || '').trim()) ? (value || '').trim().toLowerCase() : fallback);
+
+    const mixHex = (a, b, t) => {
+      const pa = a.slice(1);
+      const pb = b.slice(1);
+      let out = '#';
+      for (let i = 0; i < 3; i++) {
+        const ca = parseInt(pa.slice(i * 2, i * 2 + 2), 16);
+        const cb = parseInt(pb.slice(i * 2, i * 2 + 2), 16);
+        out += Math.round(ca + (cb - ca) * t).toString(16).padStart(2, '0');
+      }
+      return out;
+    };
+
+    const render = () => {
+      const base = safeHex(colorInput.value, fallbackColor);
+      const second = safeHex(gradientColorInput.value, base);
+      const gradientField = gradientColorInput.closest('.field');
+      const text = nameInput.value.trim();
+
+      chip.textContent = text !== '' ? text : fallbackText;
+
+      if (gradientInput.checked) {
+        const mid = mixHex(base, second, 0.5);
+        chip.style.backgroundImage = 'linear-gradient(160deg, ' + base + ' 0%, ' + mid + ' 46%, ' + second + ' 100%)';
+        chip.style.backgroundColor = 'transparent';
+        if (gradientField instanceof HTMLElement) {
+          gradientField.hidden = false;
+        }
+      } else {
+        chip.style.backgroundImage = 'none';
+        chip.style.backgroundColor = base;
+        if (gradientField instanceof HTMLElement) {
+          gradientField.hidden = true;
+        }
+      }
+    };
+
+    nameInput.addEventListener('input', render);
+    colorInput.addEventListener('input', render);
+    gradientColorInput.addEventListener('input', render);
+    gradientInput.addEventListener('change', render);
+
+    render();
+  });
 
   const typeSelect = document.getElementById('submission-type');
   if (typeSelect instanceof HTMLSelectElement) {

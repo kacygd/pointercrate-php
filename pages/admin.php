@@ -1223,6 +1223,178 @@ if (method_is_post()) {
         redirect(admin_section_url('admin-badges'));
     }
 
+    if ($action === 'create_tag' && can_manage_levels()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', t('flash.invalid_token'));
+            redirect(admin_section_url('admin-tags'));
+        }
+
+        $tagName = normalize_tag_name((string) ($_POST['tag_name'] ?? ''));
+        $tagColor = normalize_tag_color($_POST['tag_color'] ?? null);
+        $tagGradient = isset($_POST['tag_gradient']) ? 1 : 0;
+        $tagGradientColor = $tagGradient === 1
+            ? normalize_tag_color($_POST['tag_gradient_color'] ?? null)
+            : null;
+
+        if ($tagName === '') {
+            flash('error', 'Tag name is required.');
+            redirect(admin_section_url('admin-tags'));
+        }
+
+        try {
+            $stmt = db()->prepare(
+                'INSERT INTO demon_tags (name, color, gradient, gradient_color, created_by_user_id)
+                 VALUES (:name, :color, :gradient, :gradient_color, :created_by_user_id)'
+            );
+            $stmt->execute([
+                ':name' => $tagName,
+                ':color' => $tagColor,
+                ':gradient' => $tagGradient,
+                ':gradient_color' => $tagGradientColor,
+                ':created_by_user_id' => current_user_id(),
+            ]);
+
+            flash('success', 'Created tag "' . $tagName . '".');
+        } catch (Throwable $throwable) {
+            $message = $throwable instanceof PDOException && (string) $throwable->getCode() === '23000'
+                ? 'A tag with that name already exists.'
+                : 'Could not create tag: ' . $throwable->getMessage();
+            flash('error', $message);
+        }
+
+        redirect(admin_section_url('admin-tags'));
+    }
+
+    if ($action === 'update_tag' && can_manage_levels()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', t('flash.invalid_token'));
+            redirect(admin_section_url('admin-tags'));
+        }
+
+        $tagId = (int) ($_POST['tag_id'] ?? 0);
+        $tagName = normalize_tag_name((string) ($_POST['tag_name'] ?? ''));
+        $tagColor = normalize_tag_color($_POST['tag_color'] ?? null);
+        $tagGradient = isset($_POST['tag_gradient']) ? 1 : 0;
+        $tagGradientColor = $tagGradient === 1
+            ? normalize_tag_color($_POST['tag_gradient_color'] ?? null)
+            : null;
+
+        if ($tagId < 1 || $tagName === '') {
+            flash('error', 'Choose a tag and enter a tag name.');
+            redirect(admin_section_url('admin-tags'));
+        }
+
+        try {
+            $stmt = db()->prepare('UPDATE demon_tags SET name = :name, color = :color, gradient = :gradient, gradient_color = :gradient_color WHERE id = :id');
+            $stmt->execute([
+                ':name' => $tagName,
+                ':color' => $tagColor,
+                ':gradient' => $tagGradient,
+                ':gradient_color' => $tagGradientColor,
+                ':id' => $tagId,
+            ]);
+
+            flash('success', 'Updated tag "' . $tagName . '".');
+        } catch (Throwable $throwable) {
+            $message = $throwable instanceof PDOException && (string) $throwable->getCode() === '23000'
+                ? 'A tag with that name already exists.'
+                : 'Could not update tag: ' . $throwable->getMessage();
+            flash('error', $message);
+        }
+
+        redirect(admin_section_url('admin-tags'));
+    }
+
+    if ($action === 'delete_tag' && can_manage_levels()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', t('flash.invalid_token'));
+            redirect(admin_section_url('admin-tags'));
+        }
+
+        $tagId = (int) ($_POST['tag_id'] ?? 0);
+        if ($tagId < 1) {
+            flash('error', 'Choose a tag to delete.');
+            redirect(admin_section_url('admin-tags'));
+        }
+
+        try {
+            $stmt = db()->prepare('DELETE FROM demon_tags WHERE id = :id');
+            $stmt->execute([':id' => $tagId]);
+
+            flash('success', 'Deleted the tag.');
+        } catch (Throwable $throwable) {
+            flash('error', 'Could not delete tag: ' . $throwable->getMessage());
+        }
+
+        redirect(admin_section_url('admin-tags'));
+    }
+
+    if ($action === 'assign_tag' && can_manage_levels()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', t('flash.invalid_token'));
+            redirect(admin_section_url('admin-tags'));
+        }
+
+        $tagIdsInput = demon_tag_parse_ids_from_input($_POST['tag_ids'] ?? []);
+        $targetDemonName = trim((string) ($_POST['demon_name'] ?? ''));
+        $tagMode = strtolower(trim((string) ($_POST['tag_mode'] ?? 'assign')));
+
+        if ($tagIdsInput === [] || $targetDemonName === '' || !in_array($tagMode, ['assign', 'remove'], true)) {
+            flash('error', 'Choose at least one tag and a level.');
+            redirect(admin_section_url('admin-tags'));
+        }
+
+        try {
+            $pdo = db();
+            $demonStmt = $pdo->prepare('SELECT id, name FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1');
+            $demonStmt->execute([':name' => $targetDemonName]);
+            $demon = $demonStmt->fetch();
+            if ($demon === false) {
+                throw new RuntimeException('Level not found.');
+            }
+
+            $validTagIds = demon_tag_valid_ids($pdo, $tagIdsInput);
+            if ($validTagIds === []) {
+                throw new RuntimeException('Tag not found.');
+            }
+
+            $demonId = (int) $demon['id'];
+
+            if ($tagMode === 'assign') {
+                $assign = $pdo->prepare(
+                    'INSERT IGNORE INTO demon_tag_links (demon_id, tag_id, assigned_by_user_id)
+                     VALUES (:demon_id, :tag_id, :assigned_by_user_id)'
+                );
+
+                foreach ($validTagIds as $validTagId) {
+                    $assign->execute([
+                        ':demon_id' => $demonId,
+                        ':tag_id' => $validTagId,
+                        ':assigned_by_user_id' => current_user_id(),
+                    ]);
+                }
+
+                flash('success', 'Assigned ' . count($validTagIds) . ' tag(s) to "' . (string) $demon['name'] . '".');
+            } else {
+                $placeholders = implode(', ', array_fill(0, count($validTagIds), '?'));
+                $remove = $pdo->prepare(
+                    "DELETE FROM demon_tag_links WHERE demon_id = :demon_id AND tag_id IN ({$placeholders})"
+                );
+                $remove->bindValue(':demon_id', $demonId, PDO::PARAM_INT);
+                foreach ($validTagIds as $index => $validTagId) {
+                    $remove->bindValue($index + 1, $validTagId, PDO::PARAM_INT);
+                }
+                $remove->execute();
+
+                flash('success', 'Removed ' . count($validTagIds) . ' tag(s) from "' . (string) $demon['name'] . '".');
+            }
+        } catch (Throwable $throwable) {
+            flash('error', $throwable->getMessage());
+        }
+
+        redirect(admin_section_url('admin-tags'));
+    }
+
     if ($action === 'claim_contributor' && can_claim_contributors()) {
         if (!validate_csrf($_POST['_token'] ?? null)) {
             flash('error', t('flash.invalid_token'));
@@ -1382,19 +1554,16 @@ if (method_is_post()) {
         $transactionStarted = false;
 
         try {
-            // All DDL / schema ensures MUST run before beginTransaction().
-            // MySQL implicitly commits on DDL, which would otherwise leave
-            // the later commit() throwing "There is no active transaction".
             ensure_demon_claim_columns($pdo);
             if (!$pdo->inTransaction()) {
                 $pdo->beginTransaction();
                 $transactionStarted = true;
             }
 
-            $dupStmt = $pdo->prepare('SELECT id FROM demons WHERE LOWER(name) = LOWER(:name) LIMIT 1');
+            $dupStmt = $pdo->prepare('SELECT id FROM demons WHERE name_cs = :name LIMIT 1');
             $dupStmt->execute([':name' => $name]);
             if ($dupStmt->fetch() !== false) {
-                throw new RuntimeException('A level with this name already exists.');
+                throw new RuntimeException('A level with this exact name (including letter case) already exists.');
             }
 
             $maxPosition = (int) $pdo->query('SELECT COALESCE(MAX(position), 0) FROM demons')->fetchColumn();
@@ -1468,6 +1637,8 @@ if (method_is_post()) {
             )) {
                 throw new RuntimeException('Could not save custom Level Info values.');
             }
+
+            demon_tag_sync_for_demon($pdo, $newDemonId, demon_tag_parse_ids_from_input($_POST['tag_ids'] ?? []));
 
             record_position_event($pdo, $newDemonId, null, $position, current_user_id(), 'Level added');
 
@@ -1701,13 +1872,13 @@ if (method_is_post()) {
                 throw new RuntimeException('Thumbnail URL must be valid.');
             }
 
-            $dupStmt = $pdo->prepare('SELECT id FROM demons WHERE LOWER(name) = LOWER(:name) AND id <> :id LIMIT 1');
+            $dupStmt = $pdo->prepare('SELECT id FROM demons WHERE name_cs = :name AND id <> :id LIMIT 1');
             $dupStmt->execute([
                 ':name' => $finalName,
                 ':id' => $demonId,
             ]);
             if ($dupStmt->fetch() !== false) {
-                throw new RuntimeException('Another level already uses this name.');
+                throw new RuntimeException('Another level already uses this exact name (including letter case).');
             }
 
             $newPosition = $oldPosition;
@@ -2641,6 +2812,7 @@ $canManageListVisibility = can_manage_list_visibility();
 $canManageRolePermissions = can_manage_role_permissions();
 $canManageUserRoles = can_manage_user_roles();
 $canManageBadges = can_manage_badges();
+$canManageTags = can_manage_levels();
 $canModerateLevelComments = can_moderate_level_comments();
 $canResetPasswords = can_reset_passwords();
 
@@ -2668,6 +2840,7 @@ $sectionCapability = [
     'admin-pending-submissions'  => $canReviewSubmissions,
     'admin-reviewed-submissions' => $canReviewSubmissions,
     'admin-badges'               => $canManageBadges,
+    'admin-tags'                 => $canManageTags,
 ];
 $requestedSection = (string) ($_GET['section'] ?? 'overview');
 $activeSection = ($requestedSection !== 'overview'
@@ -2675,7 +2848,7 @@ $activeSection = ($requestedSection !== 'overview'
     && $sectionCapability[$requestedSection])
     ? $requestedSection
     : 'overview';
-$needsDemonList = in_array($activeSection, ['admin-edit-level', 'admin-claims', 'admin-level-comments', 'admin-delete-level'], true);
+$needsDemonList = in_array($activeSection, ['admin-edit-level', 'admin-claims', 'admin-level-comments', 'admin-delete-level', 'admin-tags'], true);
 $needsLevelInfoCustomRows = in_array($activeSection, ['admin-add-level', 'admin-edit-level', 'admin-level-info-rows'], true);
 
 $openCommentReportCount = 0;
@@ -2871,6 +3044,11 @@ if ($activeSection === 'admin-badges' && $canManageBadges) {
     $badgeList = badge_fetch_all($adminPdo);
 }
 
+$tagList = [];
+if (in_array($activeSection, ['admin-tags', 'admin-add-level'], true) && $canManageTags) {
+    $tagList = tag_fetch_all($adminPdo);
+}
+
 $editableStaffRoles = ['list_editor', 'list_helper'];
 $permissionDefinitions = [];
 $rolePermissionMatrix = [];
@@ -2919,6 +3097,10 @@ render_header(t('admin.title'), 'admin');
                         <a class="admin-action-tile<?= $activeSection === 'admin-level-info-rows' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-level-info-rows')) ?>">
                             <span class="admin-action-title"><?= e(t('admin.level_info_rows')) ?></span>
                             <small><?= e(t('admin.level_info_rows_desc')) ?></small>
+                        </a>
+                        <a class="admin-action-tile<?= $activeSection === 'admin-tags' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-tags')) ?>">
+                            <span class="admin-action-title"><?= e(t('admin.tags')) ?></span>
+                            <small><?= e(t('admin.tags_desc')) ?></small>
                         </a>
                     <?php endif; ?>
                     <a class="admin-action-tile<?= $activeSection === 'admin-level-comments' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-level-comments')) ?>">
@@ -3196,6 +3378,142 @@ render_header(t('admin.title'), 'admin');
                     <input type="hidden" name="action" value="delete_badge">
                     <input type="hidden" name="badge_id" value="<?= (int) $badge['id'] ?>">
                     <button class="button danger hover small" type="submit" data-confirm="<?= e(t('admin.delete_badge_confirm')) ?>"><?= e(t('common.delete')) ?></button>
+                </form>
+            </article>
+        <?php endforeach; ?>
+    </div>
+</section>
+<?php endif; ?>
+
+<?php if ($activeSection === 'admin-tags'): ?>
+<section class="panel fade admin-tool-section admin-badges-section" id="admin-tags">
+    <div class="panel-head">
+        <h2><?= e(t('admin.tags')) ?></h2>
+        <p><?= e(t('admin.tags_intro')) ?></p>
+    </div>
+
+    <div class="admin-badge-toolbox">
+        <div class="admin-badge-card">
+            <h3 class="admin-badge-card-title"><?= e(t('admin.create_tag')) ?></h3>
+            <form class="admin-badge-form" method="post" action="<?= e(admin_section_url('admin-tags')) ?>" data-tag-preview>
+                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="create_tag">
+
+                <label class="field">
+                    <span><?= e(t('admin.tag_name')) ?></span>
+                    <input type="text" name="tag_name" maxlength="<?= (int) tag_name_max_length() ?>" placeholder="<?= e(t('admin.tag_name_placeholder')) ?>" data-tag-preview-name required>
+                </label>
+                <label class="field">
+                    <span><?= e(t('admin.tag_color')) ?></span>
+                    <input type="color" name="tag_color" value="#465A7A" data-tag-preview-color>
+                </label>
+                <label class="cb-container" style="text-align: left; margin: 4px 0;">
+                    <input type="checkbox" name="tag_gradient" value="1" data-tag-preview-gradient>
+                    <span class="checkmark"></span>
+                    <?= e(t('admin.tag_gradient')) ?>
+                </label>
+                <div class="field" data-tag-gradient-color-field hidden>
+                    <span><?= e(t('admin.tag_gradient_color')) ?></span>
+                    <input type="color" name="tag_gradient_color" value="#1f3048" data-tag-preview-gradient-color>
+                </div>
+
+                <div class="admin-tag-preview">
+                    <span class="admin-tag-preview-label"><?= e(t('admin.preview')) ?></span>
+                    <span class="demon-tag" data-tag-preview-chip data-tag-preview-fallback="<?= e(t('admin.tag_name_placeholder')) ?>" style="background-color: #465A7A;"><?= e(t('admin.tag_name_placeholder')) ?></span>
+                </div>
+
+                <button class="button blue hover" type="submit"><?= e(t('admin.create_tag')) ?></button>
+            </form>
+        </div>
+        <div class="admin-badge-card">
+            <h3 class="admin-badge-card-title"><?= e(t('admin.assign_to_level')) ?></h3>
+            <form class="admin-badge-form" method="post" action="<?= e(admin_section_url('admin-tags')) ?>">
+                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="assign_tag">
+
+                <div class="field">
+                    <span><?= e(t('admin.tag')) ?></span>
+                    <?php if ($tagList === []): ?>
+                        <p class="muted"><?= e(t('admin.create_tag_first')) ?></p>
+                    <?php else: ?>
+                        <div class="admin-tag-checklist">
+                            <?php foreach ($tagList as $tag): ?>
+                                <label class="cb-container" style="text-align: left; margin: 2px 0;">
+                                    <input type="checkbox" name="tag_ids[]" value="<?= (int) $tag['id'] ?>">
+                                    <span class="checkmark"></span>
+                                    <?= e((string) $tag['name']) ?>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <label class="field">
+                    <span><?= e(t('admin.level_name')) ?></span>
+                    <input type="text" name="demon_name" data-suggest-list="admin-demon-list" placeholder="<?= e(t('admin.exact_level_name')) ?>" autocomplete="off" required <?= $tagList === [] ? 'disabled' : '' ?>>
+                </label>
+
+                <div class="admin-badge-actions">
+                    <button class="button blue hover" type="submit" name="tag_mode" value="assign" <?= $tagList === [] ? 'disabled' : '' ?>><?= e(t('common.assign')) ?></button>
+                    <button class="button ghost hover" type="submit" name="tag_mode" value="remove" <?= $tagList === [] ? 'disabled' : '' ?>><?= e(t('common.remove')) ?></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="admin-badge-grid">
+        <?php if ($tagList === []): ?>
+            <p class="muted"><?= e(t('admin.no_tags')) ?></p>
+        <?php endif; ?>
+        <?php foreach ($tagList as $tag): ?>
+            <article class="admin-badge-item">
+                <div class="admin-badge-item-head">
+                    <span class="demon-tag" style="<?= e(demon_tag_background_style($tag)) ?>"><?= e((string) $tag['name']) ?></span>
+                </div>
+
+                <div class="admin-badge-item-meta">
+                    <span class="badge"><?= e(t('admin.tag_usage', ['count' => (int) ($tag['usage_count'] ?? 0)])) ?></span>
+                </div>
+
+                <details class="admin-badge-edit-details">
+                    <summary class="button white hover small"><?= e(t('admin.edit_tag')) ?></summary>
+                    <form class="admin-badge-edit-form" method="post" action="<?= e(admin_section_url('admin-tags')) ?>" data-tag-preview>
+                        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="update_tag">
+                        <input type="hidden" name="tag_id" value="<?= (int) $tag['id'] ?>">
+
+                        <label class="field">
+                            <span><?= e(t('admin.tag_name')) ?></span>
+                            <input type="text" name="tag_name" maxlength="<?= (int) tag_name_max_length() ?>" value="<?= e((string) $tag['name']) ?>" data-tag-preview-name required>
+                        </label>
+                        <label class="field">
+                            <span><?= e(t('admin.tag_color')) ?></span>
+                            <input type="color" name="tag_color" value="<?= e(normalize_tag_color($tag['color'] ?? null)) ?>" data-tag-preview-color>
+                        </label>
+                        <label class="cb-container" style="text-align: left; margin: 4px 0;">
+                            <input type="checkbox" name="tag_gradient" value="1"<?= (int) ($tag['gradient'] ?? 0) === 1 ? ' checked' : '' ?> data-tag-preview-gradient>
+                            <span class="checkmark"></span>
+                            <?= e(t('admin.tag_gradient')) ?>
+                        </label>
+                        <div class="field" data-tag-gradient-color-field hidden>
+                            <span><?= e(t('admin.tag_gradient_color')) ?></span>
+                            <input type="color" name="tag_gradient_color" value="<?= e(demon_tag_gradient_to($tag, normalize_tag_color($tag['color'] ?? null))) ?>" data-tag-preview-gradient-color>
+                        </div>
+
+                        <div class="admin-tag-preview">
+                            <span class="admin-tag-preview-label"><?= e(t('admin.preview')) ?></span>
+                            <span class="demon-tag" data-tag-preview-chip data-tag-preview-fallback="<?= e((string) $tag['name']) ?>" style="<?= e(demon_tag_background_style($tag)) ?>"><?= e((string) $tag['name']) ?></span>
+                        </div>
+
+                        <button class="button blue hover small" type="submit"><?= e(t('admin.save_tag')) ?></button>
+                    </form>
+                </details>
+
+                <form class="admin-badge-delete-form" method="post" action="<?= e(admin_section_url('admin-tags')) ?>">
+                    <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="action" value="delete_tag">
+                    <input type="hidden" name="tag_id" value="<?= (int) $tag['id'] ?>">
+                    <button class="button danger hover small" type="submit" data-confirm="<?= e(t('admin.delete_tag_confirm')) ?>"><?= e(t('common.delete')) ?></button>
                 </form>
             </article>
         <?php endforeach; ?>
@@ -3652,6 +3970,21 @@ render_header(t('admin.title'), 'admin');
                                 name="custom_level_info[<?= e((string) $customRow['key']) ?>]"
                                     placeholder="<?= e((string) ($customRow['default_value'] !== '' ? $customRow['default_value'] : t('admin.optional_value'))) ?>"
                             >
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($canManageTags && $tagList !== []): ?>
+            <div class="field">
+                <span><?= e(t('admin.tags_optional')) ?></span>
+                <div class="admin-tag-checklist">
+                    <?php foreach ($tagList as $tag): ?>
+                        <label class="cb-container" style="text-align: left; margin: 2px 0;">
+                            <input type="checkbox" name="tag_ids[]" value="<?= (int) $tag['id'] ?>">
+                            <span class="checkmark"></span>
+                            <?= e((string) $tag['name']) ?>
                         </label>
                     <?php endforeach; ?>
                 </div>

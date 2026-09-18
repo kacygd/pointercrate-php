@@ -10,6 +10,7 @@ return [
         'logo_height' => 22,
         'logo_max_width' => 130,
         'tagline' => 'A competitive Geometry Dash ranking platform.',
+        'author' => 'kacygd',
         'base_url' => '/demonlist',
         'public_url' => '', // Optional absolute URL for embeds, e.g. https://your-domain.com/demonlist
         'timezone' => 'UTC',

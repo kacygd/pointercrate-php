@@ -1489,6 +1489,218 @@ function normalize_level_comment_report_reason(string $reason): string
         : (string) substr($reason, 0, level_comment_report_reason_max_length());
 }
 
+function tag_name_max_length(): int
+{
+    return 60;
+}
+
+function normalize_tag_name(string $name): string
+{
+    $name = normalize_display_name($name);
+
+    return function_exists('mb_substr')
+        ? (string) mb_substr($name, 0, tag_name_max_length(), 'UTF-8')
+        : (string) substr($name, 0, tag_name_max_length());
+}
+
+function normalize_tag_color(mixed $color): string
+{
+    $color = strtolower(trim((string) ($color ?? '')));
+
+    return preg_match('/^#[0-9a-f]{6}$/', $color) === 1 ? $color : '#465A7A';
+}
+
+function tag_fetch_all(PDO $pdo): array
+{
+    if (!table_exists('demon_tags', $pdo)) {
+        return [];
+    }
+
+    $usageCountSql = table_exists('demon_tag_links', $pdo)
+        ? '(SELECT COUNT(*) FROM demon_tag_links dtl WHERE dtl.tag_id = demon_tags.id)'
+        : '0';
+
+    $gradientSelect = schema_col_exists($pdo, 'demon_tags', 'gradient') ? ', gradient' : '';
+    $gradientColorSelect = schema_col_exists($pdo, 'demon_tags', 'gradient_color') ? ', gradient_color' : '';
+
+    $stmt = $pdo->query("SELECT id, name, color{$gradientSelect}{$gradientColorSelect}, created_by_user_id, created_at, {$usageCountSql} AS usage_count
+                         FROM demon_tags
+                         ORDER BY name ASC");
+
+    return $stmt->fetchAll();
+}
+
+function demon_tag_fetch_for_demon(PDO $pdo, int $demonId): array
+{
+    if ($demonId < 1 || !table_exists('demon_tags', $pdo) || !table_exists('demon_tag_links', $pdo)) {
+        return [];
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT dt.id, dt.name, dt.color'
+        . (schema_col_exists($pdo, 'demon_tags', 'gradient') ? ', dt.gradient' : '')
+        . (schema_col_exists($pdo, 'demon_tags', 'gradient_color') ? ', dt.gradient_color' : '') . '
+         FROM demon_tag_links dtl
+         INNER JOIN demon_tags dt ON dt.id = dtl.tag_id
+         WHERE dtl.demon_id = :demon_id
+         ORDER BY dt.name ASC'
+    );
+    $stmt->execute([':demon_id' => $demonId]);
+
+    return $stmt->fetchAll();
+}
+
+function demon_tag_map_for_demons(PDO $pdo, array $demonIds): array
+{
+    $demonIds = array_values(array_filter(array_map('intval', $demonIds), static fn (int $id): bool => $id > 0));
+    if ($demonIds === [] || !table_exists('demon_tags', $pdo) || !table_exists('demon_tag_links', $pdo)) {
+        return [];
+    }
+
+    $placeholders = implode(', ', array_fill(0, count($demonIds), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT dtl.demon_id, dt.id, dt.name, dt.color
+         FROM demon_tag_links dtl
+         INNER JOIN demon_tags dt ON dt.id = dtl.tag_id
+         WHERE dtl.demon_id IN ({$placeholders})
+         ORDER BY dtl.demon_id ASC, dt.name ASC"
+    );
+    $stmt->execute($demonIds);
+
+    $map = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $map[(int) $row['demon_id']][] = [
+            'id' => (int) $row['id'],
+            'name' => (string) $row['name'],
+            'color' => (string) $row['color'],
+        ];
+    }
+
+    return $map;
+}
+
+function demon_tag_valid_ids(PDO $pdo, array $tagIds): array
+{
+    if (!table_exists('demon_tags', $pdo)) {
+        return [];
+    }
+
+    $tagIds = array_values(array_unique(array_filter(array_map('intval', $tagIds), static fn (int $id): bool => $id > 0)));
+    if ($tagIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(', ', array_fill(0, count($tagIds), '?'));
+    $stmt = $pdo->prepare("SELECT id FROM demon_tags WHERE id IN ({$placeholders})");
+    $stmt->execute($tagIds);
+
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
+function demon_tag_sync_for_demon(PDO $pdo, int $demonId, array $tagIds): bool
+{
+    if ($demonId < 1 || !table_exists('demon_tags', $pdo) || !table_exists('demon_tag_links', $pdo)) {
+        return false;
+    }
+
+    $validIds = demon_tag_valid_ids($pdo, $tagIds);
+
+    $delete = $pdo->prepare('DELETE FROM demon_tag_links WHERE demon_id = :demon_id');
+    $delete->execute([':demon_id' => $demonId]);
+
+    if ($validIds === []) {
+        return true;
+    }
+
+    $assignedBy = current_user_id();
+    $insert = $pdo->prepare(
+        'INSERT IGNORE INTO demon_tag_links (demon_id, tag_id, assigned_by_user_id)
+         VALUES (:demon_id, :tag_id, :assigned_by_user_id)'
+    );
+
+    foreach ($validIds as $tagId) {
+        $insert->execute([
+            ':demon_id' => $demonId,
+            ':tag_id' => $tagId,
+            ':assigned_by_user_id' => $assignedBy,
+        ]);
+    }
+
+    return true;
+}
+
+function demon_tag_parse_ids_from_input(mixed $value): array
+{
+    if (is_array($value)) {
+        return array_map(static fn ($item): string => trim((string) $item), $value);
+    }
+
+    return explode(',', (string) $value);
+}
+
+function demon_tag_mix_colors(string $c1, string $c2, float $t = 0.5): string
+{
+    $c1 = ltrim(normalize_tag_color($c1), '#');
+    $c2 = strtolower(trim($c2));
+    if (preg_match('/^#[0-9a-fA-F]{6}$/', $c2) === 1) {
+        $c2 = ltrim($c2, '#');
+    } else {
+        $c2 = $c1;
+    }
+
+    $mixed = '';
+    for ($i = 0; $i < 3; $i++) {
+        $a = (int) hexdec(substr($c1, $i * 2, 2));
+        $b = (int) hexdec(substr($c2, $i * 2, 2));
+        $mixed .= sprintf('%02x', max(0, min(255, (int) round($a + ($b - $a) * $t))));
+    }
+
+    return '#' . $mixed;
+}
+
+function demon_tag_gradient_color(string $hex): string
+{
+    $hex = ltrim(normalize_tag_color($hex), '#');
+    $channels = [
+        (int) hexdec(substr($hex, 0, 2)),
+        (int) hexdec(substr($hex, 2, 2)),
+        (int) hexdec(substr($hex, 4, 2)),
+    ];
+
+    foreach ($channels as $index => $channel) {
+        $channels[$index] = max(0, (int) round($channel * 0.5));
+    }
+
+    return sprintf('#%02x%02x%02x', ...$channels);
+}
+
+function demon_tag_gradient_to(array $tag, string $color): string
+{
+    $custom = trim((string) ($tag['gradient_color'] ?? ''));
+
+    if (preg_match('/^#[0-9a-fA-F]{6}$/', $custom) === 1) {
+        return strtolower($custom);
+    }
+
+    return demon_tag_gradient_color($color);
+}
+
+function demon_tag_background_style(array $tag): string
+{
+    $color = normalize_tag_color($tag['color'] ?? null);
+
+    if ((int) ($tag['gradient'] ?? 0) === 1) {
+        $to = demon_tag_gradient_to($tag, $color);
+        $mid = demon_tag_mix_colors($color, $to, 0.5);
+
+        return 'background-image: linear-gradient(160deg, '
+            . $color . ' 0%, ' . $mid . ' 46%, ' . $to . ' 100%);'
+            . ' box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16), 0 2px 6px rgba(0,0,0,0.20);';
+    }
+
+    return 'background-color: ' . $color . ';';
+}
+
 function badge_name_max_length(): int
 {
     return 36;

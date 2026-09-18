@@ -344,12 +344,102 @@ function roulette_item_from_demon(array $demon, string $bucket, bool $shown): ar
         'score' => $score,
     ];
 }
+function demonlist_list_sort_available_options(array $demons): array
+{
+    $hasCompletions = false;
+    $hasCreatedAt = false;
+
+    foreach ($demons as $demon) {
+        if ((int) ($demon['completion_count'] ?? 0) > 0) {
+            $hasCompletions = true;
+        }
+        if (strtotime((string) ($demon['created_at'] ?? '')) !== false) {
+            $hasCreatedAt = true;
+        }
+    }
+
+    $options = [
+        '' => t('list.sort_default'),
+        'easiest' => t('list.sort_easiest'),
+    ];
+
+    $options['requirement_low'] = t('list.sort_requirement_low');
+    $options['requirement_high'] = t('list.sort_requirement_high');
+
+    if ($hasCompletions) {
+        $options['completions_least'] = t('list.sort_completions_least');
+        $options['completions_most'] = t('list.sort_completions_most');
+    }
+    if ($hasCreatedAt) {
+        $options['newest'] = t('list.sort_newest');
+        $options['oldest'] = t('list.sort_oldest');
+    }
+
+    $options['name_az'] = t('list.sort_name_az');
+    $options['name_za'] = t('list.sort_name_za');
+
+    return $options;
+}
+
+function demonlist_sort_demons(array $demons, string $sort): array
+{
+    if ($sort === '') {
+        return $demons;
+    }
+
+    usort($demons, static function (array $a, array $b) use ($sort): int {
+        $byPosition = static fn (array $row): int => (int) ($row['position'] ?? 0);
+
+        switch ($sort) {
+            case 'easiest':
+                $direction = -1;
+                return $direction * ($byPosition($a) <=> $byPosition($b));
+
+            case 'requirement_low':
+            case 'requirement_high':
+                $direction = $sort === 'requirement_low' ? 1 : -1;
+                return $direction * (((int) ($a['requirement'] ?? 100)) <=> ((int) ($b['requirement'] ?? 100)));
+
+            case 'completions_least':
+            case 'completions_most':
+                $direction = $sort === 'completions_least' ? 1 : -1;
+                return $direction * (((int) ($a['completion_count'] ?? 0)) <=> ((int) ($b['completion_count'] ?? 0)));
+
+            case 'newest':
+            case 'oldest':
+                $direction = $sort === 'oldest' ? 1 : -1;
+                $aTime = strtotime((string) ($a['created_at'] ?? ''));
+                $bTime = strtotime((string) ($b['created_at'] ?? ''));
+                if ($aTime === false || $bTime === false) {
+                    if ($aTime !== $bTime) {
+                        return $aTime === false ? 1 : -1;
+                    }
+                    return $byPosition($a) <=> $byPosition($b);
+                }
+                return $direction * ($aTime <=> $bTime);
+
+            case 'name_az':
+                $nameCompare = strcasecmp((string) ($a['name'] ?? ''), (string) ($b['name'] ?? ''));
+                return $nameCompare !== 0 ? $nameCompare : ($byPosition($a) <=> $byPosition($b));
+
+            case 'name_za':
+                $nameCompare = strcasecmp((string) ($b['name'] ?? ''), (string) ($a['name'] ?? ''));
+                return $nameCompare !== 0 ? $nameCompare : ($byPosition($a) <=> $byPosition($b));
+        }
+
+        return $byPosition($a) <=> $byPosition($b);
+    });
+
+    return $demons;
+}
+
+$pdo = db();
 
 $pdo = db();
 $hasUserBannedColumn = users_has_is_banned_column($pdo);
 
 if ($hasUserBannedColumn) {
-    $allDemons = $pdo->query('SELECT d.*, COALESCE(cc.completion_count, 0) AS completion_count
+    $allDemons = $pdo->query('SELECT d.*, COALESCE(cc.completion_count, 0) AS completion_count, ej.average_enjoyment
                               FROM demons d
                               LEFT JOIN (
                                   SELECT c.demon_id, COUNT(*) AS completion_count
@@ -361,9 +451,19 @@ if ($hasUserBannedColumn) {
                                     AND c.progress >= 100
                                   GROUP BY c.demon_id
                               ) cc ON cc.demon_id = d.id
+                              LEFT JOIN (
+                                  SELECT c.demon_id, AVG(c.enjoyment) AS average_enjoyment
+                                  FROM completions c
+                                  LEFT JOIN users banned_users
+                                    ON LOWER(banned_users.username) = LOWER(c.player)
+                                   AND COALESCE(banned_users.is_banned, 0) = 1
+                                  WHERE banned_users.id IS NULL
+                                    AND c.enjoyment IS NOT NULL
+                                  GROUP BY c.demon_id
+                              ) ej ON ej.demon_id = d.id
                               ORDER BY d.position ASC')->fetchAll();
 } else {
-    $allDemons = $pdo->query('SELECT d.*, COALESCE(cc.completion_count, 0) AS completion_count
+    $allDemons = $pdo->query('SELECT d.*, COALESCE(cc.completion_count, 0) AS completion_count, ej.average_enjoyment
                               FROM demons d
                               LEFT JOIN (
                                   SELECT c.demon_id, COUNT(*) AS completion_count
@@ -371,6 +471,12 @@ if ($hasUserBannedColumn) {
                                   WHERE c.progress >= 100
                                   GROUP BY c.demon_id
                               ) cc ON cc.demon_id = d.id
+                              LEFT JOIN (
+                                  SELECT c.demon_id, AVG(c.enjoyment) AS average_enjoyment
+                                  FROM completions c
+                                  WHERE c.enjoyment IS NOT NULL
+                                  GROUP BY c.demon_id
+                              ) ej ON ej.demon_id = d.id
                               ORDER BY d.position ASC')->fetchAll();
 }
 
@@ -410,6 +516,200 @@ foreach ($allDemons as $demon) {
 
     $legacy[] = $demon;
 }
+
+function demonlist_list_tags_from_get(): array
+{
+    $raw = $_GET['tag'] ?? [];
+    $values = is_array($raw) ? $raw : [$raw];
+
+    return array_values(array_unique(array_map(
+        static fn ($value): string => strtolower(trim((string) $value)),
+        array_filter($values, static fn ($value): bool => trim((string) $value) !== '')
+    )));
+}
+
+function demonlist_filter_demons_by_tags(array $demons, array $tagNames, array $tagsMap): array
+{
+    if ($tagNames === []) {
+        return $demons;
+    }
+
+    return array_values(array_filter(
+        $demons,
+        static function (array $demon) use ($tagNames, $tagsMap): bool {
+            $demonTagNames = array_map(
+                static fn (array $tag): string => strtolower(trim((string) $tag['name'])),
+                $tagsMap[(int) ($demon['id'] ?? 0)] ?? []
+            );
+
+            foreach ($tagNames as $wantedTag) {
+                if (!in_array($wantedTag, $demonTagNames, true)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    ));
+}
+
+$listSortOptions = demonlist_list_sort_available_options($showcase);
+$listSortValue = trim((string) ($_GET['sort'] ?? ''));
+$listSort = array_key_exists($listSortValue, $listSortOptions) ? $listSortValue : '';
+
+$listTags = array_values(array_filter(
+    tag_fetch_all($pdo),
+    static fn (array $tag): bool => (int) ($tag['usage_count'] ?? 0) > 0
+));
+$listSelectedTags = demonlist_list_tags_from_get();
+if ($listSelectedTags !== []) {
+    $showcase = demonlist_filter_demons_by_tags(
+        $showcase,
+        $listSelectedTags,
+        demon_tag_map_for_demons($pdo, array_map(static fn (array $demon): int => (int) ($demon['id'] ?? 0), $showcase))
+    );
+}
+
+function demonlist_list_enjoyment_bound(mixed $raw): ?float
+{
+    $raw = trim((string) ($raw ?? ''));
+    if ($raw === '' || !is_numeric($raw)) {
+        return null;
+    }
+
+    $value = (float) $raw;
+    if ($value < 0.0 || $value > 10.0) {
+        return null;
+    }
+
+    return $value;
+}
+
+function demonlist_demon_enjoyment(array $demon): ?float
+{
+    $raw = $demon['average_enjoyment'] ?? null;
+    if ($raw === null || $raw === '') {
+        return null;
+    }
+
+    return (float) $raw;
+}
+
+function demonlist_filter_demons_by_enjoyment(array $demons, ?float $min, ?float $max): array
+{
+    if ($min === null && $max === null) {
+        return $demons;
+    }
+
+    return array_values(array_filter(
+        $demons,
+        static function (array $demon) use ($min, $max): bool {
+            $enjoyment = demonlist_demon_enjoyment($demon);
+            if ($enjoyment === null) {
+                return false;
+            }
+            if ($min !== null && $enjoyment < $min) {
+                return false;
+            }
+            if ($max !== null && $enjoyment > $max) {
+                return false;
+            }
+
+            return true;
+        }
+    ));
+}
+
+$listEnjoymentMin = demonlist_list_enjoyment_bound($_GET['enj_min'] ?? null);
+$listEnjoymentMax = demonlist_list_enjoyment_bound($_GET['enj_max'] ?? null);
+if ($listEnjoymentMin !== null && $listEnjoymentMax !== null && $listEnjoymentMin > $listEnjoymentMax) {
+    [$listEnjoymentMin, $listEnjoymentMax] = [$listEnjoymentMax, $listEnjoymentMin];
+}
+$listEnjoymentActive = $listEnjoymentMin !== null || $listEnjoymentMax !== null;
+if ($listEnjoymentActive) {
+    $showcase = demonlist_filter_demons_by_enjoyment($showcase, $listEnjoymentMin, $listEnjoymentMax);
+}
+
+if ($listSort !== '') {
+    $showcase = demonlist_sort_demons($showcase, $listSort);
+}
+
+function demonlist_build_list_url(array $params): string
+{
+    $pairs = [];
+    foreach ($params as $key => $value) {
+        if ($value === null) {
+            continue;
+        }
+
+        if ($key === 'tag') {
+            $tags = is_array($value) ? $value : [$value];
+            foreach ($tags as $tag) {
+                $tag = trim((string) $tag);
+                if ($tag === '') {
+                    continue;
+                }
+                $pairs[] = 'tag[]=' . rawurlencode($tag);
+            }
+            continue;
+        }
+
+        if ($value === '') {
+            continue;
+        }
+
+        $pairs[] = rawurlencode((string) $key) . '=' . rawurlencode((string) $value);
+    }
+
+    $query = implode('&', $pairs);
+    $url = base_url('index.php');
+
+    return $query === '' ? $url : $url . '?' . $query;
+}
+
+$listSortParams = $_GET;
+unset($listSortParams['tag_reopen']);
+$listSortUrl = static function (string $sort) use ($listSortParams): string {
+    $params = $listSortParams;
+    if ($sort === '') {
+        unset($params['sort']);
+    } else {
+        $params['sort'] = $sort;
+    }
+    return demonlist_build_list_url($params);
+};
+$listClearTagsUrl = static function () use ($listSortParams): string {
+    $params = $listSortParams;
+    unset($params['tag'], $params['enj_min'], $params['enj_max']);
+    return demonlist_build_list_url($params);
+};
+$listTagToggleUrl = static function (string $tagName) use ($listSortParams): string {
+    $params = $listSortParams;
+    $rawTags = $params['tag'] ?? [];
+    $currentTags = is_array($rawTags) ? $rawTags : ($rawTags !== null && $rawTags !== '' ? [$rawTags] : []);
+
+    $wanted = strtolower(trim($tagName));
+    $found = false;
+    foreach ($currentTags as $index => $currentTag) {
+        if (strtolower(trim((string) $currentTag)) === $wanted) {
+            $found = true;
+            unset($currentTags[$index]);
+        }
+    }
+
+    if (!$found) {
+        $currentTags[] = $tagName;
+    }
+
+    $currentTags = array_values($currentTags);
+    if ($currentTags === []) {
+        unset($params['tag']);
+    } else {
+        $params['tag'] = $currentTags;
+    }
+
+    return demonlist_build_list_url($params);
+};
 
 $listEditorsSql = 'SELECT username, ' . user_select_display_name_expression() . ', country_code, youtube_channel
                    FROM users
@@ -463,12 +763,80 @@ render_header(t('home.title'), 'list', [
 
 <div class="flex m-center container">
     <main class="left">
-        <section class="panel fade">
+        <section class="panel fade" style="overflow: visible; z-index: 50;">
             <h1><?= e(t('home.heading')) ?></h1>
             <p style="margin-top: 0;"><?= e($mainIntro) ?></p>
             <div class="search seperated" style="margin: 10px 0;">
                 <input placeholder="<?= e(t('list.filter_shown')) ?>" type="text" data-live-search>
-            </div>
+                <div class="list-sort-dropdown">
+                    <button type="button" class="list-sort-button js-toggle<?= ($listSort !== '' || $listSelectedTags !== [] || $listEnjoymentActive) ? ' is-active' : '' ?>" data-dropdown-id="list-sort-menu" aria-label="<?= e(t('list.sort_label')) ?>"></button>
+                    <div class="see-through fade dropdown" id="list-sort-menu">
+                        <div class="list-sort-panel">
+                            <div class="list-sort-panel-col">
+                                <p class="list-sort-panel-label"><?= e(t('list.sort_column')) ?> <span class="list-name-dir-buttons"><a class="list-name-dir<?= $listSort === 'name_az' ? ' is-on' : '' ?>" href="<?= e($listSortUrl('name_az')) ?>" title="<?= e(t('list.sort_name_az')) ?>" aria-label="<?= e(t('list.sort_name_az')) ?>">A&#8593;Z</a><a class="list-name-dir<?= $listSort === 'name_za' ? ' is-on' : '' ?>" href="<?= e($listSortUrl('name_za')) ?>" title="<?= e(t('list.sort_name_za')) ?>" aria-label="<?= e(t('list.sort_name_za')) ?>">Z&#8595;A</a></span></p>
+                                <ul class="list-sort-menu">
+                                    <?php foreach ($listSortOptions as $sortKey => $sortLabel): ?>
+                                        <?php if ($sortKey === 'name_az' || $sortKey === 'name_za') continue; ?>
+                                        <li class="hover<?= $sortKey === $listSort ? ' selected' : '' ?>">
+                                            <a href="<?= e($listSortUrl($sortKey)) ?>"><?= e($sortLabel) ?></a>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
+
+                            <?php if (true): ?>
+                                <div class="list-tag-filter-form">
+                                    <p class="list-tag-filter-label"><?= e(t('list.sort_tags')) ?><?php if ($listSelectedTags !== [] || $listEnjoymentActive): ?> <a class="list-tag-filter-clear" href="<?= e($listClearTagsUrl()) ?>"><?= e(t('common.clear')) ?></a><?php endif; ?></p>
+                                    <div class="list-tag-filter-options">
+                                        <?php foreach ($listTags as $listTag): ?>
+                                            <?php
+                                            $listTagName = (string) $listTag['name'];
+                                            $listTagNameLower = strtolower(trim($listTagName));
+                                            $listTagIsOn = in_array($listTagNameLower, $listSelectedTags, true);
+                                            $listTagColor = normalize_tag_color($listTag['color'] ?? null);
+                                            $listTagChipStyle = $listTagIsOn
+                                                ? e(demon_tag_background_style($listTag)) . ' border-color: ' . $listTagColor . ';'
+                                                : 'border-color: ' . $listTagColor . '; color: inherit; background: transparent;';
+                                            $listTagToggleHref = $listTagToggleUrl($listTagName);
+                                            $listTagToggleHref .= (str_contains($listTagToggleHref, '?') ? '&' : '?') . 'tag_reopen=1';
+                                            ?>
+                                            <a class="list-tag-chip<?= $listTagIsOn ? ' is-on' : '' ?>" href="<?= e($listTagToggleHref) ?>" style="<?= $listTagChipStyle ?>">
+                                                <span class="list-tag-chip-dot"></span><?= e($listTagName) ?>
+                                            </a>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                            <form class="list-enjoyment-filter" id="list-enjoyment-filter" method="get" action="<?= e(base_url('index.php')) ?>">
+                                        <input type="hidden" name="tag_reopen" value="1">
+                                        <?php foreach ($listSortParams as $listEnjoyKey => $listEnjoyValue): ?>
+                                            <?php if ($listEnjoyKey === 'enj_min' || $listEnjoyKey === 'enj_max' || $listEnjoyKey === 'tag_reopen') continue; ?>
+                                            <?php if (is_array($listEnjoyValue)): ?>
+                                                <?php foreach ($listEnjoyValue as $listEnjoyItem): ?>
+                                                    <input type="hidden" name="<?= e($listEnjoyKey) ?>[]" value="<?= e((string) $listEnjoyItem) ?>">
+                                                <?php endforeach; ?>
+                                            <?php else: ?>
+                                                <input type="hidden" name="<?= e($listEnjoyKey) ?>" value="<?= e((string) $listEnjoyValue) ?>">
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                        <p class="list-enjoyment-label"><?= e(t('list.sort_enjoyment')) ?></p>
+                                        <div class="list-enjoyment-inputs">
+                                            <input type="number" class="list-enjoyment-num" name="enj_min" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0" aria-label="<?= e(t('list.sort_enjoyment_min')) ?>" value="<?= $listEnjoymentMin !== null ? e(rtrim(rtrim(number_format($listEnjoymentMin, 1, '.', ''), '0'), '.')) : '' ?>">
+                                            <div class="list-enjoyment-slider">
+                                                <div class="list-enjoyment-track" aria-hidden="true">
+                                                    <div class="list-enjoyment-fill" id="list-enjoyment-fill"></div>
+                                                </div>
+                                                <input type="range" id="list-enjoyment-lo" min="0" max="10" step="0.5" aria-label="<?= e(t('list.sort_enjoyment_min')) ?>" value="<?= $listEnjoymentMin !== null ? e(rtrim(rtrim(number_format($listEnjoymentMin, 1, '.', ''), '0'), '.')) : '0' ?>">
+                                                <input type="range" id="list-enjoyment-hi" min="0" max="10" step="0.5" aria-label="<?= e(t('list.sort_enjoyment_max')) ?>" value="<?= $listEnjoymentMax !== null ? e(rtrim(rtrim(number_format($listEnjoymentMax, 1, '.', ''), '0'), '.')) : '10' ?>">
+                                            </div>
+                                            <input type="number" class="list-enjoyment-num" name="enj_max" min="0" max="10" step="0.5" inputmode="decimal" placeholder="10" aria-label="<?= e(t('list.sort_enjoyment_max')) ?>" value="<?= $listEnjoymentMax !== null ? e(rtrim(rtrim(number_format($listEnjoymentMax, 1, '.', ''), '0'), '.')) : '' ?>">
+                                            <button type="submit" class="list-enjoyment-apply"><?= e(t('common.apply')) ?></button>
+                                        </div>
+                                    </form>
+                        </div>
+                    </div>
+                </div>
         </section>
 
         <?php foreach ($showcase as $demon): ?>
@@ -483,7 +851,10 @@ render_header(t('home.title'), 'list', [
             $verifierUserId = isset($demon['verifier_user_id']) ? (int) $demon['verifier_user_id'] : 0;
             $publisherLabel = user_public_name_by_id($publisherUserId > 0 ? $publisherUserId : null, $publisher) ?? $publisher;
             $verifierLabel = user_public_name_by_id($verifierUserId > 0 ? $verifierUserId : null, $verifier) ?? $verifier;
-            $cardSearchText = strtolower((string) ($demon['name'] . ' ' . $creatorSearchText . ' ' . $publisher . ' ' . $publisherLabel . ' ' . $verifier . ' ' . $verifierLabel . ' ' . $demon['difficulty']));
+            $cardSearchText = strtolower((string) ($demon['name'] . ' ' . $creatorSearchText . ' ' . $publisher . ' ' . $publisherLabel . ' ' . $verifier . ' ' . $verifierLabel . ' ' . $demon['difficulty']
+                . ' ' . trim((string) ($demon['level_id'] ?? ''))
+                . ' ' . trim((string) ($demon['level_length'] ?? ''))
+                . ' ' . (($demon['object_count'] ?? null) !== null ? (string) (int) $demon['object_count'] : '')));
             $requirement = (int) $demon['requirement'];
             $position = (int) $demon['position'];
             $currentPosition = (int) ($demon['current_position'] ?? $position);

@@ -218,7 +218,7 @@ function render_level_comment_card(
                 </a>
                 <?= $commentBadgesHtml ?>
                 <?php if ($isPinned): ?>
-                    <span class="level-comment-pin"><?= e(t('comment.pinned')) ?></span>
+                    <span class="level-comment-pin"><i class="fa fa-thumbtack"></i></span>
                 <?php endif; ?>
             </div>
             <time datetime="<?= e(date('c', $commentCreatedAt)) ?>">
@@ -258,8 +258,8 @@ function render_level_comment_card(
                     <input type="hidden" name="action" value="pin_level_comment">
                     <input type="hidden" name="comment_id" value="<?= $commentId ?>">
                     <input type="hidden" name="pin_state" value="<?= $isPinned ? 'unpin' : 'pin' ?>">
-                    <button class="level-comment-action" type="submit" title="<?= e($isPinned ? t('comment.unpin_title') : t('comment.pin_title')) ?>">
-                        <i class="fa fa-thumb-tack"></i><span><?= e($isPinned ? t('comment.unpin') : t('comment.pin')) ?></span>
+                    <button class="level-comment-action level-comment-pin-toggle<?= $isPinned ? ' is-pinned' : '' ?>" type="submit" title="<?= e($isPinned ? t('comment.unpin_title') : t('comment.pin_title')) ?>" aria-label="<?= e($isPinned ? t('comment.unpin_title') : t('comment.pin_title')) ?>">
+                        <i class="fa fa-thumbtack"></i>
                     </button>
                 </form>
             <?php endif; ?>
@@ -970,6 +970,7 @@ $verifierUserId = isset($demon['verifier_user_id']) ? (int) $demon['verifier_use
 $verifiedMetaSuffix = $verifier !== '' ? t('demon.meta_verified_by', ['verifier' => $verifier]) : '';
 $levelInfoRows = demon_level_info_rows();
 $levelInfoCustomValues = demon_level_info_custom_values(db(), $id);
+$demonTags = demon_tag_fetch_for_demon(db(), $id);
 
 $renderLevelInfoValue = static function (array $row) use (
     $demon,
@@ -1107,6 +1108,16 @@ render_header((string) $demon['name'], 'list', [
                         <div><dt><?= e(t('demon.completions')) ?></dt><dd><?= (int) $demon['completion_count'] ?></dd></div>
                         <div><dt><?= e(t('demon.average_enjoyment')) ?></dt><dd><?= $averageEnjoyment !== null ? e($averageEnjoyment . '/10') : '-' ?></dd></div>
                     </dl>
+
+                    <?php if ($demonTags !== []): ?>
+                        <div class="demon-tags">
+                            <?php foreach ($demonTags as $demonTag): ?>
+                                <span class="demon-tag" style="<?= e(demon_tag_background_style($demonTag)) ?>">
+                                    <?= e((string) $demonTag['name']) ?>
+                                </span>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </section>
