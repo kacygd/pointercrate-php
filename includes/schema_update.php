@@ -791,6 +791,8 @@ function run_schema_update(PDO $pdo): array
                 id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(60) NOT NULL,
                 color CHAR(7) NOT NULL DEFAULT '#465A7A',
+                gradient TINYINT(1) NOT NULL DEFAULT 0,
+                gradient_color CHAR(7) NULL,
                 created_by_user_id INT UNSIGNED NULL,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -832,11 +834,19 @@ function run_schema_update(PDO $pdo): array
         $logs[] = '[OK] Added demon_tag_links table';
     }
 
+    if (schema_table_exists($pdo, 'demon_tags') && !schema_col_exists($pdo, 'demon_tags', 'gradient')) {
+        $pdo->exec('ALTER TABLE demon_tags ADD COLUMN gradient TINYINT(1) NOT NULL DEFAULT 0 AFTER color');
+        $logs[] = '[OK] Added demon_tags.gradient';
+    }
+
     if (schema_table_exists($pdo, 'demon_tags') && !schema_col_exists($pdo, 'demon_tags', 'gradient_color')) {
         $pdo->exec('ALTER TABLE demon_tags ADD COLUMN gradient_color CHAR(7) NULL AFTER gradient');
         $logs[] = '[OK] Added demon_tags.gradient_color';
     }
 
+    // Level names are case sensitive: distinct GD levels may share the same
+    // name and differ only by letter case (e.g. FIREPOWER / Firepower).
+    // Replace the case-insensitive unique key with a case-sensitive one.
     if (schema_idx_exists($pdo, 'demons', 'uq_demons_name')) {
         $pdo->exec('ALTER TABLE demons DROP INDEX uq_demons_name');
         $logs[] = '[OK] Dropped case-insensitive unique key uq_demons_name';
