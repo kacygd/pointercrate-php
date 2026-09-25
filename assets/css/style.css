@@ -1216,15 +1216,16 @@ header nav .nav-icon {
 }
 
 .nav-demonlist-menu {
-  flex: 1 1 200px;
-  min-width: 120px;
-  max-width: 230px;
+  flex: 0 1 auto;
+  min-width: 0;
+  width: fit-content;
+  max-width: 250px;
 }
 
 .nav-demonlist-trigger {
   min-width: 0;
-  width: 100%;
-  max-width: 100%;
+  width: auto;
+  max-width: 250px;
   height: 70px !important;
   box-sizing: border-box;
   align-items: center !important;
@@ -1248,7 +1249,8 @@ header nav .nav-icon {
 
 .nav-demonlist-title {
   display: flex;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   min-width: 0;
   align-items: center;
   gap: 5px;
@@ -1261,6 +1263,7 @@ header nav .nav-icon {
 
 .nav-demonlist-title-text {
   min-width: 0;
+  max-width: 205px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
