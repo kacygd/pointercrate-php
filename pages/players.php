@@ -139,7 +139,7 @@ $demons = $pdo->query('SELECT ' . implode(', ', $demonSelectFields) . '
                        FROM demons
                        ORDER BY position ASC')->fetchAll();
 
-$records = db()->query('SELECT demon_id, player, progress
+$records = db()->query('SELECT demon_id, player, progress, enjoyment
                         FROM completions
                         ORDER BY created_at DESC')->fetchAll();
 
@@ -177,6 +177,8 @@ $ensurePlayer = static function (string $rawName) use (&$playersByKey): ?string 
             'total_records' => 0,
             'total_progress_records' => 0,
             'total_completions' => 0,
+            'enjoyment_total' => 0,
+            'enjoyment_count' => 0,
             'completion_scores' => [],
             'main_records' => 0,
             'extended_records' => 0,
@@ -318,6 +320,13 @@ foreach ($records as $record) {
     $score = $isRankedEntry ? pointercrate_score($position, $requirement, $progress) : 0.0;
 
     $playersByKey[$key]['total_records']++;
+    if ($record['enjoyment'] !== null) {
+        $enjoyment = (int) $record['enjoyment'];
+        if ($enjoyment >= 0 && $enjoyment <= 10) {
+            $playersByKey[$key]['enjoyment_total'] += $enjoyment;
+            $playersByKey[$key]['enjoyment_count']++;
+        }
+    }
     if ($isRankedEntry) {
         $playersByKey[$key]['score'] += $score;
         $existingScore = (float) ($playersByKey[$key]['completion_scores'][$demonId] ?? 0.0);
@@ -564,6 +573,13 @@ foreach ($players as $player) {
             'legacy_records' => 0,
             'progress_records' => 0,
             'total_completions' => 0,
+            'enjoyment_total' => 0,
+            'enjoyment_count' => 0,
+            'completed_demon_ids' => [],
+            'created_count' => 0,
+            'published_count' => 0,
+            'verified_count' => 0,
+            'members' => [],
             'best_player' => null,
             'best_points' => 0.0,
             'hardest_demon' => null,
@@ -580,6 +596,32 @@ foreach ($players as $player) {
     $countryStats[$countryCode]['legacy_records'] += (int) $player['legacy_records'];
     $countryStats[$countryCode]['progress_records'] += (int) $player['total_progress_records'];
     $countryStats[$countryCode]['total_completions'] += (int) $player['total_completions'];
+    $countryStats[$countryCode]['enjoyment_total'] += (int) $player['enjoyment_total'];
+    $countryStats[$countryCode]['enjoyment_count'] += (int) $player['enjoyment_count'];
+    $countryStats[$countryCode]['created_count'] += count((array) $player['demons_created']);
+    $countryStats[$countryCode]['published_count'] += count((array) $player['demons_published']);
+    $countryStats[$countryCode]['verified_count'] += count((array) $player['demons_verified']);
+
+    foreach ((array) $player['completed'] as $completedDemon) {
+        $completedDemonId = (int) ($completedDemon['id'] ?? 0);
+        if ($completedDemonId > 0) {
+            $countryStats[$countryCode]['completed_demon_ids'][$completedDemonId] = true;
+        }
+    }
+    $memberUserId = (int) ($player['user_id'] ?? 0);
+    $memberProfileUrl = $memberUserId > 0
+        ? base_url('players.php?uid=' . $memberUserId)
+        : base_url('players.php?user=' . rawurlencode((string) $player['username']));
+    $countryStats[$countryCode]['members'][] = [
+        'display_name' => (string) ($player['display_name'] ?? $player['username']),
+        'profile_url' => $memberProfileUrl,
+        'global_rank' => $player['rank'] !== null ? (int) $player['rank'] : null,
+        'points' => $points,
+        'completions' => (int) $player['total_completions'],
+        'progress_records' => (int) $player['total_progress_records'],
+        'hardest_demon' => $player['hardest_demon'] !== null ? (string) $player['hardest_demon'] : null,
+        'hardest_position' => $player['hardest_position'] !== null ? (int) $player['hardest_position'] : null,
+    ];
 
     if ($points > $countryStats[$countryCode]['best_points']) {
         $countryStats[$countryCode]['best_points'] = $points;
@@ -622,6 +664,43 @@ foreach ($countryStatsList as &$countryEntry) {
     } else {
         $countryEntry['rank'] = null;
     }
+
+    usort($countryEntry['members'], static function (array $a, array $b): int {
+        $pointsCompare = (float) $b['points'] <=> (float) $a['points'];
+        if ($pointsCompare !== 0) {
+            return $pointsCompare;
+        }
+
+        $completionCompare = (int) $b['completions'] <=> (int) $a['completions'];
+        if ($completionCompare !== 0) {
+            return $completionCompare;
+        }
+
+        return strcasecmp((string) $a['display_name'], (string) $b['display_name']);
+    });
+    foreach ($countryEntry['members'] as $memberIndex => &$countryMember) {
+        $countryMember['country_rank'] = $memberIndex + 1;
+    }
+    unset($countryMember);
+
+    $bestMember = $countryEntry['members'][0] ?? null;
+    if (is_array($bestMember)) {
+        $countryEntry['best_player'] = (string) $bestMember['display_name'];
+        $countryEntry['best_points'] = (float) $bestMember['points'];
+    }
+
+    $countryEntry['average_points'] = $countryEntry['player_count'] > 0
+        ? (float) $countryEntry['total_points'] / (int) $countryEntry['player_count']
+        : 0.0;
+    $countryRecordCount = (int) $countryEntry['total_completions'] + (int) $countryEntry['progress_records'];
+    $countryEntry['completion_rate'] = $countryRecordCount > 0
+        ? ((int) $countryEntry['total_completions'] / $countryRecordCount) * 100
+        : 0.0;
+    $countryEntry['average_enjoyment'] = $countryEntry['enjoyment_count'] > 0
+        ? (float) $countryEntry['enjoyment_total'] / (int) $countryEntry['enjoyment_count']
+        : null;
+    $countryEntry['unique_completions'] = count($countryEntry['completed_demon_ids']);
+    unset($countryEntry['completed_demon_ids']);
 }
 unset($countryEntry);
 
@@ -823,6 +902,85 @@ render_header(t('stats.title'), 'players');
                             <p><?= e(t('stats.breakdown', ['main' => (int) $selectedCountry['main_records'], 'extended' => (int) $selectedCountry['extended_records'], 'legacy' => (int) $selectedCountry['legacy_records'], 'progress' => (int) $selectedCountry['progress_records']])) ?></p>
                         </article>
                     </div>
+
+                    <section class="country-advanced-stats" aria-labelledby="country-advanced-title">
+                        <h3 id="country-advanced-title" class="country-stats-section-title"><?= e(t('stats.advanced_country_stats')) ?></h3>
+                        <div class="country-metric-grid">
+                            <article class="country-metric">
+                                <span><?= e(t('stats.total_completions')) ?></span>
+                                <strong><?= e(number_format((int) $selectedCountry['total_completions'])) ?></strong>
+                            </article>
+                            <article class="country-metric">
+                                <span><?= e(t('stats.unique_completions')) ?></span>
+                                <strong><?= e(number_format((int) $selectedCountry['unique_completions'])) ?></strong>
+                            </article>
+                            <article class="country-metric">
+                                <span><?= e(t('stats.progress_records')) ?></span>
+                                <strong><?= e(number_format((int) $selectedCountry['progress_records'])) ?></strong>
+                            </article>
+                            <article class="country-metric">
+                                <span><?= e(t('stats.completion_rate')) ?></span>
+                                <strong><?= e(number_format((float) $selectedCountry['completion_rate'], 1)) ?>%</strong>
+                            </article>
+                            <article class="country-metric">
+                                <span><?= e(t('stats.average_points')) ?></span>
+                                <strong><?= e(number_format((float) $selectedCountry['average_points'], 2)) ?></strong>
+                            </article>
+                            <article class="country-metric">
+                                <span><?= e(t('stats.average_enjoyment')) ?></span>
+                                <strong><?= $selectedCountry['average_enjoyment'] !== null ? e(number_format((float) $selectedCountry['average_enjoyment'], 2)) . '/10' : '-' ?></strong>
+                            </article>
+                        </div>
+                        <p class="country-contribution-summary">
+                            <strong><?= e(t('stats.contributions')) ?>:</strong>
+                            <?= e(t('stats.contrib_counts', [
+                                'created' => (int) $selectedCountry['created_count'],
+                                'published' => (int) $selectedCountry['published_count'],
+                                'verified' => (int) $selectedCountry['verified_count'],
+                            ])) ?>
+                        </p>
+                    </section>
+
+                    <section class="country-member-ranking" aria-labelledby="country-ranking-title">
+                        <h3 id="country-ranking-title" class="country-stats-section-title"><?= e(t('stats.country_player_ranking')) ?></h3>
+                        <ol class="country-member-list">
+                            <?php foreach ((array) $selectedCountry['members'] as $countryMember): ?>
+                                <?php
+                                $memberHardest = t('common.none');
+                                if ($countryMember['hardest_demon'] !== null) {
+                                    $memberHardest = $countryMember['hardest_position'] !== null
+                                        ? ('#' . (int) $countryMember['hardest_position'] . ' ' . (string) $countryMember['hardest_demon'])
+                                        : (string) $countryMember['hardest_demon'];
+                                }
+                                ?>
+                                <li class="country-member-item">
+                                    <span class="country-member-rank">#<?= (int) $countryMember['country_rank'] ?></span>
+                                    <a class="country-member-identity" href="<?= e((string) $countryMember['profile_url']) ?>">
+                                        <strong><?= e((string) $countryMember['display_name']) ?></strong>
+                                        <span><?= e(t('stats.global_rank')) ?> <?= $countryMember['global_rank'] !== null ? '#' . (int) $countryMember['global_rank'] : '-' ?></span>
+                                    </a>
+                                    <dl class="country-member-metrics">
+                                        <div>
+                                            <dt><?= e(t('common.points')) ?></dt>
+                                            <dd><?= e(number_format((float) $countryMember['points'], 2)) ?></dd>
+                                        </div>
+                                        <div>
+                                            <dt><?= e(t('stats.completed')) ?></dt>
+                                            <dd><?= (int) $countryMember['completions'] ?></dd>
+                                        </div>
+                                        <div>
+                                            <dt><?= e(t('common.progress')) ?></dt>
+                                            <dd><?= (int) $countryMember['progress_records'] ?></dd>
+                                        </div>
+                                        <div>
+                                            <dt><?= e(t('stats.hardest_demon')) ?></dt>
+                                            <dd><?= e($memberHardest) ?></dd>
+                                        </div>
+                                    </dl>
+                                </li>
+                            <?php endforeach; ?>
+                        </ol>
+                    </section>
                 </section>
             </div>
         <?php endif; ?>

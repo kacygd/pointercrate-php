@@ -12,6 +12,19 @@ $GLOBALS['app_config'] = require $configPath;
 $timezone = (string) ($GLOBALS['app_config']['app']['timezone'] ?? 'UTC');
 date_default_timezone_set($timezone);
 
+$updateLockPath = __DIR__ . '/.update/maintenance.lock';
+if (is_file($updateLockPath)) {
+    $updateLockAge = time() - (int) filemtime($updateLockPath);
+    if ($updateLockAge >= 0 && $updateLockAge < 600) {
+        http_response_code(503);
+        header('Retry-After: 30');
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo 'The site is installing an update. Please try again in a moment.';
+        exit;
+    }
+    @unlink($updateLockPath);
+}
+
 if (!headers_sent()) {
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');

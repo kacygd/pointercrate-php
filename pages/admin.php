@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
+require_once dirname(__DIR__) . '/includes/updater.php';
 
 
 function record_position_event(PDO $pdo, int $demonId, ?int $oldPosition, int $newPosition, ?int $changedByUserId, ?string $note = null): void
@@ -684,6 +685,69 @@ function admin_notify_submission_submitter_discord(array $submission, string $de
 
 if (method_is_post()) {
     $action = (string) ($_POST['action'] ?? '');
+
+    if (in_array($action, [
+        'save_update_source',
+        'install_update',
+        'resolve_update_conflict_local',
+        'resolve_update_conflict_remote',
+    ], true)) {
+        if (!has_owner_access()) {
+            flash('error', t('flash.no_permission'));
+            redirect(admin_section_url('admin-updates'));
+        }
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', t('flash.invalid_token'));
+            redirect(admin_section_url('admin-updates'));
+        }
+
+        if ($action === 'save_update_source') {
+            $repository = trim((string) ($_POST['github_repository'] ?? ''));
+            $ref = trim((string) ($_POST['update_ref'] ?? 'main'));
+            if (app_updater_normalize_repository($repository) === null || app_updater_normalize_ref($ref) === null) {
+                flash('error', t('admin.updates_source_invalid'));
+            } elseif (app_updater_set_source($repository, $ref)) {
+                flash('success', t('admin.updates_source_saved'));
+            } else {
+                flash('error', t('admin.updates_source_failed'));
+            }
+            redirect(admin_section_url('admin-updates'));
+        }
+
+        if (in_array($action, ['resolve_update_conflict_local', 'resolve_update_conflict_remote'], true)) {
+            $path = (string) ($_POST['conflict_path'] ?? '');
+            $remoteSha = (string) ($_POST['remote_sha'] ?? '');
+            try {
+                if ($action === 'resolve_update_conflict_remote') {
+                    $resolvedPath = app_updater_use_remote_conflict(
+                        $path,
+                        $remoteSha,
+                        (string) ($_POST['commit_sha'] ?? ''),
+                        (int) ($_POST['remote_size'] ?? 0)
+                    );
+                    flash('success', t('admin.updates_conflict_used_remote', ['file' => $resolvedPath]));
+                } else {
+                    $resolvedPath = app_updater_accept_local_conflict($path, $remoteSha);
+                    flash('success', t('admin.updates_conflict_kept_local', ['file' => $resolvedPath]));
+                }
+            } catch (Throwable $throwable) {
+                flash('error', t('admin.updates_conflict_resolve_failed', ['error' => $throwable->getMessage()]));
+            }
+            redirect(admin_section_url('admin-updates'));
+        }
+
+        try {
+            $updateResult = app_updater_install();
+            flash('success', t('admin.updates_installed', [
+                'updated' => (int) ($updateResult['updated'] ?? 0),
+                'deleted' => (int) ($updateResult['deleted'] ?? 0),
+                'commit' => substr((string) ($updateResult['commit_sha'] ?? ''), 0, 7),
+            ]));
+        } catch (Throwable $throwable) {
+            flash('error', t('admin.updates_failed', ['error' => $throwable->getMessage()]));
+        }
+        redirect(admin_section_url('admin-updates'));
+    }
 
 
     if ($action === 'update_scoring' && can_manage_scoring()) {
@@ -2815,6 +2879,7 @@ $canManageBadges = can_manage_badges();
 $canManageTags = can_manage_levels();
 $canModerateLevelComments = can_moderate_level_comments();
 $canResetPasswords = can_reset_passwords();
+$canManageUpdates = has_owner_access();
 
 $hasGeneralQuickActions = $canManageLevels
     || $canManageUsers
@@ -2823,12 +2888,13 @@ $hasGeneralQuickActions = $canManageLevels
     || $canReviewSubmissions
     || $canManageBadges
     || $canModerateLevelComments;
-$hasOwnerOnlyQuickActions = $canManageRolePermissions || $canManageListVisibility;
+$hasOwnerOnlyQuickActions = $canManageRolePermissions || $canManageListVisibility || $canManageUpdates;
 
 $sectionCapability = [
     'admin-role-permissions'     => $canManageRolePermissions,
     'admin-list-visibility'      => $canManageListVisibility,
     'admin-scoring'              => $canManageScoring,
+    'admin-updates'              => $canManageUpdates,
     'admin-level-info-rows'      => $canManageLevels,
     'admin-level-comments'       => $canManageLevels || $canModerateLevelComments,
     'admin-claims'               => $canClaimContributors,
@@ -3059,6 +3125,22 @@ if ($activeSection === 'admin-role-permissions') {
     }
 }
 
+$updateRepository = '';
+$updateRef = 'main';
+$updatePlan = null;
+$updateCheckError = '';
+if ($activeSection === 'admin-updates' && $canManageUpdates) {
+    $updateRepository = app_updater_repository();
+    $updateRef = app_updater_ref();
+    if ($updateRepository !== '') {
+        try {
+            $updatePlan = app_updater_build_plan($updateRepository, $updateRef);
+        } catch (Throwable $throwable) {
+            $updateCheckError = $throwable->getMessage();
+        }
+    }
+}
+
 render_header(t('admin.title'), 'admin');
 ?>
 <div class="admin-dashboard-layout">
@@ -3183,6 +3265,13 @@ render_header(t('admin.title'), 'admin');
                             <span class="admin-action-meta"><?= e(t('admin.restricted_meta')) ?></span>
                         </a>
                     <?php endif; ?>
+                    <?php if ($canManageUpdates): ?>
+                        <a class="admin-action-tile is-owner<?= $activeSection === 'admin-updates' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-updates')) ?>">
+                            <span class="admin-action-title"><?= e(t('admin.updates')) ?></span>
+                            <small><?= e(t('admin.updates_desc')) ?></small>
+                            <span class="admin-action-meta"><?= e(t('admin.restricted_meta')) ?></span>
+                        </a>
+                    <?php endif; ?>
                 </div>
             </div>
         <?php endif; ?>
@@ -3211,6 +3300,143 @@ render_header(t('admin.title'), 'admin');
             </div>
         </section>
     <?php endif; ?>
+
+<?php if ($activeSection === 'admin-updates'): ?>
+<section class="panel fade admin-tool-section admin-updates-section" id="admin-updates">
+    <div class="panel-head split">
+        <div>
+            <h2><?= e(t('admin.updates')) ?></h2>
+            <p><?= e(t('admin.updates_intro')) ?></p>
+        </div>
+        <?php if ($updateRepository !== ''): ?>
+            <a class="button white hover small" href="<?= e(admin_section_url('admin-updates')) ?>"><?= e(t('admin.updates_check')) ?></a>
+        <?php endif; ?>
+    </div>
+
+    <form class="stack-form admin-update-source-form" method="post" action="<?= e(admin_section_url('admin-updates')) ?>">
+        <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="action" value="save_update_source">
+        <div class="detail-grid admin-update-source-grid">
+            <label class="form-input">
+                <span><?= e(t('admin.updates_repository')) ?></span>
+                <input type="text" name="github_repository" value="<?= e($updateRepository) ?>" placeholder="owner/repository" required>
+                <small><?= e(t('admin.updates_repository_help')) ?></small>
+            </label>
+            <label class="form-input">
+                <span><?= e(t('admin.updates_ref')) ?></span>
+                <input type="text" name="update_ref" value="<?= e($updateRef) ?>" placeholder="main" required>
+                <small><?= e(t('admin.updates_ref_help')) ?></small>
+            </label>
+        </div>
+        <button class="button blue hover" type="submit"><?= e(t('admin.updates_save_source')) ?></button>
+    </form>
+
+    <?php if ($updateCheckError !== ''): ?>
+        <p class="info-red admin-update-message"><?= e(t('admin.updates_check_failed', ['error' => $updateCheckError])) ?></p>
+    <?php elseif (is_array($updatePlan)): ?>
+        <?php
+        $changedFiles = (array) ($updatePlan['changed'] ?? []);
+        $deletedFiles = (array) ($updatePlan['deleted'] ?? []);
+        $conflictFiles = (array) ($updatePlan['conflicts'] ?? []);
+        $commitMessage = trim((string) ($updatePlan['commit_message'] ?? ''));
+        $commitTitle = $commitMessage !== '' ? (string) strtok($commitMessage, "\r\n") : t('common.none');
+        ?>
+        <div class="admin-update-release">
+            <div>
+                <span><?= e(t('admin.updates_remote_version')) ?></span>
+                <strong><?= e((string) ($updatePlan['commit_short'] ?? '')) ?></strong>
+            </div>
+            <p><?= e($commitTitle) ?></p>
+            <?php if ((string) ($updatePlan['commit_date'] ?? '') !== ''): ?>
+                <time datetime="<?= e((string) $updatePlan['commit_date']) ?>"><?= e((string) $updatePlan['commit_date']) ?></time>
+            <?php endif; ?>
+        </div>
+
+        <div class="admin-update-summary">
+            <article>
+                <strong><?= count($changedFiles) ?></strong>
+                <span><?= e(t('admin.updates_changed_files')) ?></span>
+            </article>
+            <article>
+                <strong><?= count($deletedFiles) ?></strong>
+                <span><?= e(t('admin.updates_deleted_files')) ?></span>
+            </article>
+            <article class="<?= $conflictFiles !== [] ? 'is-alert' : '' ?>">
+                <strong><?= count($conflictFiles) ?></strong>
+                <span><?= e(t('admin.updates_conflicts')) ?></span>
+            </article>
+        </div>
+
+        <?php if (!empty($updatePlan['first_sync']) && $changedFiles !== []): ?>
+            <p class="info-yellow admin-update-message"><?= e(t('admin.updates_first_sync')) ?></p>
+        <?php endif; ?>
+
+        <?php if ($conflictFiles !== []): ?>
+            <p class="info-red admin-update-message"><?= e(t('admin.updates_conflict_help')) ?></p>
+        <?php elseif (empty($updatePlan['update_available'])): ?>
+            <p class="info-green admin-update-message"><?= e(t('admin.updates_current')) ?></p>
+        <?php else: ?>
+            <p class="info-green admin-update-message"><?= e(t('admin.updates_ready')) ?></p>
+        <?php endif; ?>
+
+        <?php if ($changedFiles !== [] || $deletedFiles !== [] || $conflictFiles !== []): ?>
+            <div class="admin-update-file-list" aria-label="<?= e(t('admin.updates_file_list')) ?>">
+                <?php foreach ($changedFiles as $file): ?>
+                    <div>
+                        <code><?= e((string) ($file['path'] ?? '')) ?></code>
+                        <span class="badge <?= ($file['status'] ?? '') === 'new' ? 'success' : '' ?>"><?= e(t(($file['status'] ?? '') === 'new' ? 'admin.updates_new' : 'admin.updates_changed')) ?></span>
+                    </div>
+                <?php endforeach; ?>
+                <?php foreach ($deletedFiles as $path): ?>
+                    <div>
+                        <code><?= e((string) $path) ?></code>
+                        <span class="badge error"><?= e(t('admin.updates_deleted')) ?></span>
+                    </div>
+                <?php endforeach; ?>
+                <?php foreach ($conflictFiles as $path): ?>
+                    <?php $remoteConflictFile = is_array($updatePlan['files'][$path] ?? null) ? $updatePlan['files'][$path] : null; ?>
+                    <div>
+                        <code><?= e((string) $path) ?></code>
+                        <div class="admin-update-conflict-actions">
+                            <span class="badge error"><?= e(t('admin.updates_conflict')) ?></span>
+                            <form method="post" action="<?= e(admin_section_url('admin-updates')) ?>">
+                                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="conflict_path" value="<?= e((string) $path) ?>">
+                                <input type="hidden" name="remote_sha" value="<?= e((string) ($remoteConflictFile['sha'] ?? '')) ?>">
+                                <input type="hidden" name="commit_sha" value="<?= e((string) ($updatePlan['commit_sha'] ?? '')) ?>">
+                                <input type="hidden" name="remote_size" value="<?= (int) ($remoteConflictFile['size'] ?? 0) ?>">
+                                <button class="button white hover small" type="submit" name="action" value="resolve_update_conflict_local">
+                                    <?= e(t('admin.updates_keep_local')) ?>
+                                </button>
+                                <?php if ($remoteConflictFile !== null): ?>
+                                    <button
+                                        class="button danger hover small"
+                                        type="submit"
+                                        name="action"
+                                        value="resolve_update_conflict_remote"
+                                        data-confirm="<?= e(t('admin.updates_use_remote_confirm')) ?>"
+                                    ><?= e(t('admin.updates_use_remote')) ?></button>
+                                <?php endif; ?>
+                            </form>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if (!empty($updatePlan['update_available']) && $conflictFiles === []): ?>
+            <form class="admin-update-install-form" method="post" action="<?= e(admin_section_url('admin-updates')) ?>">
+                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="install_update">
+                <p><?= e(t('admin.updates_backup_note')) ?></p>
+                <button class="button blue hover" type="submit"><?= e(t('admin.updates_install')) ?></button>
+            </form>
+        <?php endif; ?>
+    <?php elseif ($updateRepository === ''): ?>
+        <p class="muted admin-update-message"><?= e(t('admin.updates_configure_first')) ?></p>
+    <?php endif; ?>
+</section>
+<?php endif; ?>
 
 <?php if ($activeSection === 'admin-role-permissions'): ?>
 <section class="panel fade admin-tool-section admin-role-permissions-section" id="admin-role-permissions">

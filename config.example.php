@@ -35,6 +35,10 @@ return [
         'server_id' => '', // Optional: server ID used when server_widget_url is empty
         'server_theme' => 'light', // dark | light
     ],
+    'updates' => [
+        'github_repository' => 'https://github.com/kacygd/pointercrate-php',
+        'ref' => 'main',
+    ],
     'security' => [
         'captcha_enabled' => false,
         'setup_captcha_enabled' => true,
