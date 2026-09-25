@@ -111,17 +111,7 @@ function render_creator_credit(array $demon): string
 
 function video_host_label(string $url): string
 {
-    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
-    if (str_contains($host, 'youtube.com') || str_contains($host, 'youtu.be')) {
-        return 'YouTube';
-    }
-    if (str_contains($host, 'twitch.tv')) {
-        return 'Twitch';
-    }
-    if (str_contains($host, 'bilibili.com')) {
-        return 'Bilibili';
-    }
-    return $host !== '' ? $host : 'Video';
+    return video_provider_label($url);
 }
 
 function render_demon_dropdown(string $id, string $title, string $description, array $demons, int $currentId): void
@@ -939,7 +929,7 @@ $listHelpers = db()->query($listHelpersSql)->fetchAll();
 
 $discordWidgetUrl = discord_server_widget_url();
 
-$embed = youtube_embed_url((string) $demon['video_url']);
+$videoPlayer = video_player_source((string) $demon['video_url']);
 $thumbUrl = card_thumbnail_url($demon);
 $thumbStyle = css_background_image($thumbUrl);
 
@@ -1122,19 +1112,27 @@ render_header((string) $demon['name'], 'list', [
             </div>
         </section>
 
-        <?php if ($embed !== null): ?>
+        <?php if ($videoPlayer !== null): ?>
             <section class="panel fade">
                 <div class="panel-head">
                     <h2><?= e(t('demon.verification_preview')) ?></h2>
                 </div>
-                <iframe
-                    class="ratio-16-9 demon-preview-frame"
-                    src="<?= e($embed) ?>"
-                    title="<?= e(t('demon.video_iframe_title', ['name' => (string) $demon['name']])) ?>"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowfullscreen
-                    referrerpolicy="strict-origin-when-cross-origin"
-                ></iframe>
+                <?php if ($videoPlayer['type'] === 'video'): ?>
+                    <video class="ratio-16-9 demon-preview-frame demon-preview-video" controls playsinline preload="metadata">
+                        <source src="<?= e($videoPlayer['src']) ?>" type="<?= e((string) ($videoPlayer['mime'] ?? '')) ?>">
+                        <a href="<?= e((string) $demon['video_url']) ?>" target="_blank" rel="noreferrer"><?= e(t('demon.verification_video')) ?></a>
+                    </video>
+                <?php else: ?>
+                    <iframe
+                        class="ratio-16-9 demon-preview-frame"
+                        src="<?= e($videoPlayer['src']) ?>"
+                        title="<?= e(t('demon.video_iframe_title', ['name' => (string) $demon['name']])) ?>"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
+                        allowfullscreen
+                        loading="lazy"
+                        referrerpolicy="strict-origin-when-cross-origin"
+                    ></iframe>
+                <?php endif; ?>
             </section>
         <?php endif; ?>
 

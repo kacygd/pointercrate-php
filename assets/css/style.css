@@ -1148,7 +1148,7 @@ header nav {
 
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 
   position: fixed;
 
@@ -1175,13 +1175,27 @@ header nav .nav-icon {
 
 .nav-brand-wrap {
   margin-right: auto;
+  flex: 1 1 220px;
+  max-width: 240px;
   min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  font-size: 1.1em !important;
+  letter-spacing: 0;
 }
 
 .nav-brand-link {
-  display: inline-flex;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-weight: 700;
   align-items: center;
   line-height: 1;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-brand-logo {
@@ -1202,12 +1216,15 @@ header nav .nav-icon {
 }
 
 .nav-demonlist-menu {
-  flex: 0 0 auto;
+  flex: 1 1 200px;
+  min-width: 120px;
+  max-width: 230px;
 }
 
 .nav-demonlist-trigger {
-  min-width: 160px;
-  width: auto;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   height: 70px !important;
   box-sizing: border-box;
   align-items: center !important;
@@ -1230,7 +1247,9 @@ header nav .nav-icon {
 }
 
 .nav-demonlist-title {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
+  min-width: 0;
   align-items: center;
   gap: 5px;
   color: #4b4b4d;
@@ -1238,10 +1257,17 @@ header nav .nav-icon {
   font-weight: 600;
   line-height: 1.2;
   text-transform: none;
+}
+
+.nav-demonlist-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .nav-demonlist-title i {
+  flex: 0 0 auto;
   color: #4f5a67;
   font-size: 0.78em;
   line-height: 1;
@@ -1370,6 +1396,14 @@ header nav .nav-drop-down .nav-hover-dropdown a {
 
 /* --------- smartphone ----------- */
 @media (max-width: 1071px) {
+  .nav-brand-wrap {
+    flex: 1 1 0;
+    width: 0;
+    max-width: none;
+    padding-left: 16px !important;
+    padding-right: 12px !important;
+  }
+
   .collapse > .nav-right-cluster {
     display: none;
   }
@@ -1463,6 +1497,7 @@ header nav .nav-drop-down .nav-hover-dropdown a {
 
   .collapse-button {
     display: flex;
+    flex: 0 0 32px;
     height: 27px !important;
     width: 32px !important;
     margin-top: 24.5px !important;
@@ -2940,6 +2975,15 @@ main.left .demon-byline {
 
 .nav-auth-status {
   flex-grow: 0;
+  min-width: 0;
+  max-width: 170px;
+}
+
+.nav-auth-status > .nav-item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-right-cluster {
@@ -3251,6 +3295,12 @@ header nav .nav-profile-dropdown button:hover {
   width: 100%;
   display: block;
   margin: 0;
+}
+
+.demon-preview-video {
+  height: auto;
+  background: #05070a;
+  object-fit: contain;
 }
 
 @media (max-width: 767px) {

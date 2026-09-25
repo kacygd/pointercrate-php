@@ -232,7 +232,7 @@ render_header(t('submit.title'), 'submit');
 
         <label class="field">
             <span><?= e(t('submit.video_url')) ?></span>
-            <input type="url" name="video_url" value="<?= e($form['video_url']) ?>" placeholder="https://www.youtube.com/watch?v=..." required>
+            <input type="url" name="video_url" value="<?= e($form['video_url']) ?>" placeholder="https://..." required>
         </label>
 
         <label class="field">

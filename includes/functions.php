@@ -3453,8 +3453,10 @@ if (!function_exists('youtube_video_id')) {
             return null;
         }
 
-        $host = strtolower((string) $parts['host']);
-        if (str_contains($host, 'youtube.com') && !empty($parts['query'])) {
+        $host = strtolower(rtrim((string) $parts['host'], '.'));
+        $isYoutube = $host === 'youtube.com' || str_ends_with($host, '.youtube.com');
+        $isYoutubeShort = $host === 'youtu.be' || str_ends_with($host, '.youtu.be');
+        if ($isYoutube && !empty($parts['query'])) {
             parse_str((string) $parts['query'], $query);
             if (!empty($query['v']) && is_string($query['v'])) {
                 $id = trim($query['v']);
@@ -3462,12 +3464,13 @@ if (!function_exists('youtube_video_id')) {
             }
         }
 
-        if (str_contains($host, 'youtu.be') && !empty($parts['path'])) {
-            $id = trim((string) $parts['path'], '/');
+        if ($isYoutubeShort && !empty($parts['path'])) {
+            $segments = array_values(array_filter(explode('/', trim((string) $parts['path'], '/'))));
+            $id = trim((string) ($segments[0] ?? ''));
             return preg_match('/^[A-Za-z0-9_-]{11}$/', $id) === 1 ? $id : null;
         }
 
-        if (str_contains($host, 'youtube.com') && !empty($parts['path'])) {
+        if ($isYoutube && !empty($parts['path'])) {
             $segments = array_values(array_filter(explode('/', trim((string) $parts['path'], '/'))));
             $embedKeys = ['embed', 'shorts', 'live'];
             if (count($segments) >= 2 && in_array($segments[0], $embedKeys, true)) {
@@ -3500,6 +3503,196 @@ if (!function_exists('youtube_embed_url')) {
 
         return 'https://www.youtube.com/embed/' . rawurlencode($id) . '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
     }
+}
+
+function video_host_matches(string $host, string $domain): bool
+{
+    $host = strtolower(rtrim($host, '.'));
+    $domain = strtolower(rtrim($domain, '.'));
+
+    return $host === $domain || str_ends_with($host, '.' . $domain);
+}
+
+function video_embed_parent_host(): ?string
+{
+    $origin = app_public_url() ?? request_origin();
+    $host = $origin !== null ? strtolower((string) parse_url($origin, PHP_URL_HOST)) : '';
+    if ($host === '' || preg_match('/^[a-z0-9.-]+$/', $host) !== 1) {
+        return null;
+    }
+
+    return rtrim($host, '.');
+}
+
+/**
+ * @return array{type: 'iframe'|'video', src: string, provider: string, mime?: string}|null
+ */
+function video_player_source(string $url): ?array
+{
+    $url = trim($url);
+    if ($url === '' || filter_var($url, FILTER_VALIDATE_URL) === false) {
+        return null;
+    }
+
+    $parts = parse_url($url);
+    if (!is_array($parts) || empty($parts['host'])) {
+        return null;
+    }
+
+    $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+    if (!in_array($scheme, ['http', 'https'], true)) {
+        return null;
+    }
+
+    $host = strtolower(rtrim((string) $parts['host'], '.'));
+    $path = (string) ($parts['path'] ?? '');
+
+    $youtubeEmbed = youtube_embed_url($url);
+    if ($youtubeEmbed !== null) {
+        return ['type' => 'iframe', 'src' => $youtubeEmbed, 'provider' => 'YouTube'];
+    }
+
+    if (video_host_matches($host, 'vimeo.com')) {
+        $segments = array_values(array_filter(explode('/', trim($path, '/'))));
+        $videoId = null;
+        foreach ($segments as $segment) {
+            if (preg_match('/^\d+$/', $segment) === 1) {
+                $videoId = $segment;
+            }
+        }
+        if ($videoId !== null) {
+            return [
+                'type' => 'iframe',
+                'src' => 'https://player.vimeo.com/video/' . rawurlencode($videoId) . '?dnt=1',
+                'provider' => 'Vimeo',
+            ];
+        }
+    }
+
+    if (video_host_matches($host, 'dailymotion.com') || video_host_matches($host, 'dai.ly')) {
+        $segments = array_values(array_filter(explode('/', trim($path, '/'))));
+        $videoId = video_host_matches($host, 'dai.ly')
+            ? (string) ($segments[0] ?? '')
+            : ((string) (($segments[0] ?? '') === 'video' ? ($segments[1] ?? '') : ''));
+        $videoId = preg_replace('/_.+$/', '', $videoId) ?? '';
+        if (preg_match('/^[A-Za-z0-9]+$/', $videoId) === 1) {
+            return [
+                'type' => 'iframe',
+                'src' => 'https://www.dailymotion.com/embed/video/' . rawurlencode($videoId),
+                'provider' => 'Dailymotion',
+            ];
+        }
+    }
+
+    if (video_host_matches($host, 'twitch.tv')) {
+        $segments = array_values(array_filter(explode('/', trim($path, '/'))));
+        $parent = video_embed_parent_host();
+        if ($parent !== null) {
+            $query = ['parent' => $parent, 'autoplay' => 'false'];
+            if ($host === 'clips.twitch.tv' && isset($segments[0]) && preg_match('/^[A-Za-z0-9_-]+$/', $segments[0]) === 1) {
+                $query = ['clip' => $segments[0]] + $query;
+                return [
+                    'type' => 'iframe',
+                    'src' => 'https://clips.twitch.tv/embed?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986),
+                    'provider' => 'Twitch',
+                ];
+            }
+            if (($segments[0] ?? '') === 'videos' && isset($segments[1]) && preg_match('/^\d+$/', $segments[1]) === 1) {
+                $query = ['video' => 'v' . $segments[1]] + $query;
+                return [
+                    'type' => 'iframe',
+                    'src' => 'https://player.twitch.tv/?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986),
+                    'provider' => 'Twitch',
+                ];
+            }
+            if (($segments[1] ?? '') === 'clip' && isset($segments[2]) && preg_match('/^[A-Za-z0-9_-]+$/', $segments[2]) === 1) {
+                $query = ['clip' => $segments[2]] + $query;
+                return [
+                    'type' => 'iframe',
+                    'src' => 'https://clips.twitch.tv/embed?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986),
+                    'provider' => 'Twitch',
+                ];
+            }
+        }
+    }
+
+    if (video_host_matches($host, 'bilibili.com')) {
+        $bvid = '';
+        $aid = '';
+        if (preg_match('#/video/(BV[A-Za-z0-9]+)#i', $path, $matches) === 1) {
+            $bvid = $matches[1];
+        } elseif (preg_match('#/video/av(\d+)#i', $path, $matches) === 1) {
+            $aid = $matches[1];
+        }
+        if ($bvid !== '' || $aid !== '') {
+            $query = $bvid !== '' ? ['bvid' => $bvid] : ['aid' => $aid];
+            $query += ['high_quality' => '1', 'danmaku' => '0'];
+            return [
+                'type' => 'iframe',
+                'src' => 'https://player.bilibili.com/player.html?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986),
+                'provider' => 'Bilibili',
+            ];
+        }
+    }
+
+    if (video_host_matches($host, 'streamable.com')) {
+        $segments = array_values(array_filter(explode('/', trim($path, '/'))));
+        $videoId = (string) (($segments[0] ?? '') === 'e' ? ($segments[1] ?? '') : ($segments[0] ?? ''));
+        if (preg_match('/^[A-Za-z0-9]+$/', $videoId) === 1) {
+            return [
+                'type' => 'iframe',
+                'src' => 'https://streamable.com/e/' . rawurlencode($videoId),
+                'provider' => 'Streamable',
+            ];
+        }
+    }
+
+    if ($host === 'drive.google.com') {
+        $fileId = '';
+        if (preg_match('#/file/d/([A-Za-z0-9_-]+)#', $path, $matches) === 1) {
+            $fileId = $matches[1];
+        } elseif (!empty($parts['query'])) {
+            parse_str((string) $parts['query'], $query);
+            $fileId = is_string($query['id'] ?? null) ? (string) $query['id'] : '';
+        }
+        if (preg_match('/^[A-Za-z0-9_-]+$/', $fileId) === 1) {
+            return [
+                'type' => 'iframe',
+                'src' => 'https://drive.google.com/file/d/' . rawurlencode($fileId) . '/preview',
+                'provider' => 'Google Drive',
+            ];
+        }
+    }
+
+    $extension = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
+    $directTypes = [
+        'mp4' => 'video/mp4',
+        'm4v' => 'video/mp4',
+        'webm' => 'video/webm',
+        'ogv' => 'video/ogg',
+        'ogg' => 'video/ogg',
+    ];
+    if (isset($directTypes[$extension])) {
+        return [
+            'type' => 'video',
+            'src' => $url,
+            'provider' => 'Video',
+            'mime' => $directTypes[$extension],
+        ];
+    }
+
+    return null;
+}
+
+function video_provider_label(string $url): string
+{
+    $source = video_player_source($url);
+    if ($source !== null) {
+        return $source['provider'];
+    }
+
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    return $host !== '' ? preg_replace('/^www\./', '', $host) ?? $host : 'Video';
 }
 
 function current_user_role(): string

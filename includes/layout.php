@@ -145,8 +145,8 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
 <body>
 <header>
     <nav class="center collapse underlined see-through">
-        <div class="nav-icon nav-nohide nav-brand-wrap" style="margin-right: auto; font-size: 1.1em; letter-spacing: 0.05em;">
-            <a href="<?= e(base_url('index.php')) ?>" class="nav-brand-link" style="font-weight: 700; color: inherit;">
+        <div class="nav-icon nav-nohide nav-brand-wrap">
+            <a href="<?= e(base_url('index.php')) ?>" class="nav-brand-link" title="<?= e($appName) ?>">
                 <?php if ($brandLogoUrl !== null): ?>
                     <img src="<?= e($brandLogoUrl) ?>" alt="<?= e($appName) ?>" class="nav-brand-logo" style="<?= e($brandLogoStyle) ?>">
                 <?php else: ?>
@@ -156,8 +156,8 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
         </div>
 
         <div class="nav-group nav-demonlist-menu">
-            <a class="nav-item hover white nav-demonlist-trigger <?= $demonlistActive ? 'active' : '' ?>" href="<?= e(base_url('index.php')) ?>">
-                <span class="nav-demonlist-title"><?= e($appName) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
+            <a class="nav-item hover white nav-demonlist-trigger <?= $demonlistActive ? 'active' : '' ?>" href="<?= e(base_url('index.php')) ?>" title="<?= e($appName) ?>">
+                <span class="nav-demonlist-title"><span class="nav-demonlist-title-text"><?= e($appName) ?></span><i class="fas fa-sort-down" aria-hidden="true"></i></span>
             </a>
             <ul class="nav-hover-dropdown white nav-demonlist-dropdown">
                 <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(base_url('guidelines.php')) ?>"><?= e(t('nav.guidelines')) ?></a></li>
