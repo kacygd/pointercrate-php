@@ -7384,9 +7384,9 @@ html[data-theme="dark"] #lists.fade {
   left: auto;
   right: 0;
   top: calc(100% + 6px);
-  width: max-content;
-  min-width: min(560px, calc(100vw - 40px));
-  max-width: calc(100vw - 40px);
+  width: min(680px, calc(100vw - 40px));
+  min-width: 0;
+  max-width: min(680px, calc(100vw - 40px));
   box-sizing: border-box;
   overflow: hidden;
   z-index: 30;
@@ -7540,6 +7540,21 @@ html[data-theme="dark"] #lists.fade {
 }
 
 @media (max-width: 600px) {
+  .search {
+    position: relative;
+  }
+
+  .search .list-sort-dropdown {
+    position: static;
+  }
+
+  .search .list-sort-dropdown .dropdown {
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: none;
+  }
+
   .search .list-sort-panel {
     grid-template-columns: 1fr;
   }
@@ -7584,6 +7599,7 @@ html[data-theme="dark"] #lists.fade {
 .list-tag-filter-options {
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
   gap: 6px;
 
   margin: 0;
@@ -7595,10 +7611,12 @@ html[data-theme="dark"] #lists.fade {
 
 .list-tag-chip {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 5px;
 
   max-width: 100%;
+  overflow: hidden;
   padding: 3px 10px;
   border: 1px solid var(--color-border);
   border-radius: 999px;
@@ -7606,6 +7624,7 @@ html[data-theme="dark"] #lists.fade {
   font-size: 0.78em;
   font-weight: 600;
   white-space: nowrap;
+  text-overflow: ellipsis;
   text-decoration: none;
 
   cursor: pointer;

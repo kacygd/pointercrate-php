@@ -557,10 +557,7 @@ $listSortOptions = demonlist_list_sort_available_options($showcase);
 $listSortValue = trim((string) ($_GET['sort'] ?? ''));
 $listSort = array_key_exists($listSortValue, $listSortOptions) ? $listSortValue : '';
 
-$listTags = array_values(array_filter(
-    tag_fetch_all($pdo),
-    static fn (array $tag): bool => (int) ($tag['usage_count'] ?? 0) > 0
-));
+$listTags = tag_fetch_all($pdo);
 $listSelectedTags = demonlist_list_tags_from_get();
 if ($listSelectedTags !== []) {
     $showcase = demonlist_filter_demons_by_tags(
