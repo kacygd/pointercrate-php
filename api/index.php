@@ -731,7 +731,8 @@ function api_creator_names(array $demon): array
 function api_nullable_url(mixed $value): ?string
 {
     $url = trim((string) ($value ?? ''));
-    return $url === '' ? null : $url;
+
+    return valid_http_url($url) ? $url : null;
 }
 
 function api_iso_time(string $value): string

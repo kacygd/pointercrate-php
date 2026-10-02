@@ -92,6 +92,13 @@ if (method_is_post()) {
     $form['notes'] = trim((string) ($_POST['notes'] ?? ''));
     $form['agree'] = isset($_POST['agree']) ? '1' : '0';
 
+    $submitIpBucket = 'submit_ip:' . current_request_ip();
+    $submitWait = rate_limit_seconds_remaining($submitIpBucket, 10, 3600);
+    if ($submitWait > 0) {
+        $errors[] = t('security.rate_limited', ['minutes' => (int) ceil($submitWait / 60)]);
+    }
+    rate_limit_record_failure($submitIpBucket, 10, 3600);
+
     if (!validate_csrf($_POST['_token'] ?? null)) {
         $errors[] = t('submit.error_token');
     }
@@ -112,11 +119,11 @@ if (method_is_post()) {
             : t('submit.error_demon');
     }
 
-    if ($form['video_url'] === '' || filter_var($form['video_url'], FILTER_VALIDATE_URL) === false) {
+    if ($form['video_url'] === '' || !valid_http_url($form['video_url'])) {
         $errors[] = t('submit.error_video');
     }
 
-    if ($form['raw_footage_url'] !== '' && filter_var($form['raw_footage_url'], FILTER_VALIDATE_URL) === false) {
+    if ($form['raw_footage_url'] !== '' && !valid_http_url($form['raw_footage_url'])) {
         $errors[] = t('submit.error_raw');
     }
 

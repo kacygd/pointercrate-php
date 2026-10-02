@@ -1059,12 +1059,13 @@ if (method_is_post()) {
         try {
             $rolesToUpdate = ['list_editor', 'list_helper'];
             $permissionKeys = admin_permission_keys();
+            $ownerOnlyPermissions = ['manage_role_permissions'];
             $updatedCount = 0;
 
             foreach ($rolesToUpdate as $roleKey) {
                 foreach ($permissionKeys as $permissionKey) {
                     $rawValue = $postedPermissions[$roleKey][$permissionKey] ?? '0';
-                    $allowed = in_array(
+                    $allowed = !in_array($permissionKey, $ownerOnlyPermissions, true) && in_array(
                         strtolower(trim((string) $rawValue)),
                         ['1', 'true', 'yes', 'on'],
                         true
@@ -1590,10 +1591,10 @@ if (method_is_post()) {
         if ($publisher === '') {
             $errors[] = 'Publisher is required.';
         }
-        if ($videoUrl === '' || filter_var($videoUrl, FILTER_VALIDATE_URL) === false) {
+        if ($videoUrl === '' || !valid_http_url($videoUrl)) {
             $errors[] = 'Valid verification video URL is required.';
         }
-        if ($thumbnail !== '' && filter_var($thumbnail, FILTER_VALIDATE_URL) === false) {
+        if ($thumbnail !== '' && !valid_http_url($thumbnail)) {
             $errors[] = 'Thumbnail URL must be valid when provided.';
         }
         if ($requirement < 1 || $requirement > 100) {
@@ -1787,10 +1788,10 @@ if (method_is_post()) {
         if ($newPositionInput !== '' && !ctype_digit($newPositionInput)) {
             $errors[] = 'New position must be a positive integer.';
         }
-        if ($videoUrlInput !== '' && filter_var($videoUrlInput, FILTER_VALIDATE_URL) === false) {
+        if ($videoUrlInput !== '' && !valid_http_url($videoUrlInput)) {
             $errors[] = 'Verification video URL must be valid.';
         }
-        if ($thumbnailInput !== '' && filter_var($thumbnailInput, FILTER_VALIDATE_URL) === false) {
+        if ($thumbnailInput !== '' && !valid_http_url($thumbnailInput)) {
             $errors[] = 'Thumbnail URL must be valid.';
         }
         if (!in_array($legacyStatus, ['keep', 'normal', 'legacy'], true)) {
@@ -1929,10 +1930,10 @@ if (method_is_post()) {
             if ($finalRequirement < 1 || $finalRequirement > 100) {
                 throw new RuntimeException('Requirement must be between 1 and 100.');
             }
-            if ($finalVideoUrl === '' || filter_var($finalVideoUrl, FILTER_VALIDATE_URL) === false) {
+            if ($finalVideoUrl === '' || !valid_http_url($finalVideoUrl)) {
                 throw new RuntimeException('Verification video URL must be valid.');
             }
-            if ($finalThumbnail !== '' && filter_var($finalThumbnail, FILTER_VALIDATE_URL) === false) {
+            if ($finalThumbnail !== '' && !valid_http_url($finalThumbnail)) {
                 throw new RuntimeException('Thumbnail URL must be valid.');
             }
 
@@ -2384,6 +2385,10 @@ if (method_is_post()) {
             flash('error', 'Invalid user update request.');
             redirect($redirectTarget);
         }
+        if ($role === 'owner' && !has_owner_access()) {
+            flash('error', 'Only an owner can grant the owner role.');
+            redirect($redirectTarget);
+        }
         if (!in_array($isBannedInput, ['0', '1'], true)) {
             flash('error', 'Invalid banned status value.');
             redirect($redirectTarget);
@@ -2665,7 +2670,8 @@ if (method_is_post()) {
 
                 $progress = max(1, min(100, (int) ($submission['progress'] ?? 100)));
                 $submittedEnjoyment = $submission['enjoyment'] !== null ? max(0, min(10, (int) $submission['enjoyment'])) : null;
-                $submittedVideo = (string) ($submission['video_url'] ?: '#');
+                $candidateVideo = (string) ($submission['video_url'] ?? '');
+                $submittedVideo = valid_http_url($candidateVideo) ? $candidateVideo : '#';
                 $submittedNotes = trim((string) ($submission['notes'] ?? ''));
 
                 $existingStmt = $pdo->prepare('SELECT id, progress, enjoyment, video_url, notes, placement FROM completions WHERE demon_id = :demon_id AND player = :player LIMIT 1');
@@ -4650,8 +4656,8 @@ render_header(t('admin.title'), 'admin');
                 <div><dt><?= e(t('common.enjoyment')) ?></dt><dd><?= $item['enjoyment'] !== null ? (int) $item['enjoyment'] . '/10' : '-' ?></dd></div>
                 <div><dt><?= e(t('common.platform')) ?></dt><dd><?= e((string) ($item['platform'] ?: '-')) ?></dd></div>
                 <div><dt><?= e(t('admin.refresh')) ?></dt><dd><?= $item['refresh_rate'] !== null ? (int) $item['refresh_rate'] . 'Hz' : '-' ?></dd></div>
-                <div><dt><?= e(t('common.proof')) ?></dt><dd><a class="link" target="_blank" rel="noreferrer" href="<?= e((string) ($item['video_url'] ?: '#')) ?>"><?= e(t('common.open')) ?></a></dd></div>
-                <div><dt><?= e(t('common.raw_footage')) ?></dt><dd><?= !empty($item['raw_footage_url']) ? '<a class="link" target="_blank" rel="noreferrer" href="' . e((string) $item['raw_footage_url']) . '">' . e(t('common.open')) . '</a>' : '-' ?></dd></div>
+                <div><dt><?= e(t('common.proof')) ?></dt><dd><a class="link" target="_blank" rel="noreferrer" href="<?= e(safe_href_url((string) ($item['video_url'] ?? ''))) ?>"><?= e(t('common.open')) ?></a></dd></div>
+                <div><dt><?= e(t('common.raw_footage')) ?></dt><dd><?= !empty($item['raw_footage_url']) ? '<a class="link" target="_blank" rel="noreferrer" href="' . e(safe_href_url((string) $item['raw_footage_url'])) . '">' . e(t('common.open')) . '</a>' : '-' ?></dd></div>
             </dl>
 
             <?php if (!empty($item['notes'])): ?>

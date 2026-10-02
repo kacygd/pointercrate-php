@@ -28,6 +28,13 @@ if (method_is_post() && !$ipBanned) {
     $password = (string) ($_POST['password'] ?? '');
     $passwordConfirm = (string) ($_POST['password_confirm'] ?? '');
 
+    $registerIpBucket = 'register_ip:' . current_request_ip();
+    $registerWait = rate_limit_seconds_remaining($registerIpBucket, 10, 3600);
+    if ($registerWait > 0) {
+        $errors[] = t('security.rate_limited', ['minutes' => (int) ceil($registerWait / 60)]);
+    }
+    rate_limit_record_failure($registerIpBucket, 10, 3600);
+
     if (!validate_csrf($_POST['_token'] ?? null)) {
         $errors[] = t('auth.login.error_token');
     }

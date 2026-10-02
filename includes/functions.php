@@ -225,6 +225,30 @@ function e(string|null|int|float $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function valid_http_url(string $url): bool
+{
+    $url = trim($url);
+    if ($url === '' || preg_match('/[\x00-\x1F\x7F]/', $url) === 1) {
+        return false;
+    }
+
+    if (filter_var($url, FILTER_VALIDATE_URL) === false) {
+        return false;
+    }
+
+    $scheme = strtolower((string) (parse_url($url, PHP_URL_SCHEME) ?: ''));
+    $host = (string) (parse_url($url, PHP_URL_HOST) ?: '');
+
+    return in_array($scheme, ['http', 'https'], true) && $host !== '';
+}
+
+function safe_href_url(mixed $url): string
+{
+    $value = trim((string) $url);
+
+    return valid_http_url($value) ? $value : '#';
+}
+
 /**
  * @return array<int, string>
  */
@@ -730,6 +754,95 @@ function login_clear_failed_attempts(int $userId): void
          WHERE id = :id'
     );
     $stmt->execute([':id' => $userId]);
+}
+
+function rate_limit_file(string $bucket): ?string
+{
+    $base = sys_get_temp_dir();
+    if ($base === '' || !is_dir($base) || !is_writable($base)) {
+        return null;
+    }
+
+    $directory = $base . DIRECTORY_SEPARATOR . 'demonlist-ratelimit';
+    if (!is_dir($directory) && !@mkdir($directory, 0700, true) && !is_dir($directory)) {
+        return null;
+    }
+
+    return $directory . DIRECTORY_SEPARATOR . hash('sha256', $bucket) . '.json';
+}
+
+function rate_limit_seconds_remaining(string $bucket, int $maxAttempts, int $windowSeconds): int
+{
+    $file = rate_limit_file($bucket);
+    if ($file === null) {
+        return 0;
+    }
+
+    $raw = @file_get_contents($file);
+    if (!is_string($raw) || $raw === '') {
+        return 0;
+    }
+
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return 0;
+    }
+
+    $startedAt = (int) ($data['started_at'] ?? 0);
+    $count = (int) ($data['count'] ?? 0);
+    if ($startedAt <= 0 || $count <= 0) {
+        return 0;
+    }
+
+    $elapsed = time() - $startedAt;
+    if ($elapsed >= $windowSeconds) {
+        @unlink($file);
+        return 0;
+    }
+
+    if ($count < $maxAttempts) {
+        return 0;
+    }
+
+    return max(1, $windowSeconds - $elapsed);
+}
+
+function rate_limit_record_failure(string $bucket, int $maxAttempts, int $windowSeconds): void
+{
+    $file = rate_limit_file($bucket);
+    if ($file === null) {
+        return;
+    }
+
+    $startedAt = time();
+    $count = 1;
+
+    $raw = @file_get_contents($file);
+    if (is_string($raw) && $raw !== '') {
+        $data = json_decode($raw, true);
+        if (is_array($data)) {
+            $previousStart = (int) ($data['started_at'] ?? 0);
+            $previousCount = (int) ($data['count'] ?? 0);
+            if ($previousStart > 0 && time() - $previousStart < $windowSeconds) {
+                $startedAt = $previousStart;
+                $count = $previousCount + 1;
+            }
+        }
+    }
+
+    @file_put_contents(
+        $file,
+        (string) json_encode(['started_at' => $startedAt, 'count' => $count]),
+        LOCK_EX
+    );
+}
+
+function rate_limit_clear(string $bucket): void
+{
+    $file = rate_limit_file($bucket);
+    if ($file !== null) {
+        @unlink($file);
+    }
 }
 
 function users_has_comments_disabled_column(?PDO $pdo = null): bool
@@ -2796,8 +2909,8 @@ function current_request_path_with_query(): string
 function auth_next_path(?string $next, string $default = 'index.php'): string
 {
     $fallback = base_url($default);
-    $next = trim((string) $next);
-    if ($next === '' || str_starts_with($next, '//') || preg_match('#^https?://#i', $next) === 1) {
+    $next = preg_replace('/[\x00-\x1F\x7F]/', '', str_replace('\\', '/', trim((string) $next))) ?? '';
+    if ($next === '' || str_starts_with($next, '//') || preg_match('#^[a-z][a-z0-9+.\-]*:#i', $next) === 1) {
         return $fallback;
     }
 
@@ -2816,6 +2929,15 @@ function auth_next_path(?string $next, string $default = 'index.php'): string
 function redirect(string $path): never
 {
     $target = str_starts_with($path, '/') ? $path : base_url($path);
+    // Safety net: never emit scheme-relative, backslash or control-character
+    // targets (open-redirect / header-injection protection).
+    if (
+        str_starts_with($target, '//')
+        || str_contains($target, '\\')
+        || preg_match('/[\x00-\x1F\x7F]/', $target) === 1
+    ) {
+        $target = base_url('index.php');
+    }
     header('Location: ' . $target);
     exit;
 }

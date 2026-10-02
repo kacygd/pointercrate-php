@@ -220,6 +220,7 @@ return [
     'auth.login.error_invalid' => 'Invalid username or password.',
     'auth.login.error_failed' => 'Login failed. Make sure you imported the latest db/schema.sql.',
     'auth.error_ip_banned' => 'Your IP address is banned. You can still view the list as a guest.',
+    'security.rate_limited' => 'Too many attempts. Please try again in {minutes} minute(s).',
     'auth.register.title' => 'Register',
     'auth.register.heading' => 'Player Registration',
     'auth.register.intro' => 'Create an account to submit completion records.',

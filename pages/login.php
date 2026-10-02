@@ -23,6 +23,14 @@ if (method_is_post() && !$ipBanned) {
     $username = normalize_username((string) ($_POST['username'] ?? ''));
     $password = (string) ($_POST['password'] ?? '');
 
+    $loginIpBucket = 'login_ip:' . current_request_ip();
+    $loginUserBucket = 'login_user:' . current_request_ip() . ':' . strtolower($username);
+    $ipLockWait = rate_limit_seconds_remaining($loginIpBucket, 20, 300);
+    $userLockWait = $username !== '' ? rate_limit_seconds_remaining($loginUserBucket, 5, 300) : 0;
+    if ($ipLockWait > 0 || $userLockWait > 0) {
+        $errors[] = t('auth.login.error_locked', ['minutes' => (int) ceil(max($ipLockWait, $userLockWait) / 60)]);
+    }
+
     if (!validate_csrf($_POST['_token'] ?? null)) {
         $errors[] = t('auth.login.error_token');
     }
@@ -54,11 +62,15 @@ if (method_is_post() && !$ipBanned) {
             if ($lockSecondsRemaining > 0) {
                 $errors[] = t('auth.login.error_locked', ['minutes' => (int) ceil($lockSecondsRemaining / 60)]);
             } elseif ($user === false || !password_verify($password, (string) $user['password_hash'])) {
+                rate_limit_record_failure($loginIpBucket, 20, 300);
+                rate_limit_record_failure($loginUserBucket, 5, 300);
                 if ($user !== false && $lockoutReady) {
                     login_register_failed_attempt((int) $user['id'], (int) $user['failed_login_attempts']);
                 }
                 $errors[] = t('auth.login.error_invalid');
             } else {
+                rate_limit_clear($loginIpBucket);
+                rate_limit_clear($loginUserBucket);
                 if ($lockoutReady) {
                     login_clear_failed_attempts((int) $user['id']);
                 }

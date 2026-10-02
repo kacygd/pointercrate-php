@@ -30,6 +30,54 @@ if (!headers_sent()) {
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+    header_remove('X-Powered-By');
+
+    $requestIsHttps = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
+        || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443';
+    if ($requestIsHttps) {
+        header('Strict-Transport-Security: max-age=15552000; includeSubDomains');
+    }
+
+    if ((bool) ($GLOBALS['app_config']['security']['csp_enabled'] ?? true)) {
+        $frameSrc = [
+            "'self'",
+            'https://www.google.com',
+            'https://www.gstatic.com',
+            'https://www.youtube.com',
+            'https://player.twitch.tv',
+            'https://clips.twitch.tv',
+            'https://player.bilibili.com',
+            'https://player.vimeo.com',
+            'https://www.dailymotion.com',
+            'https://streamable.com',
+            'https://drive.google.com',
+            'https://discord.com',
+        ];
+
+        $widgetUrl = trim((string) ($GLOBALS['app_config']['discord']['server_widget_url'] ?? ''));
+        $widgetScheme = is_string(parse_url($widgetUrl, PHP_URL_SCHEME)) ? strtolower((string) parse_url($widgetUrl, PHP_URL_SCHEME)) : '';
+        $widgetHost = (string) (parse_url($widgetUrl, PHP_URL_HOST) ?: '');
+        if (in_array($widgetScheme, ['http', 'https'], true) && $widgetHost !== '' && !in_array($widgetHost, $frameSrc, true)) {
+            $frameSrc[] = 'https://' . $widgetHost;
+        }
+
+        $cspDirectives = [
+            "default-src 'self'",
+            "base-uri 'self'",
+            "object-src 'none'",
+            "frame-ancestors 'none'",
+            "form-action 'self'",
+            "script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
+            "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com",
+            "img-src 'self' data: https: http:",
+            "media-src 'self' https: http:",
+            'frame-src ' . implode(' ', $frameSrc),
+            "connect-src 'self' https://www.google.com https://www.gstatic.com",
+        ];
+        header('Content-Security-Policy: ' . implode('; ', $cspDirectives));
+    }
 }
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -46,6 +94,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
             'path:' . strtolower($sessionInstallPath),
         ]);
 
+    ini_set('session.use_strict_mode', '1');
     session_name('DLSESSID' . substr(hash('sha256', $sessionSeed), 0, 16));
 
     // Sessions persist until explicit logout instead of expiring when the browser closes.

@@ -40,7 +40,7 @@ return [
         'ref' => 'main',
     ],
     'security' => [
-        'captcha_enabled' => false,
+        'captcha_enabled' => true,
         'setup_captcha_enabled' => true,
         'captcha_login_enabled' => true,
         'captcha_register_enabled' => true,
@@ -50,6 +50,7 @@ return [
         'recaptcha_secret_key' => '',
         'recaptcha_verify_url' => 'https://www.google.com/recaptcha/api/siteverify',
         'csrf_enabled' => true,
+        'csp_enabled' => true,
         'session_cookie_httponly' => true,
         'session_cookie_samesite' => 'Lax',
         'session_cookie_secure' => false,

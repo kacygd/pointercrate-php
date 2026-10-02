@@ -4,7 +4,7 @@ declare(strict_types=1);
 function card_thumbnail_url(array $demon): string
 {
     $configured = trim((string) ($demon['thumbnail_url'] ?? ''));
-    if ($configured !== '') {
+    if (valid_http_url($configured)) {
         return $configured;
     }
 
@@ -422,7 +422,7 @@ function roulette_item_from_demon(array $demon, string $bucket, bool $shown): ar
         'name' => (string) ($demon['name'] ?? ''),
         'creator' => $creator !== '' ? $creator : $publisherLabel,
         'url' => demon_detail_url($demon),
-        'videoUrl' => (string) ($demon['video_url'] ?? ''),
+        'videoUrl' => valid_http_url((string) ($demon['video_url'] ?? '')) ? (string) $demon['video_url'] : '',
         'thumb' => card_thumbnail_url($demon),
         'levelId' => $levelId,
         'byline' => t('list.published_by') . ' ' . $publisherLabel . ($verifierLabel !== '' ? ', ' . t('list.verified_by') . ' ' . $verifierLabel : ''),

@@ -230,6 +230,10 @@ if (method_is_post()) {
         $youtubeChannel = null;
         if ($isStaff) {
             $youtubeChannel = trim((string) ($_POST['youtube_channel'] ?? ''));
+            if ($youtubeChannel !== '' && !valid_http_url($youtubeChannel)) {
+                flash('error', 'YouTube channel must be a valid http(s) URL.');
+                redirect('account.php');
+            }
         }
 
         $displayName = $displayNameInput !== '' ? $displayNameInput : null;

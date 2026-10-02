@@ -16,7 +16,7 @@ function pointercrate_score(int $position, int $requirement, int $progress): flo
 function card_thumbnail_url(array $demon): string
 {
     $configured = trim((string) ($demon['thumbnail_url'] ?? ''));
-    if ($configured !== '') {
+    if (valid_http_url($configured)) {
         return $configured;
     }
 
@@ -447,6 +447,14 @@ if (method_is_post()) {
                 flash('error', $levelCommentsDisabledMessage ?? t('comments.disabled'));
                 redirect($levelCommentRedirect);
             }
+
+            $commentIpBucket = 'comment_ip:' . current_request_ip();
+            $commentWait = rate_limit_seconds_remaining($commentIpBucket, 30, 600);
+            if ($commentWait > 0) {
+                flash('error', t('security.rate_limited', ['minutes' => (int) ceil($commentWait / 60)]));
+                redirect($levelCommentRedirect);
+            }
+            rate_limit_record_failure($commentIpBucket, 30, 600);
 
             $parentCommentId = max(0, (int) ($_POST['parent_comment_id'] ?? 0));
             if ($parentCommentId > 0) {
@@ -1039,7 +1047,7 @@ render_header((string) $demon['name'], 'list', [
     <main class="left">
         <section class="panel fade demon-hero-panel">
             <div class="flex mobile-col demon-hero">
-                <a class="thumb ratio-16-9 demon-hero-thumb" href="<?= e((string) $demon['video_url']) ?>" target="_blank" rel="noreferrer" style="<?= e($thumbStyle) ?>">
+                <a class="thumb ratio-16-9 demon-hero-thumb" href="<?= e(safe_href_url((string) $demon['video_url'])) ?>" target="_blank" rel="noreferrer" style="<?= e($thumbStyle) ?>">
                     <?php if ($thumbUrl !== ''): ?>
                         <img src="<?= e($thumbUrl) ?>" alt="<?= e(t('demon.thumbnail_alt', ['name' => (string) $demon['name']])) ?>" loading="lazy">
                     <?php endif; ?>
@@ -1063,7 +1071,7 @@ render_header((string) $demon['name'], 'list', [
                         <?php if ($nextId !== null): ?>
                             <a class="button white hover small" href="<?= e(base_url((string) $nextId)) ?>"><?= e(t('demon.next')) ?> <i class="fa fa-chevron-right"></i></a>
                         <?php endif; ?>
-                        <a class="button blue hover small" href="<?= e((string) $demon['video_url']) ?>" target="_blank" rel="noreferrer"><?= e(t('demon.verification_video')) ?></a>
+                        <a class="button blue hover small" href="<?= e(safe_href_url((string) $demon['video_url'])) ?>" target="_blank" rel="noreferrer"><?= e(t('demon.verification_video')) ?></a>
                     </div>
                 </div>
             </div>
@@ -1120,7 +1128,7 @@ render_header((string) $demon['name'], 'list', [
                 <?php if ($videoPlayer['type'] === 'video'): ?>
                     <video class="ratio-16-9 demon-preview-frame demon-preview-video" controls playsinline preload="metadata">
                         <source src="<?= e($videoPlayer['src']) ?>" type="<?= e((string) ($videoPlayer['mime'] ?? '')) ?>">
-                        <a href="<?= e((string) $demon['video_url']) ?>" target="_blank" rel="noreferrer"><?= e(t('demon.verification_video')) ?></a>
+                        <a href="<?= e(safe_href_url((string) $demon['video_url'])) ?>" target="_blank" rel="noreferrer"><?= e(t('demon.verification_video')) ?></a>
                     </video>
                 <?php else: ?>
                     <iframe
@@ -1175,7 +1183,7 @@ render_header((string) $demon['name'], 'list', [
                                     <td><?= $progress ?>%</td>
                                     <td><?= $completion['enjoyment'] !== null ? (int) $completion['enjoyment'] . '/10' : '-' ?></td>
                                     <td>
-                                        <a class="link" target="_blank" rel="noreferrer" href="<?= e((string) $completion['video_url']) ?>">
+                                        <a class="link" target="_blank" rel="noreferrer" href="<?= e(safe_href_url((string) $completion['video_url'])) ?>">
                                             <?= e(video_host_label((string) $completion['video_url'])) ?>
                                         </a>
                                     </td>
@@ -1317,6 +1325,7 @@ render_header((string) $demon['name'], 'list', [
                         $countryCode = normalize_country_code((string) ($editor['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
                         $youtubeChannel = trim((string) ($editor['youtube_channel'] ?? ''));
+                        $youtubeChannel = valid_http_url($youtubeChannel) ? $youtubeChannel : '';
                         $username = e(user_display_name_from_row($editor));
                         ?>
                         <li>
@@ -1340,6 +1349,7 @@ render_header((string) $demon['name'], 'list', [
                         $countryCode = normalize_country_code((string) ($helper['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
                         $youtubeChannel = trim((string) ($helper['youtube_channel'] ?? ''));
+                        $youtubeChannel = valid_http_url($youtubeChannel) ? $youtubeChannel : '';
                         $username = e(user_display_name_from_row($helper));
                         ?>
                         <li>

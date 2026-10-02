@@ -220,6 +220,7 @@ return [
     'auth.login.error_invalid' => 'Tên đăng nhập hoặc mật khẩu không đúng.',
     'auth.login.error_failed' => 'Đăng nhập thất bại. Hãy chắc chắn bạn đã import db/schema.sql mới nhất.',
     'auth.error_ip_banned' => 'IP của bạn đã bị cấm. Bạn vẫn có thể xem list như khách.',
+    'security.rate_limited' => 'Thử quá nhiều lần. Vui lòng thử lại sau {minutes} phút.',
     'auth.register.title' => 'Đăng ký',
     'auth.register.heading' => 'Đăng ký Người chơi',
     'auth.register.intro' => 'Tạo tài khoản để gửi record hoàn thành.',

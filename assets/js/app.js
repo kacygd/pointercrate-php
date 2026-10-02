@@ -12,6 +12,20 @@
     return text;
   };
 
+  const safeHttpUrl = (value) => {
+    const text = String(value || '').trim();
+    if (!/^https?:\/\//i.test(text)) {
+      return '';
+    }
+
+    try {
+      const parsed = new URL(text);
+      return parsed.host !== '' ? text : '';
+    } catch (error) {
+      return '';
+    }
+  };
+
   const closeAllDropdowns = () => {
     document.querySelectorAll('.dropdown, .nav-tool-dropdown').forEach((dropdown) => {
       dropdown.style.display = 'none';
@@ -938,10 +952,11 @@
         article.classList.add('is-active', 'fade-in-up');
       }
 
+      const videoUrl = safeHttpUrl(demon.videoUrl);
       const thumb = document.createElement('a');
       thumb.className = 'roulette-demon-thumb';
-      thumb.href = demon.videoUrl !== '' ? demon.videoUrl : demon.url;
-      if (demon.videoUrl !== '') {
+      thumb.href = videoUrl !== '' ? videoUrl : demon.url;
+      if (videoUrl !== '') {
         thumb.target = '_blank';
         thumb.rel = 'noreferrer';
       }

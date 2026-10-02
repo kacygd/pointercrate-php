@@ -15,7 +15,7 @@ function db(): PDO
         echo '<h1>Database connection failed</h1>';
         echo '<p>Check MySQL service and config values.</p>';
 
-        if ((bool) config('app.debug', true)) {
+        if ((bool) config('app.debug', false)) {
             echo '<pre>' . e($exception->getMessage()) . '</pre>';
         }
         exit;

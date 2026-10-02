@@ -12,10 +12,18 @@ function out(array $lines): void
     echo $text;
 }
 
-$shouldRun = PHP_SAPI === 'cli' || (($_GET['run'] ?? '') === '1');
-if (!$shouldRun) {
+$requestedRun = PHP_SAPI === 'cli' || (($_GET['run'] ?? '') === '1');
+if (!$requestedRun) {
     out([
         'Schema update is ready.',
+    ]);
+    exit;
+}
+
+if (PHP_SAPI !== 'cli' && !(is_logged_in() && has_owner_access())) {
+    http_response_code(403);
+    out([
+        'Not authorized. Sign in as an owner, or run "php update_db_schema.php" from the command line.',
     ]);
     exit;
 }

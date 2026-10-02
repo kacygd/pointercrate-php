@@ -14,7 +14,7 @@ if (array_key_exists('at', $_GET) || array_key_exists('timemachine', $_GET)) {
 function card_thumbnail_url(array $demon): string
 {
     $configured = trim((string) ($demon['thumbnail_url'] ?? ''));
-    if ($configured !== '') {
+    if (valid_http_url($configured)) {
         return $configured;
     }
 
@@ -337,7 +337,7 @@ function roulette_item_from_demon(array $demon, string $bucket, bool $shown): ar
         'name' => (string) ($demon['name'] ?? ''),
         'creator' => $creator !== '' ? $creator : $publisherLabel,
         'url' => base_url((string) $position),
-        'videoUrl' => (string) ($demon['video_url'] ?? ''),
+        'videoUrl' => valid_http_url((string) ($demon['video_url'] ?? '')) ? (string) $demon['video_url'] : '',
         'thumb' => card_thumbnail_url($demon),
         'levelId' => $levelId,
         'byline' => t('list.published_by') . ' ' . $publisherLabel . ($verifierLabel !== '' ? ', ' . t('list.verified_by') . ' ' . $verifierLabel : ''),
@@ -918,6 +918,7 @@ render_header(t('home.title'), 'list', [
                         $countryCode = normalize_country_code((string) ($editor['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
                         $youtubeChannel = trim((string) ($editor['youtube_channel'] ?? ''));
+                        $youtubeChannel = valid_http_url($youtubeChannel) ? $youtubeChannel : '';
                         $username = e(user_display_name_from_row($editor));
                         ?>
                         <li>
@@ -941,6 +942,7 @@ render_header(t('home.title'), 'list', [
                         $countryCode = normalize_country_code((string) ($helper['country_code'] ?? ''));
                         $prefix = country_flag_html($countryCode, true);
                         $youtubeChannel = trim((string) ($helper['youtube_channel'] ?? ''));
+                        $youtubeChannel = valid_http_url($youtubeChannel) ? $youtubeChannel : '';
                         $username = e(user_display_name_from_row($helper));
                         ?>
                         <li>
