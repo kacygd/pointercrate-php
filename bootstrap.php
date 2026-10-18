@@ -103,7 +103,8 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
     $cookieParams = session_get_cookie_params();
     $cookieParams['lifetime'] = $sessionLifetimeSeconds;
-    $cookieParams['path'] = $sessionBaseUrl === '' ? '/' : '/' . $sessionBaseUrl;
+    $legacyCookiePath = $sessionBaseUrl === '' ? '/' : '/' . $sessionBaseUrl;
+    $cookieParams['path'] = '/';
     $cookieParams['httponly'] = (bool) ($securityConfig['session_cookie_httponly'] ?? true);
     $sameSite = (string) ($securityConfig['session_cookie_samesite'] ?? 'Lax');
     $cookieParams['samesite'] = in_array($sameSite, ['Lax', 'Strict', 'None'], true) ? $sameSite : 'Lax';
@@ -116,9 +117,21 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_set_cookie_params($cookieParams);
 
     session_start();
+
+    if ($legacyCookiePath !== '/' && isset($_COOKIE[session_name()]) && !headers_sent()) {
+        setcookie(session_name(), '', [
+            'expires' => time() - 3600,
+            'path' => $legacyCookiePath,
+            'secure' => (bool) ($cookieParams['secure'] ?? false),
+            'httponly' => (bool) ($cookieParams['httponly'] ?? true),
+            'samesite' => (string) ($cookieParams['samesite'] ?? 'Lax'),
+        ]);
+    }
 }
 
 require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/includes/mailer.php';
+csrf_cookie_sync();
 
 if (isset($_GET['lang']) && is_string($_GET['lang']) && is_supported_language($_GET['lang'])) {
     $_SESSION['language'] = $_GET['lang'];

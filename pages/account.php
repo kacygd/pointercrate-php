@@ -268,15 +268,14 @@ if (method_is_post()) {
             $errors[] = t('account.error_email_empty');
         } elseif (filter_var($newEmail, FILTER_VALIDATE_EMAIL) === false) {
             $errors[] = t('auth.register.error_email');
-        } elseif ($newEmail === (string) ($user['email'] ?? '')) {
+        } elseif (strcasecmp($newEmail, (string) ($user['email'] ?? '')) === 0) {
             $errors[] = t('account.error_email_same');
         }
 
         if ($errors === []) {
+            $emailFeaturesReady = email_features_enabled() && users_has_email_verification_columns();
             try {
-                $stmt = db()->prepare('SELECT id FROM users WHERE email = :email AND id != :id LIMIT 1');
-                $stmt->execute([':email' => $newEmail, ':id' => (int) $user['id']]);
-                if ($stmt->fetch() !== false) {
+                if (!email_address_available(db(), $newEmail, (int) $user['id'], $emailFeaturesReady)) {
                     $errors[] = t('account.error_email_taken');
                 }
             } catch (Throwable) {
@@ -285,17 +284,87 @@ if (method_is_post()) {
         }
 
         if ($errors === []) {
-            $update = db()->prepare('UPDATE users SET email = :email WHERE id = :id');
-            $update->execute([
-                ':email' => $newEmail,
-                ':id' => (int) $user['id'],
-            ]);
-            flash('success', t('account.success_email'));
+            $emailVerificationReady = email_features_enabled() && users_has_email_verification_columns();
+
+            if ($emailVerificationReady) {
+                $pendingEmailToken = email_make_token();
+                $update = db()->prepare('UPDATE users
+                                         SET pending_email = :email,
+                                             verify_token_hash = :hash,
+                                             verify_token_expires_at = DATE_ADD(NOW(), INTERVAL :seconds SECOND)
+                                         WHERE id = :id');
+                $update->execute([
+                    ':email' => $newEmail,
+                    ':hash' => email_hash_token($pendingEmailToken),
+                    ':seconds' => email_verification_ttl_seconds(),
+                    ':id' => (int) $user['id'],
+                ]);
+
+                $verifyUrl = absolute_url('verify.php?token=' . rawurlencode($pendingEmailToken));
+                if (send_verification_email($newEmail, (string) $user['username'], $verifyUrl)) {
+                    flash('success', t('account.success_email_reverify', ['email' => $newEmail]));
+                } else {    
+                    $rollback = db()->prepare('UPDATE users
+                                              SET pending_email = NULL,
+                                                  verify_token_hash = NULL,
+                                                  verify_token_expires_at = NULL
+                                              WHERE id = :id');
+                    $rollback->execute([':id' => (int) $user['id']]);
+                    $errors[] = t('account.error_email_send_failed');
+                    flash('error', implode(' ', $errors));
+                }
+            } else {
+                $update = db()->prepare('UPDATE users SET email = :email WHERE id = :id');
+                $update->execute([
+                    ':email' => $newEmail,
+                    ':id' => (int) $user['id'],
+                ]);
+                flash('success', t('account.success_email'));
+            }
+
             redirect('account.php');
         } else {
             flash('error', implode(' ', $errors));
             redirect('account.php');
         }
+    } elseif ($action === 'resend_email_verify') {
+        if (!email_features_enabled() || !users_has_email_verification_columns()) {
+            flash('error', t('email.disabled'));
+            redirect('account.php');
+        }
+
+        $pendingEmail = trim((string) ($user['pending_email'] ?? ''));
+        if ($pendingEmail === '') {
+            flash('error', t('account.email_no_pending'));
+            redirect('account.php');
+        }
+
+        try {
+            $verifyToken = email_create_verification_token(db(), (int) $user['id']);
+            $verifyUrl = absolute_url('verify.php?token=' . rawurlencode($verifyToken));
+            if (send_verification_email($pendingEmail, (string) $user['username'], $verifyUrl)) {
+                flash('success', t('account.success_email_reverify', ['email' => $pendingEmail]));
+            } else {
+                flash('error', t('account.error_email_send_failed'));
+            }
+        } catch (Throwable $throwable) {
+            error_log('account: could not resend the email confirmation.');
+            flash('error', t('account.error_email_send_failed'));
+        }
+
+        redirect('account.php');
+    } elseif ($action === 'cancel_pending_email') {
+        if (email_features_enabled() && users_has_email_verification_columns()) {
+            $clear = db()->prepare('UPDATE users
+                                    SET pending_email = NULL,
+                                        verify_token_hash = NULL,
+                                        verify_token_expires_at = NULL
+                                    WHERE id = :id');
+            $clear->execute([':id' => (int) $user['id']]);
+        }
+
+        flash('success', t('account.email_pending_cancelled'));
+        redirect('account.php');
     } elseif ($action === 'update_username') {
         $newUsername = normalize_username((string) ($_POST['username'] ?? ''));
 
@@ -402,6 +471,8 @@ $discordPendingId = $discordColumnsReady ? normalize_discord_user_id((string) ($
 $discordPendingExpiresAt = $discordColumnsReady ? (strtotime((string) ($user['discord_link_code_expires_at'] ?? '')) ?: 0) : 0;
 $discordPendingActive = $discordPendingId !== '' && $discordPendingExpiresAt >= time();
 $discordPendingExpiresText = $discordPendingActive ? date('H:i:s', $discordPendingExpiresAt) : '';
+$pendingEmailAddress = trim((string) ($user['pending_email'] ?? ''));
+$emailVerificationReady = email_features_enabled() && users_has_email_verification_columns();
 
 render_header(t('account.title'), 'account');
 ?>
@@ -575,6 +646,27 @@ render_header(t('account.title'), 'account');
     <div class="panel-head">
         <h2><?= e(t('account.change_email')) ?></h2>
     </div>
+
+    <?php if ($emailVerificationReady && $pendingEmailAddress !== ''): ?>
+        <div class="info-green" style="margin-bottom:14px">
+            <b><?= e(t('account.email_pending_title')) ?></b><br>
+            <?= e(t('account.email_pending_note', ['email' => $pendingEmailAddress])) ?>
+        </div>
+
+        <div class="grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <form class="stack-form" method="post" action="<?= e(base_url('account.php')) ?>">
+                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="resend_email_verify">
+                <button class="button blue hover" type="submit"><?= e(t('account.email_resend')) ?></button>
+            </form>
+
+            <form class="stack-form" method="post" action="<?= e(base_url('account.php')) ?>">
+                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="action" value="cancel_pending_email">
+                <button class="button hover" type="submit"><?= e(t('account.email_cancel_pending')) ?></button>
+            </form>
+        </div>
+    <?php endif; ?>
 
     <form class="stack-form" method="post" action="<?= e(base_url('account.php')) ?>">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">

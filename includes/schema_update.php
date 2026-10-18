@@ -121,7 +121,7 @@ function schema_apply_users_role_enum(PDO $pdo): void
 
 function schema_target_version(): string
 {
-    return '2026-09-demon-name-case-sensitive';
+    return '2026-10-email-verification';
 }
 
 function schema_seed_default_badges(PDO $pdo): int
@@ -204,6 +204,24 @@ function schema_needs_update(PDO $pdo): bool
         return true;
     }
     if (!schema_users_role_enum_ready($pdo)) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'email_verified_at')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'pending_email')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'verify_token_hash')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'verify_token_expires_at')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'reset_token_hash')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'reset_token_expires_at')) {
         return true;
     }
     if (!schema_col_exists($pdo, 'users', 'display_name')) {
@@ -945,6 +963,42 @@ function run_schema_update(PDO $pdo): array
     );
     $logs[] = '[OK] Backfilled demons.creator: ' . (int) $backfilledCreator . ' row(s)';
 
+    if (!schema_col_exists($pdo, 'users', 'email_verified_at')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMP NULL DEFAULT NULL AFTER email');
+        $logs[] = '[OK] Added users.email_verified_at';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN email_verified_at TIMESTAMP NULL DEFAULT NULL');
+
+    if (!schema_col_exists($pdo, 'users', 'pending_email')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN pending_email VARCHAR(120) NULL AFTER email_verified_at');
+        $logs[] = '[OK] Added users.pending_email';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN pending_email VARCHAR(120) NULL');
+
+    if (!schema_col_exists($pdo, 'users', 'verify_token_hash')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN verify_token_hash VARCHAR(64) NULL AFTER email_verified_at');
+        $logs[] = '[OK] Added users.verify_token_hash';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN verify_token_hash VARCHAR(64) NULL');
+
+    if (!schema_col_exists($pdo, 'users', 'verify_token_expires_at')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN verify_token_expires_at TIMESTAMP NULL DEFAULT NULL AFTER verify_token_hash');
+        $logs[] = '[OK] Added users.verify_token_expires_at';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN verify_token_expires_at TIMESTAMP NULL DEFAULT NULL');
+
+    if (!schema_col_exists($pdo, 'users', 'reset_token_hash')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN reset_token_hash VARCHAR(64) NULL AFTER verify_token_expires_at');
+        $logs[] = '[OK] Added users.reset_token_hash';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN reset_token_hash VARCHAR(64) NULL');
+
+    if (!schema_col_exists($pdo, 'users', 'reset_token_expires_at')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN reset_token_expires_at TIMESTAMP NULL DEFAULT NULL AFTER reset_token_hash');
+        $logs[] = '[OK] Added users.reset_token_expires_at';
+    }
+    $pdo->exec('ALTER TABLE users MODIFY COLUMN reset_token_expires_at TIMESTAMP NULL DEFAULT NULL');
+
     $optimizeTables = [
         'app_settings',
         'users',
@@ -1057,6 +1111,20 @@ function schema_config_needs_update(): bool
     return !app_setting_truthy((string) config('app.updated', '0'), false);
 }
 
+function schema_migration_fingerprint(): string
+{
+    $stat = @stat(__FILE__);
+
+    return substr(
+        hash(
+            'sha256',
+            schema_target_version() . '|' . ($stat !== false ? (int) $stat['mtime'] : 0) . '|' . ($stat !== false ? (int) $stat['size'] : 0)
+        ),
+        0,
+        32
+    );
+}
+
 function ensure_schema_updated_on_bootstrap(): void
 {
     static $checked = false;
@@ -1074,16 +1142,13 @@ function ensure_schema_updated_on_bootstrap(): void
         return;
     }
 
-    if ((int) config('app.updated', 0) === 1) {
-        return;
-    }
-
     try {
         $pdo = db();
+        $fingerprint = schema_migration_fingerprint();
+        $storedFingerprint = (string) app_setting_get('schema.fingerprint', '');
         $configNeedsUpdate = schema_config_needs_update();
-        $schemaVersionReady = app_setting_get('schema.version', '') === schema_target_version();
 
-        if ($schemaVersionReady && !$configNeedsUpdate) {
+        if (!$configNeedsUpdate && $storedFingerprint === $fingerprint) {
             return;
         }
 
@@ -1092,6 +1157,7 @@ function ensure_schema_updated_on_bootstrap(): void
         }
 
         app_setting_set('schema.version', schema_target_version());
+        app_setting_set('schema.fingerprint', $fingerprint);
         schema_set_updated_flag(1);
     } catch (Throwable $e) {
         if ((bool) config('app.debug', false)) {

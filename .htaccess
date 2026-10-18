@@ -29,8 +29,8 @@ RewriteCond %{THE_REQUEST} \s+(.*/)index\.php(?:[?\s]|$) [NC]
 RewriteRule ^index\.php$ %1 [R=301,L]
 
 RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
-RewriteCond %{THE_REQUEST} \s+(.*/)(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php(?:[?\s]|$) [NC]
-RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php$ %1%2 [R=301,L]
+RewriteCond %{THE_REQUEST} \s+(.*/)(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine|verify|forgot|reset)\.php(?:[?\s]|$) [NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine|verify|forgot|reset)\.php$ %1%2 [R=301,L]
 
 RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
 RewriteCond %{THE_REQUEST} \s+(.*/)demon\.php\?rank=([0-9]+) [NC]
@@ -50,8 +50,8 @@ RewriteCond %{THE_REQUEST} \s+(.*/)pages/index\.php(?:[?\s]|$) [NC]
 RewriteRule ^pages/index\.php$ %1 [R=301,L]
 
 RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
-RewriteCond %{THE_REQUEST} \s+(.*/)pages/(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php(?:[?\s]|$) [NC]
-RewriteRule ^pages/(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php$ %1%2 [R=301,L]
+RewriteCond %{THE_REQUEST} \s+(.*/)pages/(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine|verify|forgot|reset)\.php(?:[?\s]|$) [NC]
+RewriteRule ^pages/(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine|verify|forgot|reset)\.php$ %1%2 [R=301,L]
 
 RewriteCond %{REQUEST_METHOD} ^GET$ [NC]
 RewriteCond %{THE_REQUEST} \s+(.*/)pages/demon\.php\?rank=([0-9]+) [NC]
@@ -76,10 +76,10 @@ RewriteRule ^ - [L]
 # Legacy script routes are served internally so POST forms keep their data.
 RewriteRule ^index\.php$ pages/index.php [QSA,L,NC]
 RewriteRule ^demon\.php$ pages/demon.php [QSA,L,NC]
-RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)\.php$ pages/$1.php [QSA,L,NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine|verify|forgot|reset)\.php$ pages/$1.php [QSA,L,NC]
 
 # Pretty URL routes.
 RewriteRule ^([0-9]+)/comments/page/([0-9]+)$ pages/demon.php?rank=$1&comment_page=$2 [QSA,L,NC]
 RewriteRule ^([0-9]+)$ pages/demon.php?rank=$1 [QSA,L,NC]
 RewriteRule ^id=([0-9]+)$ pages/demon.php?id=$1 [QSA,L,NC]
-RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine)$ pages/$1.php [QSA,L,NC]
+RewriteRule ^(players|guidelines|submit|admin|account|profile|login|logout|register|roulette|time-machine|verify|forgot|reset)$ pages/$1.php [QSA,L,NC]

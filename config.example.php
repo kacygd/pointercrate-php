@@ -35,6 +35,19 @@ return [
         'server_id' => '', // Optional: server ID used when server_widget_url is empty
         'server_theme' => 'light', // dark | light
     ],
+    'email' => [
+        'enabled' => false,
+        'smtp_host' => '', // e.g. smtp.gmail.com
+        'smtp_port' => 587,
+        'smtp_encryption' => 'tls', // tls | ssl | none
+        'smtp_username' => '',
+        'smtp_password' => '',
+        'from_address' => '', // required when enabled, e.g. noreply@your-domain.com
+        'from_name' => 'My Demonlist',
+        // false: refuse the registration, so every account that exists is verified.
+        // true : activate the account anyway (availability over verification).
+        'fail_open' => false,
+    ],
     'updates' => [
         'github_repository' => 'https://github.com/kacygd/pointercrate-php',
         'ref' => 'main',

@@ -3006,14 +3006,50 @@ function flash(string $key, ?string $message = null): ?string
     return $output;
 }
 
+function csrf_cookie_name(): string
+{
+    return 'DLCsrf' . substr(app_session_scope(), 0, 16);
+}
+
 function csrf_token(): string
 {
     $sessionKey = app_session_key('csrf_token');
     if (empty($_SESSION[$sessionKey])) {
-        $_SESSION[$sessionKey] = bin2hex(random_bytes(32));
+        $cookieToken = (string) ($_COOKIE[csrf_cookie_name()] ?? '');
+        if (preg_match('/^[a-f0-9]{64}$/', $cookieToken) !== 1) {
+            $cookieToken = '';
+        }
+
+        $_SESSION[$sessionKey] = $cookieToken !== ''
+            ? $cookieToken
+            : bin2hex(random_bytes(32));
     }
 
     return (string) $_SESSION[$sessionKey];
+}
+
+function csrf_cookie_sync(): void
+{
+    if (PHP_SAPI === 'cli' || headers_sent() || session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    $token = csrf_token();
+    if ((string) ($_COOKIE[csrf_cookie_name()] ?? '') === $token) {
+        return;
+    }
+
+    $sessionParams = session_get_cookie_params();
+    setcookie(csrf_cookie_name(), $token, [
+        'expires' => time() + 60 * 60 * 24 * 365,
+        'path' => '/',
+        'secure' => (bool) ($sessionParams['secure'] ?? false),
+        'httponly' => true,
+        'samesite' => in_array($sessionParams['samesite'] ?? '', ['Lax', 'Strict', 'None'], true)
+            ? $sessionParams['samesite']
+            : 'Lax',
+    ]);
+    $_COOKIE[csrf_cookie_name()] = $token;
 }
 
 function validate_csrf(?string $token): bool
@@ -3374,6 +3410,7 @@ function current_user(): ?array
             users_has_discord_link_columns() ? 'discord_link_pending_user_id' : 'NULL AS discord_link_pending_user_id',
             users_has_discord_link_columns() ? 'discord_link_code_expires_at' : 'NULL AS discord_link_code_expires_at',
             users_has_discord_link_columns() ? 'discord_link_requested_at' : 'NULL AS discord_link_requested_at',
+            users_has_email_verification_columns() ? 'pending_email' : 'NULL AS pending_email',
             'points',
             'created_at',
         ];

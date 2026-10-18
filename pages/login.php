@@ -47,8 +47,12 @@ if (method_is_post() && !$ipBanned) {
         try {
             $lockoutReady = users_has_login_lockout_columns();
             $lockoutFields = $lockoutReady ? ', failed_login_attempts, login_locked_until' : '';
+            $emailFeaturesOn = email_features_enabled();
+            $verifyFields = ($emailFeaturesOn && users_has_email_verification_columns())
+                ? ', email, verify_token_hash'
+                : '';
 
-            $stmt = db()->prepare('SELECT id, username, ' . user_select_display_name_expression() . ', email, password_hash, role, created_at' . $lockoutFields . '
+            $stmt = db()->prepare('SELECT id, username, ' . user_select_display_name_expression() . ', email, password_hash, role, created_at' . $lockoutFields . $verifyFields . '
                                    FROM users
                                    WHERE username = :username
                                    LIMIT 1');
@@ -74,9 +78,18 @@ if (method_is_post() && !$ipBanned) {
                 if ($lockoutReady) {
                     login_clear_failed_attempts((int) $user['id']);
                 }
-                login_user($user);
-                flash('success', t('auth.login.welcome', ['name' => user_display_name_from_row($user)]));
-                redirect($nextPath);
+
+                $pendingVerification = $emailFeaturesOn
+                    && users_has_email_verification_columns()
+                    && trim((string) ($user['email'] ?? '')) === ''
+                    && trim((string) ($user['verify_token_hash'] ?? '')) !== '';
+                if ($pendingVerification) {
+                    $errors[] = t('auth.login.error_unverified');
+                } else {
+                    login_user($user);
+                    flash('success', t('auth.login.welcome', ['name' => user_display_name_from_row($user)]));
+                    redirect($nextPath);
+                }
             }
         } catch (Throwable) {
             $errors[] = t('auth.login.error_failed');
@@ -118,9 +131,19 @@ render_header(t('auth.login.title'), 'login');
     <?php endif; ?>
 
     <?php if (!$ipBanned): ?>
-    <p class="muted" style="margin-top: 12px;">
-        <?= e(t('auth.login.new_player')) ?> <a class="link" href="<?= e($hasNext ? base_url('register.php?next=' . rawurlencode($nextPath)) : base_url('register.php')) ?>"><?= e(t('auth.login.create_account')) ?></a>
-    </p>
+    <div class="auth-helper">
+        <p class="muted">
+            <?= e(t('auth.login.new_player')) ?>
+            <a class="link" href="<?= e($hasNext ? base_url('register.php?next=' . rawurlencode($nextPath)) : base_url('register.php')) ?>"><?= e(t('auth.login.create_account')) ?></a>
+        </p>
+        <?php if (email_features_enabled()): ?>
+        <div class="auth-helper-links">
+            <a class="link" href="<?= e(base_url('forgot.php?action=password')) ?>"><?= e(t('auth.login.link_forgot_password')) ?></a>
+            <a class="link" href="<?= e(base_url('forgot.php?action=username')) ?>"><?= e(t('auth.login.link_forgot_username')) ?></a>
+            <a class="link" href="<?= e(base_url('forgot.php?action=resend')) ?>"><?= e(t('auth.login.link_resend_verify')) ?></a>
+        </div>
+        <?php endif; ?>
+    </div>
     <?php endif; ?>
 </section>
 <?php render_footer(); ?>

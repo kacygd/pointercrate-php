@@ -207,6 +207,14 @@ $values = [
     'discord_server_theme' => 'dark',
     'recaptcha_site_key' => '',
     'recaptcha_secret_key' => '',
+    'email_enabled' => '',
+    'smtp_host' => '',
+    'smtp_port' => '587',
+    'smtp_encryption' => 'tls',
+    'smtp_username' => '',
+    'smtp_password' => '',
+    'email_from_address' => '',
+    'email_from_name' => '',
 ];
 
 $error = '';
@@ -253,6 +261,22 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($values['owner_email'] !== '' && filter_var($values['owner_email'], FILTER_VALIDATE_EMAIL) === false) {
             throw new RuntimeException(setup_t($copy, 'setup.error.owner_email'));
+        }
+
+        $emailEnabled = $values['email_enabled'] === '1';
+        if (!in_array($values['smtp_encryption'], ['tls', 'ssl', 'none'], true)) {
+            $values['smtp_encryption'] = 'tls';
+        }
+        if ($emailEnabled) {
+            if ($values['smtp_host'] === '' || $values['email_from_address'] === '') {
+                throw new RuntimeException(setup_t($copy, 'setup.error.smtp_required'));
+            }
+            if (filter_var($values['email_from_address'], FILTER_VALIDATE_EMAIL) === false) {
+                throw new RuntimeException(setup_t($copy, 'setup.error.email_from'));
+            }
+            if (filter_var($values['smtp_port'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]) === false) {
+                throw new RuntimeException(setup_t($copy, 'setup.error.smtp_port'));
+            }
         }
 
         $port = filter_var($values['db_port'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
@@ -324,6 +348,16 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'server_id' => $values['discord_server_id'],
                 'server_theme' => $values['discord_server_theme'],
             ],
+            'email' => [
+                'enabled' => $emailEnabled,
+                'smtp_host' => $values['smtp_host'],
+                'smtp_port' => (int) $values['smtp_port'] > 0 ? (int) $values['smtp_port'] : 587,
+                'smtp_encryption' => $values['smtp_encryption'],
+                'smtp_username' => $values['smtp_username'],
+                'smtp_password' => $values['smtp_password'],
+                'from_address' => $values['email_from_address'],
+                'from_name' => $values['email_from_name'] !== '' ? $values['email_from_name'] : $values['name'],
+            ],
             'security' => [
                 'captcha_enabled' => $recaptchaConfigured,
                 'setup_captcha_enabled' => $recaptchaConfigured,
@@ -368,6 +402,9 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
         .box{max-width:820px;margin:40px auto;padding:28px;background:#1b293a;border-radius:12px}
         h1{margin-top:0}fieldset{border:1px solid #42566f;border-radius:8px;margin:18px 0;padding:16px}
         label{display:block;margin:10px 0 4px}input,select,button{box-sizing:border-box;width:100%;padding:10px;border-radius:6px;border:1px solid #607895;font:inherit}
+        input[type="checkbox"]{width:auto;height:auto;min-height:0;margin:0 10px 0 0;padding:0;flex:0 0 auto;accent-color:#3585d4}
+        .toggle{display:flex;align-items:center;gap:0;margin:14px 0 4px;padding:10px;border:1px solid #42566f;border-radius:6px;cursor:pointer}
+        .toggle:hover{border-color:#6f88a6}
         button{background:#3585d4;color:white;border:0;margin-top:20px;font-weight:700;cursor:pointer}
         a{color:#87c5ff}.error{background:#6c2630;padding:12px;border-radius:6px}.lang{float:right;width:auto}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
         .hint{color:#b8c8da;font-size:.9em;margin:.25rem 0 0}.optional-label{color:#b8c8da;font-size:.85em;font-weight:400}.recaptcha-box{margin-top:12px;min-height:78px}@media(max-width:720px){.grid{grid-template-columns:1fr}.box{margin:0;min-height:100vh;border-radius:0}}
@@ -489,6 +526,34 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     class="recaptcha-box"
                     data-empty-message="<?= setup_e(setup_t($copy, 'setup.recaptcha_enter_site_key')) ?>"
                 ></div>
+            </fieldset>
+
+            <fieldset>
+                <legend><?= setup_e(setup_t($copy, 'setup.section_email')) ?></legend>
+                <p class="hint"><?= setup_e(setup_t($copy, 'setup.email_hint')) ?></p>
+                <label class="toggle">
+                    <input type="checkbox" name="email_enabled" value="1"<?= $values['email_enabled'] === '1' ? ' checked' : '' ?>>
+                    <?= setup_e(setup_t($copy, 'setup.email_enable')) ?>
+                </label>
+                <div class="grid">
+                    <label><?= setup_e(setup_t($copy, 'setup.smtp_host')) ?><input name="smtp_host" value="<?= setup_e($values['smtp_host']) ?>" placeholder="smtp.example.com" autocomplete="off"></label>
+                    <label><?= setup_e(setup_t($copy, 'setup.smtp_port')) ?><input name="smtp_port" value="<?= setup_e($values['smtp_port']) ?>" inputmode="numeric" autocomplete="off"></label>
+                </div>
+                <label><?= setup_e(setup_t($copy, 'setup.smtp_encryption')) ?>
+                    <select name="smtp_encryption">
+                        <option value="tls" <?= $values['smtp_encryption'] === 'tls' ? 'selected' : '' ?>><?= setup_e(setup_t($copy, 'setup.smtp_encryption_tls')) ?></option>
+                        <option value="ssl" <?= $values['smtp_encryption'] === 'ssl' ? 'selected' : '' ?>><?= setup_e(setup_t($copy, 'setup.smtp_encryption_ssl')) ?></option>
+                        <option value="none" <?= $values['smtp_encryption'] === 'none' ? 'selected' : '' ?>><?= setup_e(setup_t($copy, 'setup.smtp_encryption_none')) ?></option>
+                    </select>
+                </label>
+                <div class="grid">
+                    <label><?= setup_e(setup_t($copy, 'setup.smtp_username')) ?><input name="smtp_username" value="<?= setup_e($values['smtp_username']) ?>" autocomplete="off"></label>
+                    <label><?= setup_e(setup_t($copy, 'setup.smtp_password')) ?><input type="password" name="smtp_password" value="<?= setup_e($values['smtp_password']) ?>" autocomplete="off"></label>
+                </div>
+                <div class="grid">
+                    <label><?= setup_e(setup_t($copy, 'setup.email_from_address')) ?><input type="email" name="email_from_address" value="<?= setup_e($values['email_from_address']) ?>" placeholder="noreply@your-domain.com"></label>
+                    <label><?= setup_e(setup_t($copy, 'setup.email_from_name')) ?><input name="email_from_name" value="<?= setup_e($values['email_from_name']) ?>"></label>
+                </div>
             </fieldset>
 
             <script>

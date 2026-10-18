@@ -1423,4 +1423,30 @@
       activeAdminTile.classList.remove('admin-section-focus');
     }, { once: true });
   }
+  
+  const trackFilledFields = () => {
+    const fields = document.querySelectorAll('form input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="submit"]):not([type="button"]), form textarea');
+
+    fields.forEach((field) => {
+      if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) {
+        return;
+      }
+
+      const sync = () => {
+        if (field.value.trim() !== '') {
+          field.setAttribute('data-filled', '1');
+        } else {
+          field.removeAttribute('data-filled');
+        }
+      };
+
+      sync();
+      field.addEventListener('input', sync);
+      field.addEventListener('change', sync);
+      field.addEventListener('blur', sync);
+    });
+  };
+
+  trackFilledFields();
+  window.addEventListener('pageshow', trackFilledFields);
 })();

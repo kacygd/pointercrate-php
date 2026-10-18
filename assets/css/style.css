@@ -634,6 +634,7 @@ textarea {
 input[type="text"],
 input[type="number"],
 input[type="url"],
+input[type="email"],
 input[type="password"],
 input[type="datetime-local"],
 textarea {
@@ -650,6 +651,7 @@ textarea {
 input[type="text"],
 input[type="number"],
 input[type="url"],
+input[type="email"],
 input[type="password"],
 input[type="datetime-local"]{
   min-height: 1em;
@@ -659,6 +661,7 @@ input[type="datetime-local"]{
 form input[type="text"]:valid,
 form input[type="number"]:valid,
 form input[type="url"]:valid,
+form input[type="email"]:valid,
 form input[type="password"]:valid,
 form input[type="datetime-local"]:valid,
 textarea:valid {
@@ -668,10 +671,26 @@ textarea:valid {
 form input[type="text"]:invalid,
 form input[type="number"]:invalid,
 form input[type="url"]:invalid,
+form input[type="email"]:invalid,
 form input[type="password"]:invalid,
 form input[type="datetime-local"]:invalid,
 textarea:invalid {
   border-bottom: 1px solid var(--color-link-dark);
+}
+
+form input[data-filled="1"]:valid,
+textarea[data-filled="1"]:valid {
+  border-bottom: 1px solid var(--color-ok-border);
+}
+
+form input[data-filled="1"]:invalid,
+textarea[data-filled="1"]:invalid {
+  border-bottom: 1px solid var(--color-link-dark);
+}
+
+form input:not([data-filled]):valid,
+textarea:not([data-filled]):valid {
+  border-bottom: 1px solid var(--color-border);
 }
 
 .form-input > * {
@@ -2802,6 +2821,35 @@ textarea {
 
 .muted {
   color: #666;
+}
+
+.auth-helper {
+  margin-top: 14px;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  text-align: center;
+}
+
+.auth-helper p {
+  margin: 0;
+}
+
+.auth-helper-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px 16px;
+  font-size: 0.95em;
+}
+
+.auth-helper-links a.link {
+  white-space: nowrap;
+}
+
+.auth-helper a.link:after {
+  content: none;
 }
 
 #mobile-nav-dropdown .nav-item {
