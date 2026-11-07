@@ -21,6 +21,12 @@ if (method_is_post()) {
     }
 
     if ($action === 'start_discord_link') {
+        $wait = rate_limit_consume('discord_link_start:' . (int) $user['id'] . ':' . (current_request_ip() ?: 'unknown'), 3, 600);
+        if ($wait > 0) {
+            flash('error', t('security.rate_limited', ['minutes' => (int) ceil($wait / 60)]));
+            redirect('account.php');
+        }
+
         if (!users_has_discord_link_columns()) {
             flash('error', t('account.error_discord_columns'));
             redirect('account.php');
@@ -92,6 +98,12 @@ if (method_is_post()) {
 
         redirect('account.php');
     } elseif ($action === 'verify_discord_link') {
+        $wait = rate_limit_consume('discord_link_verify:' . (int) $user['id'] . ':' . (current_request_ip() ?: 'unknown'), 10, 600);
+        if ($wait > 0) {
+            flash('error', t('security.rate_limited', ['minutes' => (int) ceil($wait / 60)]));
+            redirect('account.php');
+        }
+
         if (!users_has_discord_link_columns()) {
             flash('error', t('account.error_discord_columns'));
             redirect('account.php');

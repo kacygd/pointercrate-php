@@ -1,5 +1,5 @@
 (() => {
-  console.info('list v2.1');
+  console.info('list v2.2');
 
   const i18n = window.DEMONLIST_I18N && typeof window.DEMONLIST_I18N === 'object'
     ? window.DEMONLIST_I18N
@@ -547,11 +547,15 @@
 
         if (matches.length === 0) {
           menu.style.display = 'none';
-          menu.innerHTML = '';
+          while (menu.firstChild) {
+            menu.removeChild(menu.firstChild);
+          }
           return;
         }
 
-        menu.innerHTML = '';
+        while (menu.firstChild) {
+          menu.removeChild(menu.firstChild);
+        }
         matches.forEach((opt) => {
           const button = document.createElement('button');
           button.type = 'button';

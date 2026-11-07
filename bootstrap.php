@@ -3,6 +3,13 @@ declare(strict_types=1);
 
 $configPath = __DIR__ . '/config.php';
 if (!is_file($configPath)) {
+    if (defined('DEMONLIST_BOOTSTRAP_API') && DEMONLIST_BOOTSTRAP_API) {
+        http_response_code(503);
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode(['message' => 'Application is not installed.', 'code' => 503]);
+        exit;
+    }
+
     header('Location: setup.php');
     exit;
 }
@@ -11,6 +18,7 @@ $GLOBALS['app_config_path'] = $configPath;
 $GLOBALS['app_config'] = require $configPath;
 $timezone = (string) ($GLOBALS['app_config']['app']['timezone'] ?? 'UTC');
 date_default_timezone_set($timezone);
+$isApiBootstrap = defined('DEMONLIST_BOOTSTRAP_API') && DEMONLIST_BOOTSTRAP_API;
 
 $updateLockPath = __DIR__ . '/.update/maintenance.lock';
 if (is_file($updateLockPath)) {
@@ -26,6 +34,7 @@ if (is_file($updateLockPath)) {
 }
 
 if (!headers_sent()) {
+    $GLOBALS['app_csp_nonce'] = base64_encode(random_bytes(18));
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: strict-origin-when-cross-origin');
@@ -33,7 +42,8 @@ if (!headers_sent()) {
     header_remove('X-Powered-By');
 
     $requestIsHttps = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
-        || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
+        || ((bool) ($GLOBALS['app_config']['security']['trust_proxy'] ?? false)
+            && strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https')
         || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443';
     if ($requestIsHttps) {
         header('Strict-Transport-Security: max-age=15552000; includeSubDomains');
@@ -68,7 +78,7 @@ if (!headers_sent()) {
             "object-src 'none'",
             "frame-ancestors 'none'",
             "form-action 'self'",
-            "script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com",
+            "script-src 'self' 'nonce-" . $GLOBALS['app_csp_nonce'] . "' https://www.google.com https://www.gstatic.com",
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
             "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com",
             "img-src 'self' data: https: http:",
@@ -80,7 +90,7 @@ if (!headers_sent()) {
     }
 }
 
-if (session_status() !== PHP_SESSION_ACTIVE) {
+if (!$isApiBootstrap && session_status() !== PHP_SESSION_ACTIVE) {
     $sessionConfig = $GLOBALS['app_config'];
     $securityConfig = is_array($sessionConfig['security'] ?? null) ? $sessionConfig['security'] : [];
     $sessionBaseUrl = trim((string) ($sessionConfig['app']['base_url'] ?? ''), '/');
@@ -109,7 +119,8 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     $sameSite = (string) ($securityConfig['session_cookie_samesite'] ?? 'Lax');
     $cookieParams['samesite'] = in_array($sameSite, ['Lax', 'Strict', 'None'], true) ? $sameSite : 'Lax';
     if ((!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
-        || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
+        || ((bool) ($securityConfig['trust_proxy'] ?? false)
+            && strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https')
         || (string) ($_SERVER['SERVER_PORT'] ?? '') === '443'
         || (bool) ($securityConfig['session_cookie_secure'] ?? false)) {
         $cookieParams['secure'] = true;
@@ -131,18 +142,21 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/mailer.php';
-csrf_cookie_sync();
+if (!$isApiBootstrap) {
+    csrf_cookie_sync();
+}
 
-if (isset($_GET['lang']) && is_string($_GET['lang']) && is_supported_language($_GET['lang'])) {
+if (!$isApiBootstrap && isset($_GET['lang']) && is_string($_GET['lang']) && is_supported_language($_GET['lang'])) {
     $_SESSION['language'] = $_GET['lang'];
 }
-if (isset($_GET['theme']) && is_string($_GET['theme']) && is_supported_theme($_GET['theme'])) {
+if (!$isApiBootstrap && isset($_GET['theme']) && is_string($_GET['theme']) && is_supported_theme($_GET['theme'])) {
     $_SESSION['theme'] = $_GET['theme'];
 }
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/schema_update.php';
 
-ensure_schema_updated_on_bootstrap();
-
-require_once __DIR__ . '/includes/layout.php';
+if (!$isApiBootstrap) {
+    ensure_schema_updated_on_bootstrap();
+    require_once __DIR__ . '/includes/layout.php';
+}

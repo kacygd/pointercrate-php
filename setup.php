@@ -8,7 +8,29 @@ session_start();
 $root = __DIR__;
 $configPath = $root . '/config.php';
 $existingConfig = is_file($configPath) ? require $configPath : null;
-$isInstalled = is_array($existingConfig);
+$isInstalled = is_array($existingConfig)
+    && (bool) (($existingConfig['app']['installation_complete'] ?? false));
+
+if ($isInstalled) {
+    http_response_code(404);
+    exit;
+}
+
+function setup_csrf_token(): string
+{
+    if (empty($_SESSION['setup_csrf_token'])) {
+        $_SESSION['setup_csrf_token'] = bin2hex(random_bytes(32));
+    }
+
+    return (string) $_SESSION['setup_csrf_token'];
+}
+
+function setup_validate_csrf(mixed $token): bool
+{
+    return is_string($token)
+        && $token !== ''
+        && hash_equals(setup_csrf_token(), $token);
+}
 
 function setup_e(mixed $value): string
 {
@@ -182,10 +204,6 @@ if (!isset($languages[$defaultLanguage])) {
     $defaultLanguage = $language;
 }
 
-if ($isInstalled && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-    setup_remove_self();
-}
-
 $values = [
     'name' => '',
     'tagline' => '',
@@ -227,6 +245,10 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $confirm = (string) ($_POST['owner_password_confirm'] ?? '');
 
     try {
+        if (!setup_validate_csrf($_POST['_token'] ?? null)) {
+            throw new RuntimeException('Invalid setup request token. Refresh the page and try again.');
+        }
+
         $recaptchaSiteKey = trim($values['recaptcha_site_key']);
         $recaptchaSecretKey = trim($values['recaptcha_secret_key']);
         $recaptchaConfigured = $recaptchaSiteKey !== '' || $recaptchaSecretKey !== '';
@@ -285,6 +307,8 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $values['public_url'] = setup_optional_url($values['public_url'], setup_t($copy, 'setup.public_url'));
+        $publicUrlScheme = strtolower((string) (parse_url($values['public_url'], PHP_URL_SCHEME) ?: ''));
+        $useSecureCookies = $publicUrlScheme === 'https';
         $values['discord_webhook_url'] = setup_optional_url($values['discord_webhook_url'], setup_t($copy, 'setup.discord_webhook_url'));
         $values['discord_bot_api_base_url'] = setup_optional_url(
             $values['discord_bot_api_base_url'] !== '' ? $values['discord_bot_api_base_url'] : 'https://discord.com/api/v10',
@@ -319,6 +343,7 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $config = [
             'app' => [
                 'name' => $values['name'],
+                'ratedplus_enabled' => true,
                 'brand_mode' => 1,
                 'logo_path' => 'logo.png',
                 'logo_height' => 22,
@@ -359,6 +384,7 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'from_name' => $values['email_from_name'] !== '' ? $values['email_from_name'] : $values['name'],
             ],
             'security' => [
+                'trust_proxy' => false,
                 'captcha_enabled' => $recaptchaConfigured,
                 'setup_captcha_enabled' => $recaptchaConfigured,
                 'captcha_login_enabled' => $recaptchaConfigured,
@@ -371,7 +397,7 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 'csrf_enabled' => true,
                 'session_cookie_httponly' => true,
                 'session_cookie_samesite' => 'Lax',
-                'session_cookie_secure' => false,
+                'session_cookie_secure' => $useSecureCookies,
             ],
         ];
 
@@ -422,16 +448,14 @@ if (!$isInstalled && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <h1><?= setup_e(setup_t($copy, 'setup.title')) ?></h1>
 
-    <?php if ($isInstalled): ?>
-        <p><?= setup_e(setup_t($copy, 'setup.installed')) ?></p>
-        <p><a href="<?= setup_e(setup_main_url()) ?>"><?= setup_e(setup_t($copy, 'setup.open')) ?></a></p>
-    <?php else: ?>
+    <?php if (!$isInstalled): ?>
         <p><?= setup_e(setup_t($copy, 'setup.intro')) ?></p>
         <?php if ($error !== ''): ?>
             <p class="error"><?= setup_e(setup_t($copy, 'setup.error_prefix') . ' ' . $error) ?></p>
         <?php endif; ?>
 
         <form method="post">
+            <input type="hidden" name="_token" value="<?= setup_e(setup_csrf_token()) ?>">
             <input type="hidden" name="setup_language" value="<?= setup_e($language) ?>">
 
             <fieldset>

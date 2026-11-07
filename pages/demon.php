@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
+require_once dirname(__DIR__) . '/includes/list_page_helpers.php';
 
 function pointercrate_beaten_score(int $position): float
 {
@@ -13,30 +14,44 @@ function pointercrate_score(int $position, int $requirement, int $progress): flo
     return demonlist_score($position, $requirement, $progress);
 }
 
-function card_thumbnail_url(array $demon): string
+function demon_position_history_groups(array $events): array
 {
-    $configured = trim((string) ($demon['thumbnail_url'] ?? ''));
-    if (valid_http_url($configured)) {
-        return $configured;
+    $groups = [];
+
+    foreach ($events as $event) {
+        $oldPosition = $event['old_position'] !== null ? (int) $event['old_position'] : null;
+        $newPosition = (int) ($event['new_position'] ?? 0);
+        $direction = $oldPosition === null ? 0 : ($newPosition <=> $oldPosition);
+        $dateKey = substr((string) ($event['created_at'] ?? ''), 0, 10);
+        $lastIndex = count($groups) - 1;
+        $last = $lastIndex >= 0 ? $groups[$lastIndex] : null;
+
+        $continuesLast = $last !== null
+            && $oldPosition !== null
+            && $direction !== 0
+            && $last['date_key'] === $dateKey
+            && $last['direction'] === $direction
+            && $last['new_position'] === $oldPosition;
+
+        if (!$continuesLast) {
+            $event['date_key'] = $dateKey;
+            $event['direction'] = $direction;
+            $event['event_count'] = 1;
+            $event['notes'] = [trim((string) ($event['note'] ?? ''))];
+            $groups[] = $event;
+            continue;
+        }
+
+        $groups[$lastIndex]['new_position'] = $newPosition;
+        $groups[$lastIndex]['created_at'] = $event['created_at'];
+        $groups[$lastIndex]['event_count']++;
+        $note = trim((string) ($event['note'] ?? ''));
+        if ($note !== '') {
+            $groups[$lastIndex]['notes'][] = $note;
+        }
     }
 
-    $videoUrl = trim((string) ($demon['video_url'] ?? ''));
-    $youtubeId = youtube_video_id($videoUrl);
-    if ($youtubeId !== null && $youtubeId !== '') {
-        return 'https://i.ytimg.com/vi/' . rawurlencode($youtubeId) . '/hqdefault.jpg';
-    }
-
-    return '';
-}
-
-function css_background_image(string $url): string
-{
-    if ($url === '') {
-        return 'background-image: linear-gradient(135deg, #1f3048 0%, #101824 100%);';
-    }
-
-    $safe = str_replace(["\\", "'", "\r", "\n"], ["\\\\", "\\'", '', ''], $url);
-    return "background-image: url('{$safe}');";
+    return array_slice($groups, -50);
 }
 
 function level_comment_page_url(int $position, int $page = 1, string $fragment = 'level-comments'): string
@@ -54,59 +69,6 @@ function level_comment_page_url(int $position, int $page = 1, string $fragment =
     }
 
     return base_url($path);
-}
-
-function demon_creator_name(array $demon): string
-{
-    return demon_primary_creator_name($demon);
-}
-
-function render_player_role_link(string $name, ?int $userId = null): string
-{
-    $trimmed = trim($name);
-    if ($trimmed === '') {
-        return '-';
-    }
-
-    $labelText = $userId !== null && $userId > 0
-        ? (user_public_name_by_id($userId, $trimmed) ?? $trimmed)
-        : $trimmed;
-    $label = '<b>' . e($labelText) . '</b>';
-    if ($userId !== null && $userId > 0) {
-        $url = base_url('players.php?uid=' . $userId);
-        return '<a class="player-link" href="' . e($url) . '">' . $label . '</a>';
-    }
-
-    return $label;
-}
-
-function render_creator_credit(array $demon): string
-{
-    $creators = demon_creator_names($demon);
-    if ($creators === []) {
-        return '-';
-    }
-
-    $primary = array_shift($creators);
-    
-    $primaryTrimmed = trim($primary);
-    $userStmt = db()->prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(:username) LIMIT 1');
-    $userStmt->execute([':username' => $primaryTrimmed]);
-    $primaryUserId = (int) ($userStmt->fetchColumn() ?: 0);
-    
-    $html = render_player_role_link($primary, $primaryUserId > 0 ? $primaryUserId : null);
-
-    if ($creators === []) {
-        return $html;
-    }
-    $tooltipText = implode(', ', array_map(fn($c) => e($c), $creators));
-    
-    $html .= ' ' . e(t('demon.and')) . ' <span class="tooltip underdotted">';
-    $html .= e(t('demon.more'));
-    $html .= '<span class="tooltiptext fade">' . $tooltipText . '</span>';
-    $html .= '</span>';
-
-    return $html;
 }
 
 function video_host_label(string $url): string
@@ -141,7 +103,7 @@ function render_demon_dropdown(string $id, string $title, string $description, a
                     );
                     ?>
                     <li class="hover white" title="<?= e($positionedName) ?>">
-                        <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
+                        <a href="<?= e(demonlist_list_url((string) ((int) $demon['position']), demonlist_active_list())) ?>">
                             <?= e($positionedName) ?>
                             <br>
                             <i><?= e(t('list.published_by')) ?> <?= e((string) $demon['publisher']) ?></i>
@@ -332,6 +294,7 @@ function render_level_comment_card(
 
 $requestedRank = (int) ($_GET['rank'] ?? 0);
 $requestedId = (int) ($_GET['id'] ?? 0);
+$activeList = demonlist_active_list();
 if ($requestedRank < 1 && $requestedId < 1) {
     redirect('index.php');
 }
@@ -343,9 +306,10 @@ $hasUserBannedColumn = users_has_is_banned_column();
 $showExtendedList = demonlist_show_extended_list();
 $showLegacyList = demonlist_show_legacy_list();
 
-$allDemons = db()->query('SELECT id, position, name, publisher, legacy
+$allDemons = db()->query('SELECT id, position, rated_position, rated, name, publisher, legacy
                            FROM demons
                            ORDER BY position ASC')->fetchAll();
+$allDemons = demonlist_apply_list_context($allDemons, $activeList);
 
 $demonSelectSql = $hasUserBannedColumn
     ? 'SELECT d.*,
@@ -356,14 +320,14 @@ $demonSelectSql = $hasUserBannedColumn
        LEFT JOIN users banned_users
          ON LOWER(banned_users.username) = LOWER(c.player)
         AND COALESCE(banned_users.is_banned, 0) = 1
-       WHERE ' . ($viewingById ? 'd.id = :id' : 'd.position = :rank') . '
+       WHERE ' . ($viewingById ? 'd.id = :id' : ($activeList === 'demonlist' ? 'd.rated_position = :rank' : 'd.position = :rank')) . '
        GROUP BY d.id'
     : 'SELECT d.*,
               COUNT(CASE WHEN c.progress >= 100 THEN c.id END) AS completion_count,
               AVG(c.enjoyment) AS average_enjoyment
        FROM demons d
        LEFT JOIN completions c ON c.demon_id = d.id
-       WHERE ' . ($viewingById ? 'd.id = :id' : 'd.position = :rank') . '
+       WHERE ' . ($viewingById ? 'd.id = :id' : ($activeList === 'demonlist' ? 'd.rated_position = :rank' : 'd.position = :rank')) . '
        GROUP BY d.id';
 $stmt = db()->prepare($demonSelectSql);
 $stmt->execute($viewingById ? [':id' => $requestedId] : [':rank' => $rank]);
@@ -390,6 +354,11 @@ if ($demon === false) {
 }
 
 $rank = (int) ($demon['position'] ?? $rank);
+if ($activeList === 'demonlist') {
+    $demon['ratedplus_position'] = (int) ($demon['position'] ?? 0);
+    $demon['position'] = (int) ($demon['rated_position'] ?? 0);
+    $demon['legacy'] = 0;
+}
 $levelCommentsDisabledMessage = level_comments_disabled_message($demon);
 $demonPosition = (int) ($demon['position'] ?? 0);
 $levelCommentActionPage = max(1, (int) ($_POST['comment_page'] ?? $_GET['comment_page'] ?? 1));
@@ -794,10 +763,10 @@ $completions = $completionsStmt->fetchAll();
 $historyStmt = db()->prepare('SELECT created_at, old_position, new_position, note
                               FROM demon_position_history
                               WHERE demon_id = :demon_id
-                              ORDER BY created_at ASC
-                              LIMIT 50');
+                              ORDER BY created_at DESC, id DESC
+                              LIMIT 250');
 $historyStmt->execute([':demon_id' => $id]);
-$positionHistory = $historyStmt->fetchAll();
+$positionHistory = demon_position_history_groups(array_reverse($historyStmt->fetchAll()));
 
 $currentCommentUserId = is_logged_in() ? (int) current_user_id() : 0;
 $levelCommentsPerPage = 10;
@@ -1023,7 +992,7 @@ $metaDescription = t('demon.meta_description', [
 render_header((string) $demon['name'], 'list', [
     'title' => $positionedName,
     'description' => $metaDescription,
-    'url' => $viewingById ? base_url('id=' . $id) : base_url((string) $position),
+    'url' => $viewingById ? base_url('id=' . $id) : demonlist_list_url((string) $position, $activeList),
     'image' => $thumbUrl,
 ]);
 ?>
@@ -1055,6 +1024,7 @@ render_header((string) $demon['name'], 'list', [
                 <div class="demon-hero-content">
                     <h1 class="demon-hero-title">
                         <?= e($positionedName) ?>
+                        <?php if ($activeList === 'ratedplus' && (int) ($demon['rated'] ?? 0) !== 1): ?><span class="ratedplus-level-badge"><?= e(t('list.ratedplus_badge')) ?></span><?php endif; ?>
                     </h1>
                     <p class="demon-hero-byline">
                         <?= e(t('demon.byline_by')) ?> <?= render_creator_credit($demon) ?>, <?= e(t('list.published_by')) ?> <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>
@@ -1066,10 +1036,10 @@ render_header((string) $demon['name'], 'list', [
                     <?php endif; ?>
                     <div class="demon-hero-actions">
                         <?php if ($prevId !== null): ?>
-                            <a class="button white hover small" href="<?= e(base_url((string) $prevId)) ?>"><i class="fa fa-chevron-left"></i> <?= e(t('demon.prev')) ?></a>
+                            <a class="button white hover small" href="<?= e(demonlist_list_url((string) $prevId, $activeList)) ?>"><i class="fa fa-chevron-left"></i> <?= e(t('demon.prev')) ?></a>
                         <?php endif; ?>
                         <?php if ($nextId !== null): ?>
-                            <a class="button white hover small" href="<?= e(base_url((string) $nextId)) ?>"><?= e(t('demon.next')) ?> <i class="fa fa-chevron-right"></i></a>
+                            <a class="button white hover small" href="<?= e(demonlist_list_url((string) $nextId, $activeList)) ?>"><?= e(t('demon.next')) ?> <i class="fa fa-chevron-right"></i></a>
                         <?php endif; ?>
                         <a class="button blue hover small" href="<?= e(safe_href_url((string) $demon['video_url'])) ?>" target="_blank" rel="noreferrer"><?= e(t('demon.verification_video')) ?></a>
                     </div>
@@ -1228,7 +1198,19 @@ render_header((string) $demon['name'], 'list', [
                                             $rowClass = 'moved-down';
                                             $changeLabel = '&darr;' . $changeAmount;
                                         }
+                                        $eventCount = (int) ($event['event_count'] ?? 1);
                                         $reason = trim((string) ($event['note'] ?? ''));
+                                        if ($eventCount > 1) {
+                                            $notes = array_values(array_unique(array_filter(
+                                                (array) ($event['notes'] ?? []),
+                                                static fn (mixed $note): bool => trim((string) $note) !== ''
+                                            )));
+                                            $suffix = $newPosition > (int) $oldPosition ? 'were added above' : 'were moved below';
+                                            if ($notes !== [] && preg_match('/ was (?:added above|moved above|moved below)$/', (string) $notes[0], $match) === 1) {
+                                                $suffix = $match[0] === ' was moved below' ? 'were moved below' : ($match[0] === ' was moved above' ? 'were moved above' : 'were added above');
+                                            }
+                                            $reason = $eventCount . ' levels ' . $suffix;
+                                        }
                                         if ($reason === '') {
                                             $reason = $oldPosition === null ? t('demon.added_to_list') : t('demon.position_updated');
                                         }

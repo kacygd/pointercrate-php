@@ -41,6 +41,10 @@ function render_theme_switcher(string $class = 'nav-theme-switcher'): void
 
 function render_header(string $title, string $activeNav = '', array $meta = []): void
 {
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=UTF-8');
+    }
+
     $appName = app_name();
     $brandMode = (int) config('app.brand_mode', 1);
     $logoPathRaw = trim((string) config('app.logo_path', 'logo.png'));
@@ -98,10 +102,13 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
     $error = flash('error');
     $user = current_user();
     $showAdminLink = is_admin();
-    $profileActive = in_array($activeNav, ['account', 'submit'], true);
+    $profileActive = in_array($activeNav, ['account', 'submit', 'admin'], true);
     $timeMachineActive = $activeNav === 'time_machine';
     $statsViewerActive = $activeNav === 'players';
-    $demonlistActive = in_array($activeNav, ['list', 'guidelines', 'roulette', 'time_machine'], true);
+    $demonlistActive = in_array($activeNav, ['list', 'guidelines', 'roulette', 'time_machine', 'players', 'submit'], true);
+    $activeList = demonlist_active_list();
+    $themeList = in_array($activeNav, ['admin', 'submit'], true) ? 'demonlist' : $activeList;
+    $ratedPlusEnabled = demonlist_ratedplus_enabled();
     $loginUrl = base_url('login.php');
     if (!in_array($activeNav, ['login', 'register'], true)) {
         $loginUrl = base_url('login.php?next=' . rawurlencode(auth_next_path(current_request_path_with_query())));
@@ -112,7 +119,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
     $styleHref = base_url('assets/css/style.css?v=' . rawurlencode($styleVersion));
 ?>
 <!doctype html>
-<html lang="<?= e(current_language()) ?>" data-theme="<?= e(current_theme()) ?>">
+<html lang="<?= e(current_language()) ?>" data-theme="<?= e(current_theme()) ?>" data-list="<?= e($themeList) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -146,7 +153,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
 <header>
     <nav class="center collapse underlined see-through">
         <div class="nav-icon nav-nohide nav-brand-wrap">
-            <a href="<?= e(base_url('index.php')) ?>" class="nav-brand-link" title="<?= e($appName) ?>">
+            <a href="<?= e(demonlist_list_url('index.php', 'demonlist')) ?>" class="nav-brand-link" title="<?= e($appName) ?>">
                 <?php if ($brandLogoUrl !== null): ?>
                     <img src="<?= e($brandLogoUrl) ?>" alt="<?= e($appName) ?>" class="nav-brand-logo" style="<?= e($brandLogoStyle) ?>">
                 <?php else: ?>
@@ -155,26 +162,31 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
             </a>
         </div>
 
-        <div class="nav-group nav-demonlist-menu">
-            <a class="nav-item hover white nav-demonlist-trigger <?= $demonlistActive ? 'active' : '' ?>" href="<?= e(base_url('index.php')) ?>" title="<?= e($appName) ?>">
-                <span class="nav-demonlist-title"><span class="nav-demonlist-title-text"><?= e($appName) ?></span><i class="fas fa-sort-down" aria-hidden="true"></i></span>
+        <?php if ($ratedPlusEnabled): ?>
+        <div class="nav-group nav-list-menu <?= $activeList === 'ratedplus' && $demonlistActive ? 'is-current-list' : '' ?>">
+            <a class="nav-item hover white nav-list-trigger" href="<?= e(demonlist_list_url('index.php', 'ratedplus')) ?>" title="<?= e(t('list.ratedplus')) ?>">
+                <span class="nav-list-title"><?= e(t('list.ratedplus_title')) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
             </a>
-            <ul class="nav-hover-dropdown white nav-demonlist-dropdown">
-                <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(base_url('guidelines.php')) ?>"><?= e(t('nav.guidelines')) ?></a></li>
-                <li><a class="white hover <?= $activeNav === 'roulette' ? 'active' : '' ?>" href="<?= e(base_url('roulette.php')) ?>"><?= e(t('nav.roulette')) ?></a></li>
-                <li><a class="white hover <?= $timeMachineActive ? 'active' : '' ?>" href="<?= e(base_url('time-machine.php')) ?>"><?= e(t('nav.time_machine')) ?></a></li>
+            <ul class="nav-hover-dropdown white nav-list-dropdown">
+                <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(demonlist_list_url('guidelines.php', 'ratedplus')) ?>"><?= e(t('nav.guidelines')) ?></a></li>
+                <li><a class="white hover <?= $statsViewerActive ? 'active' : '' ?>" href="<?= e(demonlist_list_url('players.php', 'ratedplus')) ?>"><?= e(t('nav.stats')) ?></a></li>
+                <li><a class="white hover <?= $activeNav === 'roulette' ? 'active' : '' ?>" href="<?= e(demonlist_list_url('roulette.php', 'ratedplus')) ?>"><?= e(t('nav.roulette')) ?></a></li>
+                <li><a class="white hover <?= $timeMachineActive ? 'active' : '' ?>" href="<?= e(demonlist_list_url('time-machine.php', 'ratedplus')) ?>"><?= e(t('nav.time_machine')) ?></a></li>
             </ul>
         </div>
-
-        <div class="nav-group">
-            <a class="nav-item hover white <?= $statsViewerActive ? 'active' : '' ?>" href="<?= e(base_url('players.php')) ?>"><?= e(t('nav.stats')) ?></a>
-        </div>
-
-        <?php if ($showAdminLink): ?>
-            <div class="nav-group">
-                <a class="nav-item hover white <?= $activeNav === 'admin' ? 'active' : '' ?>" href="<?= e(base_url('admin.php')) ?>"><?= e(t('nav.admin')) ?></a>
-            </div>
         <?php endif; ?>
+
+        <div class="nav-group nav-list-menu <?= $activeList === 'demonlist' && $demonlistActive ? 'is-current-list' : '' ?>">
+            <a class="nav-item hover white nav-list-trigger" href="<?= e(demonlist_list_url('index.php', 'demonlist')) ?>" title="<?= e($appName) ?>">
+                <span class="nav-list-title"><?= e($appName) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
+            </a>
+            <ul class="nav-hover-dropdown white nav-list-dropdown">
+                <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(demonlist_list_url('guidelines.php', 'demonlist')) ?>"><?= e(t('nav.guidelines')) ?></a></li>
+                <li><a class="white hover <?= $statsViewerActive ? 'active' : '' ?>" href="<?= e(demonlist_list_url('players.php', 'demonlist')) ?>">Stats Viewer</a></li>
+                <li><a class="white hover <?= $activeNav === 'roulette' ? 'active' : '' ?>" href="<?= e(demonlist_list_url('roulette.php', 'demonlist')) ?>"><?= e(t('nav.roulette')) ?></a></li>
+                <li><a class="white hover <?= $timeMachineActive ? 'active' : '' ?>" href="<?= e(demonlist_list_url('time-machine.php', 'demonlist')) ?>"><?= e(t('nav.time_machine')) ?></a></li>
+            </ul>
+        </div>
 
         <div class="nav-right-cluster">
             <div class="nav-tools nav-tools-right">
@@ -187,6 +199,9 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
                 <div class="nav-hover-dropdown white nav-profile-dropdown">
                     <a href="<?= e(base_url('account.php')) ?>"><?= e(t('nav.profile')) ?></a>
                     <a href="<?= e(base_url('submit.php')) ?>"><?= e(t('nav.submit')) ?></a>
+                    <?php if ($showAdminLink): ?>
+                        <a href="<?= e(base_url('admin.php')) ?>"><?= e(t('nav.admin_panel')) ?></a>
+                    <?php endif; ?>
                     <form method="post" action="<?= e(base_url('logout.php')) ?>" class="nav-profile-logout">
                         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
                         <button type="submit"><?= e(t('nav.logout')) ?></button>
@@ -212,7 +227,10 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
             </div>
         </div>
         <div class="nav-drop-down" id="mobile-nav-dropdown">
-            <a class="nav-item hover white" href="<?= e(base_url('index.php')) ?>"><?= e(t('nav.main_list')) ?></a>
+            <?php if ($ratedPlusEnabled): ?>
+                <a class="nav-item hover white" href="<?= e(demonlist_list_url('index.php', 'ratedplus')) ?>"><?= e(t('list.ratedplus')) ?></a>
+            <?php endif; ?>
+            <a class="nav-item hover white" href="<?= e(demonlist_list_url('index.php', 'demonlist')) ?>">Demonlist</a>
             <a class="nav-item hover white" href="<?= e(base_url('guidelines.php')) ?>"><?= e(t('nav.guidelines')) ?></a>
             <a class="nav-item hover white" href="<?= e(base_url('submit.php')) ?>"><?= e(t('nav.submit')) ?></a>
             <a class="nav-item hover white" href="<?= e(base_url('roulette.php')) ?>"><?= e(t('nav.roulette')) ?></a>
@@ -265,6 +283,7 @@ function render_footer(): void
     $scriptFilePath = dirname(__DIR__) . '/assets/js/app.js';
     $scriptVersion = is_file($scriptFilePath) ? (string) filemtime($scriptFilePath) : '1';
     $scriptSrc = base_url('assets/js/app.js?v=' . rawurlencode($scriptVersion));
+    $cspNonce = (string) ($GLOBALS['app_csp_nonce'] ?? '');
     $jsTranslations = t_js([
         'roulette.open',
         'roulette.level_id',
@@ -316,7 +335,7 @@ function render_footer(): void
     <span class="muted" style="margin-top: 8px;"><?= e(t('footer.created_by', ['author' => (string) config('app.author', 'kacygd')])) ?></span>
 </footer>
 
-<script>window.DEMONLIST_I18N = <?= json_encode($jsTranslations, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
+<script nonce="<?= e($cspNonce) ?>">window.DEMONLIST_I18N = <?= json_encode($jsTranslations, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
 <script src="<?= e($scriptSrc) ?>" defer></script>
 </body>
 </html>

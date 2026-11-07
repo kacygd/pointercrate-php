@@ -5,15 +5,17 @@ require dirname(__DIR__) . '/bootstrap.php';
 require dirname(__DIR__) . '/includes/list_page_helpers.php';
 
 $pdo = db();
+$activeList = demonlist_active_list();
 $allDemons = demonlist_fetch_all_demons($pdo);
-$parts = demonlist_partition_demons($allDemons, false);
+$listDemons = demonlist_apply_list_context($allDemons, $activeList);
+$parts = demonlist_partition_demons($listDemons, false);
 
 $main = $parts['main'];
 $extended = $parts['extended'];
 $legacy = $parts['legacy'];
 $showExtendedList = demonlist_show_extended_list();
 $showLegacyList = demonlist_show_legacy_list();
-$rouletteStorageScope = is_logged_in() ? ('user:' . (int) current_user_id()) : 'guest';
+$rouletteStorageScope = (is_logged_in() ? ('user:' . (int) current_user_id()) : 'guest') . ':list:' . $activeList;
 
 $rouletteItems = [];
 foreach ($main as $demon) {
@@ -29,13 +31,19 @@ foreach ($legacy as $demon) {
 render_header(t('roulette.title'), 'roulette', [
     'title' => t('roulette.title'),
     'description' => t('roulette.meta_description'),
-    'url' => base_url('roulette.php'),
+    'url' => demonlist_list_url('roulette.php', $activeList),
 ]);
 ?>
 
 <section class="panel fade m-center roulette-page-intro">
     <h1><?= e(t('roulette.heading')) ?></h1>
     <p><?= e(t('roulette.intro')) ?></p>
+    <div class="stats-viewer-tabs roulette-list-tabs">
+        <?php if (demonlist_ratedplus_enabled()): ?>
+            <a class="button <?= $activeList === 'ratedplus' ? 'blue' : 'white' ?> hover small" href="<?= e(demonlist_list_url('roulette.php', 'ratedplus')) ?>"><?= e(t('list.ratedplus')) ?></a>
+        <?php endif; ?>
+        <a class="button <?= $activeList === 'demonlist' ? 'blue' : 'white' ?> hover small" href="<?= e(demonlist_list_url('roulette.php', 'demonlist')) ?>">Demonlist</a>
+    </div>
 </section>
 
 <section class="panel fade m-center roulette-panel" id="roulette-panel" data-roulette-storage-scope="<?= e($rouletteStorageScope) ?>">
@@ -97,6 +105,6 @@ render_header(t('roulette.title'), 'roulette', [
     </section>
 </section>
 
-<script id="roulette-data" type="application/json"><?= json_encode($rouletteItems, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+<script nonce="<?= e((string) ($GLOBALS['app_csp_nonce'] ?? '')) ?>" id="roulette-data" type="application/json"><?= json_encode($rouletteItems, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 
 <?php render_footer(); ?>

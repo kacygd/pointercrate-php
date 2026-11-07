@@ -23,7 +23,7 @@ $snapshotDemons = $allDemons;
 
 if ($isTimeMachineView) {
     $futureEventsStmt = $pdo->prepare(
-        'SELECT id, demon_id, old_position, new_position, created_at
+        'SELECT id, demon_id, old_position, new_position, note, created_at
          FROM demon_position_history
          WHERE created_at > :at
          ORDER BY created_at DESC, id DESC'

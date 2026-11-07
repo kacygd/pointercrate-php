@@ -21,6 +21,20 @@ function record_position_event(PDO $pdo, int $demonId, ?int $oldPosition, int $n
     ]);
 }
 
+/** @param array<int, array{id: mixed, position: mixed}> $shiftedDemons */
+function record_position_shift_events(PDO $pdo, array $shiftedDemons, int $shift, ?int $changedByUserId, string $note): void
+{
+    foreach ($shiftedDemons as $shiftedDemon) {
+        $demonId = (int) ($shiftedDemon['id'] ?? 0);
+        $oldPosition = (int) ($shiftedDemon['position'] ?? 0);
+        if ($demonId < 1 || $oldPosition < 1) {
+            continue;
+        }
+
+        record_position_event($pdo, $demonId, $oldPosition, $oldPosition + $shift, $changedByUserId, $note);
+    }
+}
+
 function admin_safe_transaction_commit(PDO $pdo, bool $transactionStarted, bool $success): void
 {
     if (!$transactionStarted || !$pdo->inTransaction()) {
@@ -219,8 +233,19 @@ function admin_badge_uploaded_image_url(?array $file): ?string
         throw new RuntimeException('Badge upload must be PNG, JPG, GIF, or WEBP.');
     }
 
-    if (@getimagesize($tmpName) === false) {
+    $imageInfo = @getimagesize($tmpName);
+    if ($imageInfo === false) {
         throw new RuntimeException('Uploaded badge file is not a valid image.');
+    }
+
+    $imageExtensions = [
+        IMAGETYPE_PNG => 'png',
+        IMAGETYPE_JPEG => 'jpg',
+        IMAGETYPE_GIF => 'gif',
+        IMAGETYPE_WEBP => 'webp',
+    ];
+    if (($imageExtensions[(int) ($imageInfo[2] ?? 0)] ?? null) !== $extension) {
+        throw new RuntimeException('Badge file extension does not match its image type.');
     }
 
     $targetDir = dirname(__DIR__) . '/assets/badges';
@@ -810,6 +835,7 @@ if (method_is_post()) {
 
         $showExtendedList = isset($_POST['show_extended_list']);
         $showLegacyList = isset($_POST['show_legacy_list']);
+        $ratedPlusEnabled = isset($_POST['ratedplus_enabled']);
         $mainListLimitInput = trim((string) ($_POST['main_list_limit'] ?? ''));
         $extendedListLimitInput = trim((string) ($_POST['extended_list_limit'] ?? ''));
 
@@ -840,7 +866,8 @@ if (method_is_post()) {
         }
 
         if (
-            !demonlist_set_show_extended_list($showExtendedList)
+            !demonlist_set_ratedplus_enabled($ratedPlusEnabled)
+            || !demonlist_set_show_extended_list($showExtendedList)
             || !demonlist_set_show_legacy_list($showLegacyList)
             || !demonlist_set_list_limits($mainListLimit, $extendedListLimit)
         ) {
@@ -872,6 +899,8 @@ if (method_is_post()) {
             . ($showExtendedList ? 'ON' : 'OFF')
             . ', Legacy: '
             . ($showLegacyList ? 'ON' : 'OFF')
+            . ', ' . t('list.ratedplus') . ': '
+            . ($ratedPlusEnabled ? 'ON' : 'OFF')
             . '.'
             . $syncMessage
         );
@@ -1575,6 +1604,7 @@ if (method_is_post()) {
         $song = trim((string) ($_POST['song'] ?? ''));
         $objectCountInput = trim((string) ($_POST['object_count'] ?? ''));
         $legacy = isset($_POST['legacy']) ? 1 : 0;
+        $rated = isset($_POST['rated']) ? 1 : 0;
         $commentsDisabled = isset($_POST['comments_disabled']) ? 1 : 0;
         $customLevelInfoUpdates = demon_level_info_custom_value_updates_from_post(
             $_POST['custom_level_info'] ?? [],
@@ -1594,7 +1624,7 @@ if (method_is_post()) {
         if ($videoUrl === '' || !valid_http_url($videoUrl)) {
             $errors[] = 'Valid verification video URL is required.';
         }
-        if ($thumbnail !== '' && !valid_http_url($thumbnail)) {
+        if ($thumbnail !== '' && !valid_thumbnail_url($thumbnail)) {
             $errors[] = 'Thumbnail URL must be valid when provided.';
         }
         if ($requirement < 1 || $requirement > 100) {
@@ -1632,6 +1662,7 @@ if (method_is_post()) {
             }
 
             $maxPosition = (int) $pdo->query('SELECT COALESCE(MAX(position), 0) FROM demons')->fetchColumn();
+            $shiftedDemons = [];
 
             if ($positionInput !== '') {
                 $position = (int) $positionInput;
@@ -1641,6 +1672,10 @@ if (method_is_post()) {
                 if ($position > $maxPosition + 1) {
                     throw new RuntimeException('Position cannot be greater than ' . ($maxPosition + 1) . '.');
                 }
+
+                $shiftedStmt = $pdo->prepare('SELECT id, position FROM demons WHERE position >= :position ORDER BY position ASC');
+                $shiftedStmt->execute([':position' => $position]);
+                $shiftedDemons = $shiftedStmt->fetchAll();
 
                 $positionOffset = $maxPosition + 1;
 
@@ -1667,9 +1702,9 @@ if (method_is_post()) {
             $verifierUserId = admin_user_id_by_username($pdo, $verifier);
 
             $insert = $pdo->prepare('INSERT INTO demons
-                (position, name, difficulty, requirement, creator, creator_more, publisher, publisher_user_id, verifier, verifier_user_id, description, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy, comments_disabled)
+                (position, name, difficulty, requirement, creator, creator_more, publisher, publisher_user_id, verifier, verifier_user_id, description, video_url, thumbnail_url, level_id, level_length, song, object_count, legacy, rated, comments_disabled)
                 VALUES
-                (:position, :name, :difficulty, :requirement, :creator, :creator_more, :publisher, :publisher_user_id, :verifier, :verifier_user_id, :description, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy, :comments_disabled)');
+                (:position, :name, :difficulty, :requirement, :creator, :creator_more, :publisher, :publisher_user_id, :verifier, :verifier_user_id, :description, :video_url, :thumbnail_url, :level_id, :level_length, :song, :object_count, :legacy, :rated, :comments_disabled)');
 
             $insert->execute([
                 ':position' => $position,
@@ -1690,6 +1725,7 @@ if (method_is_post()) {
                 ':song' => $song !== '' ? $song : null,
                 ':object_count' => $objectCount,
                 ':legacy' => $legacy,
+                ':rated' => $rated,
                 ':comments_disabled' => $commentsDisabled,
             ]);
 
@@ -1706,6 +1742,9 @@ if (method_is_post()) {
             demon_tag_sync_for_demon($pdo, $newDemonId, demon_tag_parse_ids_from_input($_POST['tag_ids'] ?? []));
 
             record_position_event($pdo, $newDemonId, null, $position, current_user_id(), 'Level added');
+            record_position_shift_events($pdo, $shiftedDemons, 1, current_user_id(), $name . ' was added above');
+            demonlist_recompute_rated_positions($pdo);
+            demonlist_sync_user_points($pdo);
 
             $createdLevelData = [
                 'id' => $newDemonId,
@@ -1765,6 +1804,7 @@ if (method_is_post()) {
         $songInput = trim((string) ($_POST['song'] ?? ''));
         $objectCountInput = trim((string) ($_POST['object_count'] ?? ''));
         $legacyStatus = (string) ($_POST['legacy_status'] ?? 'keep');
+        $ratedStatus = (string) ($_POST['rated_status'] ?? 'keep');
         $commentStatus = strtolower(trim((string) ($_POST['comment_status'] ?? 'keep')));
         $newPositionInput = trim((string) ($_POST['new_position'] ?? ''));
         $moveNote = trim((string) ($_POST['move_note'] ?? ''));
@@ -1791,11 +1831,14 @@ if (method_is_post()) {
         if ($videoUrlInput !== '' && !valid_http_url($videoUrlInput)) {
             $errors[] = 'Verification video URL must be valid.';
         }
-        if ($thumbnailInput !== '' && !valid_http_url($thumbnailInput)) {
+        if ($thumbnailInput !== '' && !valid_thumbnail_url($thumbnailInput)) {
             $errors[] = 'Thumbnail URL must be valid.';
         }
         if (!in_array($legacyStatus, ['keep', 'normal', 'legacy'], true)) {
             $errors[] = 'Invalid legacy status option.';
+        }
+        if (!in_array($ratedStatus, ['keep', 'rated', 'unrated'], true)) {
+            $errors[] = 'Invalid rated status option.';
         }
         if (!in_array($commentStatus, ['keep', 'enabled', 'disabled'], true)) {
             $errors[] = 'Invalid comment status option.';
@@ -1909,6 +1952,13 @@ if (method_is_post()) {
             if ($legacyStatus === 'legacy') {
                 $finalLegacy = 1;
             }
+            $finalRated = (int) ($target['rated'] ?? 1);
+            if ($ratedStatus === 'rated') {
+                $finalRated = 1;
+            }
+            if ($ratedStatus === 'unrated') {
+                $finalRated = 0;
+            }
 
             $finalCommentsDisabled = (int) ($target['comments_disabled'] ?? 0);
             if ($commentStatus === 'enabled') {
@@ -1933,7 +1983,7 @@ if (method_is_post()) {
             if ($finalVideoUrl === '' || !valid_http_url($finalVideoUrl)) {
                 throw new RuntimeException('Verification video URL must be valid.');
             }
-            if ($finalThumbnail !== '' && !valid_http_url($finalThumbnail)) {
+            if ($finalThumbnail !== '' && !valid_thumbnail_url($finalThumbnail)) {
                 throw new RuntimeException('Thumbnail URL must be valid.');
             }
 
@@ -1955,6 +2005,16 @@ if (method_is_post()) {
             }
 
             if ($newPosition !== $oldPosition) {
+                $shiftedStmt = $pdo->prepare(
+                    $newPosition < $oldPosition
+                        ? 'SELECT id, position FROM demons WHERE position >= :new_position AND position < :old_position ORDER BY position ASC'
+                        : 'SELECT id, position FROM demons WHERE position > :old_position AND position <= :new_position ORDER BY position ASC'
+                );
+                $shiftedStmt->execute([
+                    ':new_position' => $newPosition,
+                    ':old_position' => $oldPosition,
+                ]);
+                $shiftedDemons = $shiftedStmt->fetchAll();
                 $positionOffset = $maxPosition + 1;
 
                 $parkTarget = $pdo->prepare('UPDATE demons SET position = :temporary_position WHERE id = :id');
@@ -2013,6 +2073,13 @@ if (method_is_post()) {
                     current_user_id(),
                     $moveNote !== '' ? $moveNote : 'Position updated in level edit'
                 );
+                record_position_shift_events(
+                    $pdo,
+                    $shiftedDemons,
+                    $newPosition < $oldPosition ? 1 : -1,
+                    current_user_id(),
+                    $finalName . ($newPosition < $oldPosition ? ' was moved above' : ' was moved below')
+                );
             }
 
             $update = $pdo->prepare('UPDATE demons
@@ -2034,6 +2101,7 @@ if (method_is_post()) {
                     song = :song,
                     object_count = :object_count,
                     legacy = :legacy,
+                    rated = :rated,
                     comments_disabled = :comments_disabled
                 WHERE id = :id');
 
@@ -2056,9 +2124,12 @@ if (method_is_post()) {
                 ':song' => $finalSong !== '' ? $finalSong : null,
                 ':object_count' => $finalObjectCount,
                 ':legacy' => $finalLegacy,
+                ':rated' => $finalRated,
                 ':comments_disabled' => $finalCommentsDisabled,
                 ':id' => $demonId,
             ]);
+            demonlist_recompute_rated_positions($pdo);
+            demonlist_sync_user_points($pdo);
 
             if (!demon_level_info_save_custom_values(
                 $pdo,
@@ -2192,6 +2263,8 @@ if (method_is_post()) {
                     ':lifted_from' => $oldPosition + $positionOffset,
                 ]);
             }
+            demonlist_recompute_rated_positions($pdo);
+            demonlist_sync_user_points($pdo);
 
             $deletedLevelData = [
                 'id' => $demonId,
@@ -2276,6 +2349,16 @@ if (method_is_post()) {
             }
 
             if ($newPosition !== $oldPosition) {
+                $shiftedStmt = $pdo->prepare(
+                    $newPosition < $oldPosition
+                        ? 'SELECT id, position FROM demons WHERE position >= :new_position AND position < :old_position ORDER BY position ASC'
+                        : 'SELECT id, position FROM demons WHERE position > :old_position AND position <= :new_position ORDER BY position ASC'
+                );
+                $shiftedStmt->execute([
+                    ':new_position' => $newPosition,
+                    ':old_position' => $oldPosition,
+                ]);
+                $shiftedDemons = $shiftedStmt->fetchAll();
                 $positionOffset = $maxPosition + 1;
 
                 $parkTarget = $pdo->prepare('UPDATE demons SET position = :temporary_position WHERE id = :id');
@@ -2340,6 +2423,15 @@ if (method_is_post()) {
                     current_user_id(),
                     $note !== '' ? $note : 'Position moved in admin panel'
                 );
+                record_position_shift_events(
+                    $pdo,
+                    $shiftedDemons,
+                    $newPosition < $oldPosition ? 1 : -1,
+                    current_user_id(),
+                    (string) $target['name'] . ($newPosition < $oldPosition ? ' was moved above' : ' was moved below')
+                );
+                demonlist_recompute_rated_positions($pdo);
+                demonlist_sync_user_points($pdo);
             }
 
             admin_safe_transaction_commit($pdo, $transactionStarted, true);
@@ -2962,6 +3054,7 @@ if ($activeSection === 'admin-scoring') {
 
 $showExtendedList = false;
 $showLegacyList = false;
+$ratedPlusEnabled = false;
 $mainListLimit = 0;
 $extendedListLimit = 0;
 $listLimitMinInput = '';
@@ -2969,6 +3062,7 @@ $listLimitMaxInput = '';
 if ($activeSection === 'admin-list-visibility') {
     $showExtendedList = demonlist_show_extended_list();
     $showLegacyList = demonlist_show_legacy_list();
+    $ratedPlusEnabled = demonlist_ratedplus_enabled();
     $mainListLimit = demonlist_main_list_limit();
     $extendedListLimit = demonlist_extended_list_limit();
     $listLimitMinInput = (string) demonlist_list_limit_min();
@@ -3765,6 +3859,15 @@ render_header(t('admin.title'), 'admin');
         <input type="hidden" name="action" value="update_list_visibility">
 
         <label class="cb-container" style="text-align: left;">
+            <input type="checkbox" name="ratedplus_enabled" value="1" <?= $ratedPlusEnabled ? 'checked' : '' ?> >
+            <span class="checkmark"></span>
+            <?= e(t('admin.enable_ratedplus', ['list' => t('list.ratedplus')])) ?>
+        </label>
+        <small class="muted" style="text-align: left;">
+            <?= e(t('admin.ratedplus_visibility_help', ['list' => t('list.ratedplus'), 'demonlist' => t('list.demonlist')])) ?>
+        </small>
+
+        <label class="cb-container" style="text-align: left;">
             <input type="checkbox" name="show_extended_list" value="1" <?= $showExtendedList ? 'checked' : '' ?>>
             <span class="checkmark"></span>
             <?= e(t('admin.show_extended_list')) ?>
@@ -4230,6 +4333,12 @@ render_header(t('admin.title'), 'admin');
         </label>
 
         <label class="cb-container" style="text-align: left; margin-top: 6px;">
+            <input type="checkbox" name="rated" value="1" checked>
+            <span class="checkmark"></span>
+            Rated in Geometry Dash (included in Demonlist)
+        </label>
+
+        <label class="cb-container" style="text-align: left; margin-top: 6px;">
             <input type="checkbox" name="comments_disabled" value="1">
             <span class="checkmark"></span>
             <?= e(t('admin.disable_comments_for_level')) ?>
@@ -4365,6 +4474,14 @@ render_header(t('admin.title'), 'admin');
                     <option value="keep"><?= e(t('admin.keep_current')) ?></option>
                     <option value="normal"><?= e(t('admin.set_current_list')) ?></option>
                     <option value="legacy"><?= e(t('admin.set_legacy')) ?></option>
+                </select>
+            </label>
+            <label class="field">
+                <span><?= e(t('admin.rated_status')) ?></span>
+                <select name="rated_status">
+                    <option value="keep"><?= e(t('admin.keep_current')) ?></option>
+                    <option value="rated"><?= e(t('admin.rated_demonlist', ['list' => t('list.demonlist')])) ?></option>
+                    <option value="unrated"><?= e(t('admin.unrated_ratedplus', ['list' => t('list.ratedplus')])) ?></option>
                 </select>
             </label>
             <label class="field">

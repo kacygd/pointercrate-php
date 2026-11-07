@@ -4,7 +4,7 @@ declare(strict_types=1);
 function card_thumbnail_url(array $demon): string
 {
     $configured = trim((string) ($demon['thumbnail_url'] ?? ''));
-    if (valid_http_url($configured)) {
+    if (valid_thumbnail_url($configured)) {
         return $configured;
     }
 
@@ -32,6 +32,29 @@ function css_background_image(string $url): string
     return "background-image: url('{$safe}');";
 }
 
+function render_creator_credit(array $demon): string
+{
+    $creators = demon_creator_names($demon);
+    if ($creators === []) {
+        return '-';
+    }
+
+    $primary = array_shift($creators);
+    $stmt = db()->prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(:username) LIMIT 1');
+    $stmt->execute([':username' => trim((string) $primary)]);
+    $primaryUserId = (int) ($stmt->fetchColumn() ?: 0);
+    $html = render_player_role_link((string) $primary, $primaryUserId > 0 ? $primaryUserId : null);
+
+    if ($creators === []) {
+        return $html;
+    }
+
+    $html .= ' ' . e(t('demon.and')) . ' <span class="tooltip underdotted">';
+    $html .= e(t('demon.more'));
+    $html .= '<span class="tooltiptext fade">' . implode(', ', array_map(static fn(string $name): string => e($name), $creators)) . '</span>';
+    return $html . '</span>';
+}
+
 function demon_creator_name(array $demon): string
 {
     return demon_primary_creator_name($demon);
@@ -56,14 +79,15 @@ function render_player_role_link(string $name, ?int $userId = null): string
     return $label;
 }
 
-function demon_detail_url(array $demon, bool $usePermalink = false): string
+function demon_detail_url(array $demon, bool $usePermalink = false, ?string $list = null): string
 {
     $id = (int) ($demon['id'] ?? 0);
     if ($usePermalink && $id > 0) {
         return base_url('id=' . $id);
     }
 
-    return base_url((string) ((int) ($demon['position'] ?? 0)));
+    $path = (string) ((int) ($demon['position'] ?? 0));
+    return demonlist_list_url($path, $list ?? demonlist_active_list());
 }
 
 function render_list_dropdown(string $id, string $title, string $description, array $demons, bool $usePermalinks = false): void
@@ -325,6 +349,11 @@ function time_machine_reconstruct_demons(array $currentDemons, array $futureEven
     }
 
     foreach ($futureEvents as $event) {
+        $note = trim((string) ($event['note'] ?? ''));
+        if (preg_match('/ was (?:added above|moved above|moved below)$/', $note) === 1) {
+            continue;
+        }
+
         $demonId = (int) ($event['demon_id'] ?? 0);
         $newPosition = (int) ($event['new_position'] ?? 0);
         $oldPosition = $event['old_position'] !== null ? (int) $event['old_position'] : null;

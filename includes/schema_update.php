@@ -121,7 +121,7 @@ function schema_apply_users_role_enum(PDO $pdo): void
 
 function schema_target_version(): string
 {
-    return '2026-10-email-verification';
+    return '2026-10-ratedplus';
 }
 
 function schema_seed_default_badges(PDO $pdo): int
@@ -303,6 +303,15 @@ function schema_needs_update(PDO $pdo): bool
         return true;
     }
     if (!schema_col_exists($pdo, 'demons', 'comments_disabled')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'demons', 'rated') || !schema_col_exists($pdo, 'demons', 'rated_position')) {
+        return true;
+    }
+    if (!schema_idx_exists($pdo, 'demons', 'uq_demons_rated_position')) {
+        return true;
+    }
+    if (!schema_col_exists($pdo, 'users', 'ratedplus_points')) {
         return true;
     }
     if (!schema_idx_exists($pdo, 'demons', 'idx_demons_comments_disabled')) {
@@ -998,6 +1007,31 @@ function run_schema_update(PDO $pdo): array
         $logs[] = '[OK] Added users.reset_token_expires_at';
     }
     $pdo->exec('ALTER TABLE users MODIFY COLUMN reset_token_expires_at TIMESTAMP NULL DEFAULT NULL');
+
+    // `position` is the global Rated+ order; `rated_position` only numbers
+    // levels which Geometry Dash has rated.
+    if (!schema_col_exists($pdo, 'demons', 'rated')) {
+        $pdo->exec('ALTER TABLE demons ADD COLUMN rated TINYINT(1) NOT NULL DEFAULT 1 AFTER legacy');
+        $logs[] = '[OK] Added demons.rated';
+    }
+    $pdo->exec('ALTER TABLE demons MODIFY COLUMN rated TINYINT(1) NOT NULL DEFAULT 1');
+    if (!schema_col_exists($pdo, 'demons', 'rated_position')) {
+        $pdo->exec('ALTER TABLE demons ADD COLUMN rated_position INT UNSIGNED NULL AFTER position');
+        $logs[] = '[OK] Added demons.rated_position';
+    }
+    if (!schema_idx_exists($pdo, 'demons', 'uq_demons_rated_position')) {
+        $pdo->exec('ALTER TABLE demons ADD UNIQUE KEY uq_demons_rated_position (rated_position)');
+        $logs[] = '[OK] Added uq_demons_rated_position';
+    }
+    if (!schema_col_exists($pdo, 'users', 'ratedplus_points')) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN ratedplus_points DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER points');
+        $logs[] = '[OK] Added users.ratedplus_points';
+    }
+    demonlist_recompute_rated_positions($pdo);
+    $logs[] = '[OK] Recomputed Rated+ and Demonlist positions';
+    $syncSummary = demonlist_sync_user_points($pdo);
+    $logs[] = '[OK] Recomputed Demonlist/Rated+ player scores: '
+        . (int) ($syncSummary['updated_users'] ?? 0) . ' user(s) updated';
 
     $optimizeTables = [
         'app_settings',

@@ -176,7 +176,7 @@ function db_connection_dsn(array $settings): string
     $charset = (string) ($settings['charset'] ?? 'utf8mb4');
     $database = (string) ($settings['database'] ?? 'demonlist');
     $host = trim((string) ($settings['host'] ?? ''));
-    if ($host === '') {
+    if ($host === '' || preg_match('/^[a-z0-9.-]+(?::[0-9]{1,5})?$/i', $host) !== 1) {
         throw new RuntimeException('Database host is not configured.');
     }
 
@@ -240,6 +240,19 @@ function valid_http_url(string $url): bool
     $host = (string) (parse_url($url, PHP_URL_HOST) ?: '');
 
     return in_array($scheme, ['http', 'https'], true) && $host !== '';
+}
+
+function valid_thumbnail_url(string $url): bool
+{
+    $url = trim($url);
+    if (strlen($url) > 2048 || !valid_http_url($url)) {
+        return false;
+    }
+
+    $parts = parse_url($url);
+    $path = is_array($parts) ? trim((string) ($parts['path'] ?? '')) : '';
+
+    return $path !== '' && $path !== '/';
 }
 
 function safe_href_url(mixed $url): string
@@ -427,7 +440,8 @@ function request_origin(): ?string
         $https = true;
     } elseif ((string) ($_SERVER['SERVER_PORT'] ?? '') === '443') {
         $https = true;
-    } elseif (strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https') {
+    } elseif ((bool) config('security.trust_proxy', false)
+        && strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https') {
         $https = true;
     }
 
@@ -817,24 +831,31 @@ function rate_limit_record_failure(string $bucket, int $maxAttempts, int $window
     $startedAt = time();
     $count = 1;
 
-    $raw = @file_get_contents($file);
-    if (is_string($raw) && $raw !== '') {
-        $data = json_decode($raw, true);
-        if (is_array($data)) {
-            $previousStart = (int) ($data['started_at'] ?? 0);
-            $previousCount = (int) ($data['count'] ?? 0);
-            if ($previousStart > 0 && time() - $previousStart < $windowSeconds) {
-                $startedAt = $previousStart;
-                $count = $previousCount + 1;
-            }
+    $handle = @fopen($file, 'c+');
+    if ($handle === false || !@flock($handle, LOCK_EX)) {
+        if (is_resource($handle)) {
+            fclose($handle);
+        }
+        return;
+    }
+
+    $raw = stream_get_contents($handle);
+    $data = is_string($raw) ? json_decode($raw, true) : null;
+    if (is_array($data)) {
+        $previousStart = (int) ($data['started_at'] ?? 0);
+        $previousCount = (int) ($data['count'] ?? 0);
+        if ($previousStart > 0 && time() - $previousStart < $windowSeconds) {
+            $startedAt = $previousStart;
+            $count = $previousCount + 1;
         }
     }
 
-    @file_put_contents(
-        $file,
-        (string) json_encode(['started_at' => $startedAt, 'count' => $count]),
-        LOCK_EX
-    );
+    rewind($handle);
+    ftruncate($handle, 0);
+    fwrite($handle, (string) json_encode(['started_at' => $startedAt, 'count' => $count]));
+    fflush($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
 }
 
 function rate_limit_clear(string $bucket): void
@@ -843,6 +864,51 @@ function rate_limit_clear(string $bucket): void
     if ($file !== null) {
         @unlink($file);
     }
+}
+
+/** Atomically consume one request from a fixed-window bucket. */
+function rate_limit_consume(string $bucket, int $maxAttempts, int $windowSeconds): int
+{
+    $file = rate_limit_file($bucket);
+    if ($file === null) {
+        return 0;
+    }
+
+    $handle = @fopen($file, 'c+');
+    if ($handle === false || !@flock($handle, LOCK_EX)) {
+        if (is_resource($handle)) {
+            fclose($handle);
+        }
+        return 0;
+    }
+
+    $now = time();
+    $startedAt = $now;
+    $count = 0;
+    $raw = stream_get_contents($handle);
+    $data = is_string($raw) ? json_decode($raw, true) : null;
+    if (is_array($data)) {
+        $previousStart = (int) ($data['started_at'] ?? 0);
+        if ($previousStart > 0 && $now - $previousStart < $windowSeconds) {
+            $startedAt = $previousStart;
+            $count = max(0, (int) ($data['count'] ?? 0));
+        }
+    }
+
+    if ($count >= $maxAttempts) {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+        return max(1, $windowSeconds - ($now - $startedAt));
+    }
+
+    rewind($handle);
+    ftruncate($handle, 0);
+    fwrite($handle, (string) json_encode(['started_at' => $startedAt, 'count' => $count + 1]));
+    fflush($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
+
+    return 0;
 }
 
 function users_has_comments_disabled_column(?PDO $pdo = null): bool
@@ -2178,6 +2244,100 @@ function demonlist_is_ranked_entry(int $position, bool $legacy): bool
     return demonlist_list_bucket($position, $legacy) !== 'legacy';
 }
 
+function demonlist_ratedplus_default(): bool
+{
+    $configured = config('app.ratedplus_enabled', true);
+    if (is_bool($configured)) {
+        return $configured;
+    }
+
+    return app_setting_truthy(is_scalar($configured) ? (string) $configured : null, true);
+}
+
+function demonlist_ratedplus_enabled(): bool
+{
+    return app_setting_truthy(
+        app_setting_get('list.ratedplus_enabled', null),
+        demonlist_ratedplus_default()
+    );
+}
+
+function demonlist_set_ratedplus_enabled(bool $enabled): bool
+{
+    return app_setting_set('list.ratedplus_enabled', $enabled ? '1' : '0');
+}
+
+function demonlist_normalize_list(?string $list): string
+{
+    if (!demonlist_ratedplus_enabled()) {
+        return 'demonlist';
+    }
+
+    return strtolower(trim((string) $list)) === 'demonlist' ? 'demonlist' : 'ratedplus';
+}
+
+function demonlist_active_list(): string
+{
+    return demonlist_normalize_list($_GET['list'] ?? null);
+}
+
+function demonlist_list_label(string $list): string
+{
+    return demonlist_normalize_list($list) === 'demonlist' ? t('list.demonlist') : t('list.ratedplus');
+}
+
+function demonlist_list_url(string $path, string $list, array $params = []): string
+{
+    $url = base_url($path);
+    $params['list'] = demonlist_normalize_list($list);
+    $separator = str_contains($url, '?') ? '&' : '?';
+    return $url . $separator . http_build_query($params);
+}
+
+function demonlist_position_for_list(array $demon, string $list): ?int
+{
+    if (demonlist_normalize_list($list) === 'demonlist') {
+        $position = $demon['rated_position'] ?? null;
+        return $position === null ? null : (int) $position;
+    }
+
+    return (int) ($demon['position'] ?? 0);
+}
+
+function demonlist_apply_list_context(array $demons, string $list): array
+{
+    $list = demonlist_normalize_list($list);
+    $result = [];
+
+    foreach ($demons as $demon) {
+        $ratedPlusPosition = (int) ($demon['position'] ?? 0);
+        $position = demonlist_position_for_list($demon, $list);
+        if ($position === null || $position < 1) {
+            continue;
+        }
+
+        $demon['ratedplus_position'] = $ratedPlusPosition;
+        $demon['list_position'] = $position;
+        $demon['position'] = $position;
+        $demon['legacy'] = 0;
+        $result[] = $demon;
+    }
+
+    usort($result, static fn (array $a, array $b): int => (int) $a['position'] <=> (int) $b['position']);
+    return $result;
+}
+
+function demonlist_recompute_rated_positions(?PDO $pdo = null): void
+{
+    $pdo = $pdo ?? db();
+    $pdo->exec('UPDATE demons SET rated_position = NULL');
+    $rated = $pdo->query('SELECT id FROM demons WHERE COALESCE(rated, 1) = 1 ORDER BY position ASC, id ASC')->fetchAll(PDO::FETCH_COLUMN);
+    $update = $pdo->prepare('UPDATE demons SET rated_position = :position WHERE id = :id');
+    foreach ($rated as $index => $id) {
+        $update->execute([':position' => $index + 1, ':id' => (int) $id]);
+    }
+}
+
 function demonlist_top1_points_default(): float
 {
     return 350.0;
@@ -2227,6 +2387,10 @@ function demonlist_set_top1_points(float $value): bool
 
 function demonlist_base_beaten_score(int $position): float
 {
+    if ($position > 150) {
+        return 0.0;
+    }
+
     return match (true) {
         $position >= 56 => 1.039035131 * ((185.7 * exp(-0.02715 * $position)) + 14.84),
         $position >= 36 && $position <= 55 => 1.0371139743 * ((212.61 * pow(1.036, 1 - $position)) + 25.071),
@@ -2273,7 +2437,7 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
 
-    $users = $pdo->query('SELECT id, username, points, bonus_points FROM users')->fetchAll();
+    $users = $pdo->query('SELECT id, username, points, ratedplus_points, bonus_points FROM users')->fetchAll();
     if ($users === []) {
         return [
             'processed_users' => 0,
@@ -2283,9 +2447,12 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
 
     $userIdByName = [];
     $storedPointsByUserId = [];
+    $storedRatedPlusPointsByUserId = [];
     $bonusPointsByUserId = [];
     $completionTotalByUserId = [];
+    $ratedPlusCompletionTotalByUserId = [];
     $completionScoresByUserId = [];
+    $ratedPlusCompletionScoresByUserId = [];
 
     foreach ($users as $user) {
         $userId = (int) ($user['id'] ?? 0);
@@ -2299,9 +2466,12 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
         }
 
         $storedPointsByUserId[$userId] = round((float) ($user['points'] ?? 0.0), 2);
+        $storedRatedPlusPointsByUserId[$userId] = round((float) ($user['ratedplus_points'] ?? 0.0), 2);
         $bonusPointsByUserId[$userId] = round((float) ($user['bonus_points'] ?? 0.0), 2);
         $completionTotalByUserId[$userId] = 0.0;
+        $ratedPlusCompletionTotalByUserId[$userId] = 0.0;
         $completionScoresByUserId[$userId] = [];
+        $ratedPlusCompletionScoresByUserId[$userId] = [];
     }
 
     if ($storedPointsByUserId === []) {
@@ -2311,7 +2481,7 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
         ];
     }
 
-    $demons = $pdo->query('SELECT id, position, requirement, legacy, verifier, verifier_user_id FROM demons')->fetchAll();
+    $demons = $pdo->query('SELECT id, position, rated_position, requirement, legacy, verifier, verifier_user_id FROM demons')->fetchAll();
     $demonById = [];
     foreach ($demons as $demon) {
         $demonId = (int) ($demon['id'] ?? 0);
@@ -2321,6 +2491,7 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
 
         $demonById[$demonId] = [
             'position' => (int) ($demon['position'] ?? 0),
+            'rated_position' => $demon['rated_position'] !== null ? (int) $demon['rated_position'] : null,
             'requirement' => (int) ($demon['requirement'] ?? 100),
             'legacy' => (int) ($demon['legacy'] ?? 0),
             'verifier' => trim((string) ($demon['verifier'] ?? '')),
@@ -2346,24 +2517,23 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
         }
 
         $demon = $demonById[$demonId];
-        $isRankedEntry = demonlist_is_ranked_entry(
-            (int) ($demon['position'] ?? 0),
-            (int) ($demon['legacy'] ?? 0) === 1
-        );
-        if (!$isRankedEntry) {
-            continue;
-        }
-
         $progress = max(0, min(100, (int) ($completion['progress'] ?? 0)));
-        $score = demonlist_score($demon['position'], $demon['requirement'], $progress);
+        $ratedPlusScore = demonlist_score($demon['position'], $demon['requirement'], $progress);
+        $ratedScore = $demon['rated_position'] === null
+            ? 0.0
+            : demonlist_score((int) $demon['rated_position'], $demon['requirement'], $progress);
 
-        $completionTotalByUserId[$userId] += $score;
-        $completionScoresByUserId[$userId][$demonId] = $score;
+        $ratedPlusCompletionTotalByUserId[$userId] += $ratedPlusScore;
+        $completionTotalByUserId[$userId] += $ratedScore;
+        $completionScoresByUserId[$userId][$demonId] = $ratedScore;
+        $ratedPlusCompletionScoresByUserId[$userId][$demonId] = $ratedPlusScore;
     }
 
     $verifierBonusByUserId = [];
+    $ratedPlusVerifierBonusByUserId = [];
     foreach ($storedPointsByUserId as $userId => $_storedPoints) {
         $verifierBonusByUserId[(int) $userId] = 0.0;
+        $ratedPlusVerifierBonusByUserId[(int) $userId] = 0.0;
     }
 
     foreach ($demonById as $demonId => $demon) {
@@ -2379,20 +2549,23 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
             continue;
         }
 
-        $position = (int) ($demon['position'] ?? 0);
-        $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
-        if (!demonlist_is_ranked_entry($position, $isLegacy)) {
+        $fullRatedPlusScore = demonlist_score((int) $demon['position'], (int) ($demon['requirement'] ?? 100), 100);
+        $existingRatedPlusScore = (float) ($ratedPlusCompletionScoresByUserId[$verifierUserId][$demonId] ?? 0.0);
+        if ($fullRatedPlusScore > $existingRatedPlusScore) {
+            $ratedPlusVerifierBonusByUserId[$verifierUserId] += ($fullRatedPlusScore - $existingRatedPlusScore);
+        }
+        if ($demon['rated_position'] === null) {
             continue;
         }
 
-        $fullVerifierScore = demonlist_score($position, (int) ($demon['requirement'] ?? 100), 100);
+        $fullVerifierScore = demonlist_score((int) $demon['rated_position'], (int) ($demon['requirement'] ?? 100), 100);
         $existingCompletionScore = (float) ($completionScoresByUserId[$verifierUserId][$demonId] ?? 0.0);
         if ($fullVerifierScore > $existingCompletionScore) {
             $verifierBonusByUserId[$verifierUserId] += ($fullVerifierScore - $existingCompletionScore);
         }
     }
 
-    $updateStmt = $pdo->prepare('UPDATE users SET points = :points WHERE id = :id');
+    $updateStmt = $pdo->prepare('UPDATE users SET points = :points, ratedplus_points = :ratedplus_points WHERE id = :id');
     $updatedUsers = 0;
     $processedUsers = 0;
 
@@ -2406,12 +2579,20 @@ function demonlist_sync_user_points(?PDO $pdo = null): array
             2
         );
 
-        if (abs((float) $storedPoints - $newPoints) < 0.01) {
+        $newRatedPlusPoints = round(
+            (float) ($ratedPlusCompletionTotalByUserId[$userId] ?? 0.0)
+            + (float) ($ratedPlusVerifierBonusByUserId[$userId] ?? 0.0)
+            + (float) ($bonusPointsByUserId[$userId] ?? 0.0),
+            2
+        );
+        $storedRatedPlusPoints = (float) ($storedRatedPlusPointsByUserId[$userId] ?? 0.0);
+        if (abs((float) $storedPoints - $newPoints) < 0.01 && abs($storedRatedPlusPoints - $newRatedPlusPoints) < 0.01) {
             continue;
         }
 
         $updateStmt->execute([
             ':points' => $newPoints,
+            ':ratedplus_points' => $newRatedPlusPoints,
             ':id' => $userId,
         ]);
         $updatedUsers++;

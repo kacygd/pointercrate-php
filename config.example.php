@@ -5,6 +5,7 @@ declare(strict_types=1);
 return [
     'app' => [
         'name' => 'My Demonlist',
+        'ratedplus_enabled' => true, // Set false to hide Rated+ and use Demonlist only.
         'brand_mode' => 2, // 1 = text, 2 = logo
         'logo_path' => 'logo.png',
         'logo_height' => 22,
@@ -53,6 +54,7 @@ return [
         'ref' => 'main',
     ],
     'security' => [
+        'trust_proxy' => false, // Set true only behind a trusted reverse proxy that overwrites X-Forwarded-Proto.
         'captcha_enabled' => true,
         'setup_captcha_enabled' => true,
         'captcha_login_enabled' => true,

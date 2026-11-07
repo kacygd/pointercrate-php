@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/bootstrap.php';
+require_once dirname(__DIR__) . '/includes/list_page_helpers.php';
 
 if (array_key_exists('at', $_GET) || array_key_exists('timemachine', $_GET)) {
     $target = 'time-machine.php';
@@ -11,339 +12,6 @@ if (array_key_exists('at', $_GET) || array_key_exists('timemachine', $_GET)) {
     redirect($target);
 }
 
-function card_thumbnail_url(array $demon): string
-{
-    $configured = trim((string) ($demon['thumbnail_url'] ?? ''));
-    if (valid_http_url($configured)) {
-        return $configured;
-    }
-
-    $videoUrl = trim((string) ($demon['video_url'] ?? ''));
-    $youtubeId = youtube_video_id($videoUrl);
-    if ($youtubeId !== null && $youtubeId !== '') {
-        return 'https://i.ytimg.com/vi/' . rawurlencode($youtubeId) . '/hqdefault.jpg';
-    }
-
-    return '';
-}
-
-function css_background_image(string $url): string
-{
-    if ($url === '') {
-        return 'background-image: linear-gradient(135deg, #1f3048 0%, #101824 100%);';
-    }
-
-    $safe = str_replace(
-        ["\\", "'", "\r", "\n"],
-        ["\\\\", "\\'", '', ''],
-        $url
-    );
-
-    return "background-image: url('{$safe}');";
-}
-
-function demon_creator_name(array $demon): string
-{
-    return demon_primary_creator_name($demon);
-}
-
-function render_player_role_link(string $name, ?int $userId = null): string
-{
-    $trimmed = trim($name);
-    if ($trimmed === '') {
-        return '-';
-    }
-
-    $labelText = $userId !== null && $userId > 0
-        ? (user_public_name_by_id($userId, $trimmed) ?? $trimmed)
-        : $trimmed;
-    $label = '<b>' . e($labelText) . '</b>';
-    if ($userId !== null && $userId > 0) {
-        $url = base_url('players.php?uid=' . $userId);
-        return '<a class="player-link" href="' . e($url) . '">' . $label . '</a>';
-    }
-
-    return $label;
-}
-
-function render_creator_credit(array $demon): string
-{
-    $creators = demon_creator_names($demon);
-    if ($creators === []) {
-        return '-';
-    }
-
-    $primary = array_shift($creators);
-    
-    // Get user ID for primary creator
-    $primaryTrimmed = trim($primary);
-    $userStmt = db()->prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(:username) LIMIT 1');
-    $userStmt->execute([':username' => $primaryTrimmed]);
-    $primaryUserId = (int) ($userStmt->fetchColumn() ?: 0);
-    
-    $html = render_player_role_link($primary, $primaryUserId > 0 ? $primaryUserId : null);
-
-    if ($creators === []) {
-        return $html;
-    }
-
-    // Additional creators in tooltip - plain text only
-    $tooltipText = implode(', ', array_map(fn($c) => e($c), $creators));
-    
-    $html .= ' ' . e(t('demon.and')) . ' <span class="tooltip underdotted">';
-    $html .= e(t('demon.more'));
-    $html .= '<span class="tooltiptext fade">' . $tooltipText . '</span>';
-    $html .= '</span>';
-
-    return $html;
-}
-
-function render_list_dropdown(string $id, string $title, string $description, array $demons): void
-{
-    ?>
-    <div>
-        <div class="button white hover no-shadow js-toggle" data-toggle-group="0" data-dropdown-id="<?= e($id) ?>">
-            <?= e($title) ?>
-        </div>
-
-        <div class="see-through fade dropdown" id="<?= e($id) ?>">
-            <div class="search js-search seperated" style="margin: 10px;">
-                <input placeholder="<?= e(t('list.filter')) ?>" type="text">
-            </div>
-            <p style="margin: 10px;"><?= e($description) ?></p>
-            <ul class="flex wrap space">
-                <?php if ($demons === []): ?>
-                    <li class="white" style="min-width: 100%; width: 100%;"><?= e(t('list.no_entries')) ?></li>
-                <?php endif; ?>
-
-                <?php foreach ($demons as $demon): ?>
-                    <?php
-                    $positionLabel = demonlist_position_label((int) $demon['position'], $id === 'legacy');
-                    $positionedName = demonlist_positioned_name((int) $demon['position'], $id === 'legacy', (string) $demon['name']);
-                    $dropdownVerifier = trim((string) ($demon['verifier'] ?? ''));
-                    $dropdownPublisher = trim((string) ($demon['publisher'] ?? ''));
-                    $dropdownPublisherLabel = user_public_name_by_id((int) ($demon['publisher_user_id'] ?? 0), $dropdownPublisher) ?? $dropdownPublisher;
-                    $dropdownVerifierLabel = user_public_name_by_id((int) ($demon['verifier_user_id'] ?? 0), $dropdownVerifier) ?? $dropdownVerifier;
-                    ?>
-                    <li class="hover white" title="<?= e($positionedName) ?>">
-                        <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
-                            <?= e($positionedName) ?>
-                            <br>
-                            <i><?= e(t('list.published_by')) ?> <?= e($dropdownPublisherLabel) ?><?php if ($dropdownVerifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= e($dropdownVerifierLabel) ?><?php endif; ?></i>
-                        </a>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-        </div>
-    </div>
-    <?php
-}
-
-function time_machine_timezone(): DateTimeZone
-{
-    static $timezone = null;
-    if ($timezone instanceof DateTimeZone) {
-        return $timezone;
-    }
-
-    $timezone = new DateTimeZone((string) config('app.timezone', 'UTC'));
-    return $timezone;
-}
-
-function time_machine_format_input(DateTimeInterface $date): string
-{
-    return DateTimeImmutable::createFromInterface($date)
-        ->setTimezone(time_machine_timezone())
-        ->format('Y-m-d\TH:i');
-}
-
-function time_machine_parse_input(string $value): ?DateTimeImmutable
-{
-    $normalized = trim($value);
-    if ($normalized === '') {
-        return null;
-    }
-
-    $timezone = time_machine_timezone();
-    $formats = [
-        'Y-m-d\TH:i',
-        'Y-m-d\TH:i:s',
-        'Y-m-d H:i',
-        'Y-m-d H:i:s',
-        DateTimeInterface::RFC3339,
-        DateTimeInterface::RFC3339_EXTENDED,
-    ];
-
-    foreach ($formats as $format) {
-        $parsed = DateTimeImmutable::createFromFormat($format, $normalized, $timezone);
-        if ($parsed instanceof DateTimeImmutable) {
-            return $parsed;
-        }
-    }
-
-    try {
-        return new DateTimeImmutable($normalized, $timezone);
-    } catch (Throwable) {
-        return null;
-    }
-}
-
-function time_machine_format_banner(DateTimeInterface $date): string
-{
-    return DateTimeImmutable::createFromInterface($date)
-        ->setTimezone(time_machine_timezone())
-        ->format('l, F jS Y \a\t g:i:sa \G\M\TP');
-}
-
-function time_machine_available_since(PDO $pdo): ?DateTimeImmutable
-{
-    try {
-        $value = $pdo->query('SELECT MIN(created_at) FROM demons')->fetchColumn();
-        if (!is_string($value) || trim($value) === '') {
-            return null;
-        }
-
-        return new DateTimeImmutable($value, time_machine_timezone());
-    } catch (Throwable) {
-        return null;
-    }
-}
-
-function time_machine_reconstruct_demons(array $currentDemons, array $futureEvents): array
-{
-    $demonsById = [];
-    foreach ($currentDemons as $demon) {
-        $demonId = (int) ($demon['id'] ?? 0);
-        if ($demonId < 1) {
-            continue;
-        }
-
-        $demon['position'] = (int) ($demon['position'] ?? 0);
-        $demonsById[$demonId] = $demon;
-    }
-
-    foreach ($futureEvents as $event) {
-        $demonId = (int) ($event['demon_id'] ?? 0);
-        $newPosition = (int) ($event['new_position'] ?? 0);
-        $oldPosition = $event['old_position'] !== null ? (int) $event['old_position'] : null;
-
-        if ($demonId < 1 || $newPosition < 1) {
-            continue;
-        }
-
-        if ($oldPosition === null) {
-            if (!isset($demonsById[$demonId])) {
-                continue;
-            }
-
-            unset($demonsById[$demonId]);
-            foreach ($demonsById as &$otherDemon) {
-                $position = (int) ($otherDemon['position'] ?? 0);
-                if ($position > $newPosition) {
-                    $otherDemon['position'] = $position - 1;
-                }
-            }
-            unset($otherDemon);
-            continue;
-        }
-
-        if (!isset($demonsById[$demonId]) || $oldPosition < 1) {
-            continue;
-        }
-
-        if ($newPosition < $oldPosition) {
-            foreach ($demonsById as $otherId => &$otherDemon) {
-                if ($otherId === $demonId) {
-                    continue;
-                }
-
-                $position = (int) ($otherDemon['position'] ?? 0);
-                if ($position > $newPosition && $position <= $oldPosition) {
-                    $otherDemon['position'] = $position - 1;
-                }
-            }
-            unset($otherDemon);
-        } elseif ($newPosition > $oldPosition) {
-            foreach ($demonsById as $otherId => &$otherDemon) {
-                if ($otherId === $demonId) {
-                    continue;
-                }
-
-                $position = (int) ($otherDemon['position'] ?? 0);
-                if ($position >= $oldPosition && $position < $newPosition) {
-                    $otherDemon['position'] = $position + 1;
-                }
-            }
-            unset($otherDemon);
-        }
-
-        $demonsById[$demonId]['position'] = $oldPosition;
-    }
-
-    $reconstructed = array_values($demonsById);
-    usort($reconstructed, static function (array $a, array $b): int {
-        $positionCompare = (int) ($a['position'] ?? 0) <=> (int) ($b['position'] ?? 0);
-        if ($positionCompare !== 0) {
-            return $positionCompare;
-        }
-
-        return strcasecmp((string) ($a['name'] ?? ''), (string) ($b['name'] ?? ''));
-    });
-
-    return $reconstructed;
-}
-
-function historical_list_bucket(int $position): string
-{
-    if ($position < 1) {
-        return 'legacy';
-    }
-
-    if ($position <= demonlist_main_list_limit()) {
-        return 'main';
-    }
-
-    if ($position <= demonlist_extended_list_limit()) {
-        return demonlist_show_extended_list() ? 'extended' : 'main';
-    }
-
-    return demonlist_show_legacy_list() ? 'legacy' : 'main';
-}
-
-function roulette_item_from_demon(array $demon, string $bucket, bool $shown): array
-{
-    $position = (int) ($demon['position'] ?? 0);
-    $requirement = (int) ($demon['requirement'] ?? 100);
-    $publisher = trim((string) ($demon['publisher'] ?? ''));
-    $verifier = trim((string) ($demon['verifier'] ?? ''));
-    $publisherLabel = user_public_name_by_id((int) ($demon['publisher_user_id'] ?? 0), $publisher) ?? $publisher;
-    $verifierLabel = user_public_name_by_id((int) ($demon['verifier_user_id'] ?? 0), $verifier) ?? $verifier;
-    $creator = demon_creator_name($demon);
-    $levelId = trim((string) ($demon['level_id'] ?? ''));
-    $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
-    $score = '';
-    if (demonlist_is_ranked_entry($position, $isLegacy)) {
-        $score = number_format(pointercrate_score($position, $requirement, $requirement), 2) . ' (' . $requirement . '%) - '
-            . number_format(pointercrate_score($position, $requirement, 100), 2) . ' (100%) points';
-    }
-
-    return [
-        'id' => (int) ($demon['id'] ?? 0),
-        'bucket' => $bucket,
-        'shown' => $shown,
-        'position' => $position,
-        'positionLabel' => demonlist_position_label($position, $bucket === 'legacy'),
-        'currentPosition' => (int) ($demon['current_position'] ?? $position),
-        'name' => (string) ($demon['name'] ?? ''),
-        'creator' => $creator !== '' ? $creator : $publisherLabel,
-        'url' => base_url((string) $position),
-        'videoUrl' => valid_http_url((string) ($demon['video_url'] ?? '')) ? (string) $demon['video_url'] : '',
-        'thumb' => card_thumbnail_url($demon),
-        'levelId' => $levelId,
-        'byline' => t('list.published_by') . ' ' . $publisherLabel . ($verifierLabel !== '' ? ', ' . t('list.verified_by') . ' ' . $verifierLabel : ''),
-        'score' => $score,
-    ];
-}
 function demonlist_list_sort_available_options(array $demons): array
 {
     $hasCompletions = false;
@@ -434,6 +102,7 @@ function demonlist_sort_demons(array $demons, string $sort): array
 }
 
 $pdo = db();
+$activeList = demonlist_active_list();
 
 $pdo = db();
 $hasUserBannedColumn = users_has_is_banned_column($pdo);
@@ -486,6 +155,8 @@ foreach ($allDemons as &$demon) {
 }
 unset($demon);
 
+$allDemons = demonlist_apply_list_context($allDemons, $activeList);
+
 $isTimeMachineView = false;
 
 $main = [];
@@ -498,6 +169,13 @@ $showLegacyList = demonlist_show_legacy_list();
 foreach ($allDemons as $demon) {
     $position = (int) $demon['position'];
     $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
+    // Rated+ templates remain visible even when the main site's legacy section
+    // is hidden. They are intentionally exclusive to the Rated+ view.
+    if ($activeList === 'ratedplus' && (int) ($demon['rated'] ?? 0) !== 1) {
+        $main[] = $demon;
+        $showcase[] = $demon;
+        continue;
+    }
     $listBucket = $isTimeMachineView
         ? historical_list_bucket($position)
         : demonlist_list_bucket($position, $isLegacy);
@@ -731,9 +409,9 @@ $listHelpersSql .= '
 $listHelpers = $pdo->query($listHelpersSql)->fetchAll();
 
 $discordWidgetUrl = discord_server_widget_url();
-$pageDescription = (!$showExtendedList && !$showLegacyList)
+$pageDescription = demonlist_list_label($activeList) . ': ' . ((!$showExtendedList && !$showLegacyList)
     ? 'All ranked demons are currently merged into one Main List.'
-    : 'Ranked demons with Main, Extended, and Legacy sections.';
+    : 'Ranked demons with Main, Extended, and Legacy sections.');
 $mainListDescription = demonlist_main_list_dropdown_description($showExtendedList, $showLegacyList);
 $extendedListDescription = demonlist_extended_list_dropdown_description(true);
 $legacyListDescription = demonlist_legacy_list_dropdown_description();
@@ -761,6 +439,12 @@ render_header(t('home.title'), 'list', [
 <div class="flex m-center container">
     <main class="left">
         <section class="panel fade" style="overflow: visible; z-index: 50;">
+            <?php if ($activeList === 'ratedplus'): ?>
+                <div class="ratedplus-list-banner" role="note">
+                    <span class="ratedplus-list-banner-mark"><?= e(t('list.ratedplus_badge')) ?></span>
+                    <span><?= e(t('list.ratedplus_banner', ['list' => t('list.ratedplus')])) ?></span>
+                </div>
+            <?php endif; ?>
             <h1><?= e(t('home.heading')) ?></h1>
             <p style="margin-top: 0;"><?= e($mainIntro) ?></p>
             <div class="search seperated" style="margin: 10px 0;">
@@ -863,6 +547,8 @@ render_header(t('home.title'), 'list', [
                 ? historical_list_bucket($position)
                 : demonlist_list_bucket($position, $isLegacy);
             $positionedName = demonlist_positioned_name($position, $bucket === 'legacy', (string) $demon['name']);
+            $demonUrl = demonlist_list_url((string) $position, $activeList);
+            $isRatedPlusTemplate = $activeList === 'ratedplus' && (int) ($demon['rated'] ?? 0) !== 1;
             ?>
             <section
                 class="panel fade flex mobile-col"
@@ -873,15 +559,16 @@ render_header(t('home.title'), 'list', [
             >
                 <a
                     class="thumb ratio-16-9"
-                    href="<?= e(base_url((string) ((int) $demon['position']))) ?>"
+                    href="<?= e($demonUrl) ?>"
                     style="position: relative; <?= e($thumbStyle) ?>"
                 ></a>
                 <div class="flex demon-info" style="align-items: center;">
                     <div class="demon-byline">
                         <h2 style="text-align: left; margin-bottom: 0;">
-                            <a href="<?= e(base_url((string) ((int) $demon['position']))) ?>">
+                            <a href="<?= e($demonUrl) ?>">
                                 <?= e($positionedName) ?>
                             </a>
+                            <?php if ($isRatedPlusTemplate): ?><span class="ratedplus-level-badge"><?= e(t('list.ratedplus_badge')) ?></span><?php endif; ?>
                         </h2>
                         <h3 class="demon-card-byline" style="text-align: left; margin-bottom: 0;">
                             <?= e(t('list.published_by')) ?> <?= render_player_role_link($publisher, $publisherUserId > 0 ? $publisherUserId : null) ?><?php if ($verifier !== ''): ?>, <?= e(t('list.verified_by')) ?> <?= render_player_role_link($verifier, $verifierUserId > 0 ? $verifierUserId : null) ?><?php endif; ?>

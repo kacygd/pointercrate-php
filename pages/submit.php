@@ -23,6 +23,7 @@ if ($user === null) {
 }
 
 $form = [
+    'submit_list' => 'demonlist',
     'demon_name' => '',
     'video_url' => '',
     'raw_footage_url' => '',
@@ -35,19 +36,14 @@ $form = [
 ];
 $errors = [];
 
-$allDemons = db()->query('SELECT id, name, requirement, position, legacy
+$requestedSubmitList = strtolower(trim((string) ($_POST['submit_list'] ?? $_GET['list'] ?? 'demonlist')));
+$submitList = $requestedSubmitList === 'ratedplus' && demonlist_ratedplus_enabled() ? 'ratedplus' : 'demonlist';
+$form['submit_list'] = $submitList;
+
+$allDemons = db()->query('SELECT id, name, requirement, position, rated_position, rated, legacy
                           FROM demons
                           ORDER BY position ASC')->fetchAll();
-$demons = [];
-foreach ($allDemons as $demon) {
-    $position = (int) ($demon['position'] ?? 0);
-    $legacy = (int) ($demon['legacy'] ?? 0) === 1;
-    if (!demonlist_is_ranked_entry($position, $legacy)) {
-        continue;
-    }
-
-    $demons[] = $demon;
-}
+$demons = demonlist_apply_list_context($allDemons, $submitList);
 
 $showExtendedList = demonlist_show_extended_list();
 $showLegacyList = demonlist_show_legacy_list();
@@ -82,6 +78,7 @@ function resolve_demon_input(array $demons, string $rawInput): array
 }
 
 if (method_is_post()) {
+    $form['submit_list'] = $submitList;
     $form['demon_name'] = trim((string) ($_POST['demon_name'] ?? ''));
     $form['video_url'] = trim((string) ($_POST['video_url'] ?? ''));
     $form['raw_footage_url'] = trim((string) ($_POST['raw_footage_url'] ?? ''));
@@ -97,7 +94,6 @@ if (method_is_post()) {
     if ($submitWait > 0) {
         $errors[] = t('security.rate_limited', ['minutes' => (int) ceil($submitWait / 60)]);
     }
-    rate_limit_record_failure($submitIpBucket, 10, 3600);
 
     if (!validate_csrf($_POST['_token'] ?? null)) {
         $errors[] = t('submit.error_token');
@@ -162,6 +158,7 @@ if (method_is_post()) {
     }
 
     if ($errors === [] && $demon !== null) {
+        rate_limit_record_failure($submitIpBucket, 10, 3600);
         $pdo = db();
         $insert = $pdo->prepare('INSERT INTO submissions
             (type, demon_name, difficulty, publisher, player, submitted_by_user_id, video_url, raw_footage_url, platform, refresh_rate, progress, enjoyment, notes, status)
@@ -212,8 +209,17 @@ render_header(t('submit.title'), 'submit');
         <div class="info-red"><?= e(implode(' ', $errors)) ?></div>
     <?php endif; ?>
 
+    <div class="submit-list-selector" aria-label="Submission list">
+        <span><?= e(t('submit.select_list')) ?></span>
+        <a class="button <?= $submitList === 'demonlist' ? 'blue' : 'white' ?> hover small" href="<?= e(demonlist_list_url('submit.php', 'demonlist')) ?>"><?= e(t('list.demonlist')) ?></a>
+        <?php if (demonlist_ratedplus_enabled()): ?>
+            <a class="button <?= $submitList === 'ratedplus' ? 'blue' : 'white' ?> hover small" href="<?= e(demonlist_list_url('submit.php', 'ratedplus')) ?>"><?= e(t('list.ratedplus')) ?></a>
+        <?php endif; ?>
+    </div>
+
     <form class="stack-form" method="post" action="<?= e(base_url('submit.php')) ?>" novalidate>
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="submit_list" value="<?= e($submitList) ?>">
 
         <label class="field">
             <span><?= e(t('submit.level_name')) ?></span>
@@ -247,20 +253,26 @@ render_header(t('submit.title'), 'submit');
             <input type="url" name="raw_footage_url" value="<?= e($form['raw_footage_url']) ?>" placeholder="<?= e(t('submit.raw_placeholder')) ?>">
         </label>
 
-        <div class="detail-grid" style="grid-template-columns: 1fr 1fr;">
-            <label class="field">
-                <span><?= e(t('common.platform')) ?></span>
-                <select name="platform">
-                    <?php foreach (['PC', 'Mobile', 'Tablet', 'Other'] as $platform): ?>
-                        <option value="<?= e($platform) ?>" <?= $form['platform'] === $platform ? 'selected' : '' ?>><?= e($platform) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
+        <div class="submit-run-details">
+            <div class="submit-run-details-grid">
+                <label class="submit-run-field">
+                    <span class="submit-run-label"><?= e(t('common.platform')) ?></span>
+                    <span class="submit-select-suffix">
+                        <select name="platform">
+                            <?php foreach (['PC', 'Mobile', 'Tablet', 'Other'] as $platform): ?>
+                                <option value="<?= e($platform) ?>" <?= $form['platform'] === $platform ? 'selected' : '' ?>><?= e($platform) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </span>
+                </label>
 
-            <label class="field">
-                <span><?= e(t('submit.refresh_rate')) ?></span>
-                <input type="number" min="30" max="1000" name="refresh_rate" value="<?= e($form['refresh_rate']) ?>">
-            </label>
+                <label class="submit-run-field">
+                    <span class="submit-run-label"><?= e(t('submit.refresh_rate')) ?></span>
+                    <span class="submit-input-suffix">
+                        <input type="number" min="30" max="1000" name="refresh_rate" value="<?= e($form['refresh_rate']) ?>" inputmode="numeric">
+                    </span>
+                </label>
+            </div>
         </div>
 
         <label class="field">

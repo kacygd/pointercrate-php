@@ -1,25 +1,19 @@
 <?php
 declare(strict_types=1);
 
-$rootPath = dirname(__DIR__);
-$configPath = $rootPath . '/config.php';
-if (!is_file($configPath)) {
-    $configPath = $rootPath . '/config.example.php';
-}
-
-$GLOBALS['app_config_path'] = $configPath;
-$GLOBALS['app_config'] = require $configPath;
-
-$timezone = (string) ($GLOBALS['app_config']['app']['timezone'] ?? 'UTC');
-date_default_timezone_set($timezone);
-
-require_once $rootPath . '/includes/functions.php';
+define('DEMONLIST_BOOTSTRAP_API', true);
+require dirname(__DIR__) . '/bootstrap.php';
 
 api_set_common_headers();
 
 if (api_request_method() === 'OPTIONS') {
     http_response_code(204);
     exit;
+}
+
+$apiWait = rate_limit_consume('api_ip:' . (current_request_ip() ?: 'unknown'), 120, 60);
+if ($apiWait > 0) {
+    api_error(429, 'Too many API requests. Please try again shortly.');
 }
 
 try {
@@ -43,6 +37,8 @@ function api_set_common_headers(): void
     header('Access-Control-Allow-Methods: GET, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, Authorization');
     header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
 }
 
 function api_send(mixed $payload, int $status = 200, array $headers = []): never
@@ -68,30 +64,7 @@ function api_error(int $status, string $message, int $code = 0): never
 
 function api_db(): PDO
 {
-    static $pdo = null;
-    if ($pdo instanceof PDO) {
-        return $pdo;
-    }
-
-    $host = (string) config('db.host', '127.0.0.1');
-    $port = (int) config('db.port', 3306);
-    $database = (string) config('db.database', 'demonlist');
-    $charset = (string) config('db.charset', 'utf8mb4');
-    $username = (string) config('db.username', 'root');
-    $password = (string) config('db.password', '');
-
-    $pdo = new PDO(
-        sprintf('mysql:host=%s;port=%d;dbname=%s;charset=%s', $host, $port, $database, $charset),
-        $username,
-        $password,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-        ]
-    );
-
-    return $pdo;
+    return db();
 }
 
 function api_dispatch(): never
@@ -381,15 +354,6 @@ function api_demon_tags_map(PDO $pdo, array $demonIds): array
     }
 
     $placeholders = implode(', ', array_fill(0, count($demonIds), '?'));
-    $stmt = $pdo->prepare(
-        "SELECT dtl.demon_id, dt.id, dt.name, dt.color
-         FROM demon_tag_links dtl
-         INNER JOIN demon_tags dt ON dt.id = dtl.tag_id
-         WHERE dtl.demon_id IN ({$placeholders})
-         ORDER BY dtl.demon_id ASC, dt.name ASC"
-    );
-    $stmt->execute($demonIds);
-
     $map = [];
     $gradientCol = api_schema_col_exists($pdo, 'demon_tags', 'gradient') ? ', dt.gradient' : '';
     $gradientColorCol = api_schema_col_exists($pdo, 'demon_tags', 'gradient_color') ? ', dt.gradient_color' : '';
@@ -693,7 +657,7 @@ function api_format_demon(array $row): array
         'name' => (string) $row['name'],
         'requirement' => (int) ($row['requirement'] ?? 100),
         'video' => api_nullable_url($row['video_url'] ?? null),
-        'thumbnail' => (string) ($row['thumbnail_url'] ?? ''),
+        'thumbnail' => api_nullable_thumbnail_url($row['thumbnail_url'] ?? null),
         'publisher' => api_player_for_name(
             (string) ($row['publisher_account_name'] ?: ($row['publisher'] ?? 'Unknown')),
             (int) ($row['publisher_user_id_resolved'] ?? 0),
@@ -733,6 +697,13 @@ function api_nullable_url(mixed $value): ?string
     $url = trim((string) ($value ?? ''));
 
     return valid_http_url($url) ? $url : null;
+}
+
+function api_nullable_thumbnail_url(mixed $value): ?string
+{
+    $url = trim((string) ($value ?? ''));
+
+    return valid_thumbnail_url($url) ? $url : null;
 }
 
 function api_iso_time(string $value): string

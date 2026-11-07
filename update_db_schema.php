@@ -3,6 +3,11 @@ declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
 
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
 function out(array $lines): void
 {
     $text = implode(PHP_EOL, $lines) . PHP_EOL;
@@ -10,22 +15,6 @@ function out(array $lines): void
         header('Content-Type: text/plain; charset=UTF-8');
     }
     echo $text;
-}
-
-$requestedRun = PHP_SAPI === 'cli' || (($_GET['run'] ?? '') === '1');
-if (!$requestedRun) {
-    out([
-        'Schema update is ready.',
-    ]);
-    exit;
-}
-
-if (PHP_SAPI !== 'cli' && !(is_logged_in() && has_owner_access())) {
-    http_response_code(403);
-    out([
-        'Not authorized. Sign in as an owner, or run "php update_db_schema.php" from the command line.',
-    ]);
-    exit;
 }
 
 $pdo = db();

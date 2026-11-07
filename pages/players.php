@@ -50,7 +50,8 @@ function render_stats_demon_links(array $demons, bool $useLabel = false): string
 
         $url = trim((string) ($demon['url'] ?? ''));
         if ($url !== '') {
-            $parts[] = '<a class="link stats-demon-link" href="' . e($url) . '">' . e($label) . '</a>';
+            $class = 'link stats-demon-link' . (!empty($demon['is_ratedplus_only']) ? ' ratedplus-only-link' : '');
+            $parts[] = '<a class="' . $class . '" href="' . e($url) . '">' . e($label) . '</a>';
         } else {
             $parts[] = e($label);
         }
@@ -64,6 +65,9 @@ function render_stats_demon_links(array $demons, bool $useLabel = false): string
 }
 
 $pdo = db();
+$activeList = demonlist_active_list();
+$ratedPlusEnabled = demonlist_ratedplus_enabled();
+$activePointsColumn = $activeList === 'ratedplus' ? 'ratedplus_points' : 'points';
 
 $hasBonusPointsColumn = false;
 try {
@@ -85,7 +89,7 @@ $userSelectFields = [
     users_has_display_name_column($pdo) ? 'display_name' : 'NULL AS display_name',
     'country_code',
     'role',
-    'points',
+    $activePointsColumn . ' AS points',
     $hasBonusPointsColumn ? 'bonus_points' : '0.00 AS bonus_points',
     $hasUserBannedColumn ? 'is_banned' : '0 AS is_banned',
 ];
@@ -126,6 +130,8 @@ $demonSelectFields = [
     'id',
     'name',
     'position',
+    'rated_position',
+    'rated',
     'requirement',
     'legacy',
     'creator',
@@ -138,6 +144,7 @@ $demonSelectFields = [
 $demons = $pdo->query('SELECT ' . implode(', ', $demonSelectFields) . '
                        FROM demons
                        ORDER BY position ASC')->fetchAll();
+$demons = demonlist_apply_list_context($demons, $activeList);
 
 $records = db()->query('SELECT demon_id, player, progress, enjoyment
                         FROM completions
@@ -247,11 +254,13 @@ foreach ($demons as $demon) {
     $demonPosition = (int) $demon['position'];
     $legacy = (int) $demon['legacy'] === 1;
     $isRankedEntry = demonlist_is_ranked_entry($demonPosition, $legacy);
+    $isRatedPlusOnly = $activeList === 'ratedplus' && (int) ($demon['rated'] ?? 0) !== 1;
     $demonItem = [
         'id' => $demonId,
         'name' => $demonName,
         'position' => $demonPosition,
-        'url' => base_url((string) $demonPosition),
+        'is_ratedplus_only' => $isRatedPlusOnly,
+        'url' => demonlist_list_url((string) $demonPosition, $activeList),
     ];
 
     $creatorNames = demon_creator_names($demon);
@@ -311,6 +320,7 @@ foreach ($records as $record) {
     $requirement = (int) $demon['requirement'];
     $legacy = (int) $demon['legacy'] === 1;
     $isRankedEntry = demonlist_is_ranked_entry($position, $legacy);
+    $isRatedPlusOnly = $activeList === 'ratedplus' && (int) ($demon['rated'] ?? 0) !== 1;
 
     $progress = (int) ($record['progress'] ?? 0);
     if ($progress < $requirement) {
@@ -350,7 +360,8 @@ foreach ($records as $record) {
             'id' => $demonId,
             'name' => $demonName,
             'position' => $position,
-            'url' => base_url((string) $position),
+            'is_ratedplus_only' => $isRatedPlusOnly,
+            'url' => demonlist_list_url((string) $position, $activeList),
         ];
         $playersByKey[$key]['completed'][$demonId] = $completionItem;
         if ($listBucket === 'main') {
@@ -371,8 +382,9 @@ foreach ($records as $record) {
             'id' => $demonId,
             'name' => $demonName,
             'position' => $position,
+            'is_ratedplus_only' => $isRatedPlusOnly,
             'label' => $demonName . ' (' . $progress . '%)',
-            'url' => base_url((string) $position),
+            'url' => demonlist_list_url((string) $position, $activeList),
         ];
     }
 }
@@ -473,7 +485,7 @@ unset($player);
 
 if ($userPointUpdates !== []) {
     try {
-        $updatePoints = db()->prepare('UPDATE users SET points = :points WHERE id = :id');
+        $updatePoints = db()->prepare('UPDATE users SET ' . $activePointsColumn . ' = :points WHERE id = :id');
         foreach ($userPointUpdates as $update) {
             $updatePoints->execute([
                 ':points' => $update['points'],
@@ -767,6 +779,7 @@ $serializeDemonItems = static function (array $items, bool $useLabel = false): a
         $result[] = [
             'name' => $name,
             'position' => isset($item['position']) ? (int) $item['position'] : null,
+            'is_ratedplus_only' => !empty($item['is_ratedplus_only']),
             'url' => trim((string) ($item['url'] ?? '')),
             'label' => $useLabel ? trim((string) ($item['label'] ?? $name)) : null,
         ];
@@ -829,15 +842,22 @@ foreach ($players as $player) {
 
 render_header(t('stats.title'), 'players');
 ?>
-<section class="panel fade stats-viewer-panel stats-viewer-panel-<?= e($view) ?>">
+<section class="panel fade stats-viewer-panel stats-viewer-panel-<?= e($view) ?> stats-viewer-list-<?= e($activeList) ?>">
     <div class="panel-head">
         <h1><?= e(t('stats.title')) ?></h1>
         <p><?= e(t('stats.intro')) ?></p>
+        <?php if ($activeList === 'ratedplus'): ?>
+            <p class="ratedplus-stats-context"><span><?= e(t('list.ratedplus_badge')) ?></span> <?= e(t('list.ratedplus_stats_context', ['list' => t('list.ratedplus')])) ?></p>
+        <?php endif; ?>
     </div>
 
     <div class="stats-viewer-tabs">
-        <a class="button <?= $view === 'players' ? 'blue' : 'white' ?> hover small" href="<?= e(base_url('players.php')) ?>"><?= e(t('stats.players_tab')) ?></a>
-        <a class="button <?= $view === 'countries' ? 'blue' : 'white' ?> hover small" href="<?= e(base_url('players.php?view=countries')) ?>"><?= e(t('stats.countries_tab')) ?></a>
+        <a class="button <?= $view === 'players' ? 'blue' : 'white' ?> hover small" href="<?= e(demonlist_list_url('players.php', $activeList)) ?>"><?= e(t('stats.players_tab')) ?></a>
+        <a class="button <?= $view === 'countries' ? 'blue' : 'white' ?> hover small" href="<?= e(demonlist_list_url('players.php?view=countries', $activeList)) ?>"><?= e(t('stats.countries_tab')) ?></a>
+        <?php if ($ratedPlusEnabled): ?>
+            <a class="button <?= $activeList === 'ratedplus' ? 'blue' : 'white' ?> hover small" href="<?= e(demonlist_list_url('players.php' . ($view === 'countries' ? '?view=countries' : ''), 'ratedplus')) ?>"><?= e(t('list.ratedplus')) ?></a>
+        <?php endif; ?>
+        <a class="button <?= $activeList === 'demonlist' ? 'blue' : 'white' ?> hover small" href="<?= e(demonlist_list_url('players.php' . ($view === 'countries' ? '?view=countries' : ''), 'demonlist')) ?>"><?= e(t('list.demonlist')) ?></a>
     </div>
 
     <?php if ($view === 'countries'): ?>
@@ -858,7 +878,7 @@ render_header(t('stats.title'), 'players');
                         <?php foreach ($countryStatsList as $index => $countryEntry): ?>
                             <?php $countryRankLabel = $countryEntry['rank'] !== null ? '#' . (int) $countryEntry['rank'] : '-'; ?>
                             <li class="stats-player-item <?= $index === $selectedCountryIndex ? 'active' : '' ?>">
-                                <a class="stats-player-button" href="<?= e(base_url('players.php?view=countries&country=' . rawurlencode((string) $countryEntry['country_code']))) ?>">
+                                <a class="stats-player-button" href="<?= e(demonlist_list_url('players.php?view=countries&country=' . rawurlencode((string) $countryEntry['country_code']), $activeList)) ?>">
                                     <span class="stats-player-rank"><?= e($countryRankLabel) ?></span>
                                     <span class="stats-player-name"><?= country_flag_html((string) $countryEntry['country_code'], true) ?><span><?= e((string) $countryEntry['country_name']) ?></span></span>
                                     <span class="stats-player-score"><?= e(number_format((float) $countryEntry['total_points'], 2)) ?></span>
@@ -1108,7 +1128,7 @@ render_header(t('stats.title'), 'players');
             </section>
         </div>
 
-        <script>
+        <script nonce="<?= e((string) ($GLOBALS['app_csp_nonce'] ?? '')) ?>">
         (() => {
             const data = <?= json_encode($playersPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
             const statsText = <?= json_encode([
@@ -1192,7 +1212,7 @@ render_header(t('stats.title'), 'players');
                     const url = typeof demon?.url === 'string' ? demon.url : '';
                     if (url !== '') {
                         const link = document.createElement('a');
-                        link.className = 'link stats-demon-link';
+                        link.className = `link stats-demon-link${demon?.is_ratedplus_only ? ' ratedplus-only-link' : ''}`;
                         link.href = url;
                         link.textContent = label;
                         target.appendChild(link);
