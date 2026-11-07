@@ -210,17 +210,17 @@ function admin_badge_uploaded_image_url(?array $file): ?string
 
     $error = (int) ($file['error'] ?? UPLOAD_ERR_OK);
     if ($error !== UPLOAD_ERR_OK) {
-        throw new RuntimeException('Badge image upload failed.');
+        throw new RuntimeException(t('admin.badge_upload_failed'));
     }
 
     $size = (int) ($file['size'] ?? 0);
     if ($size < 1 || $size > 2 * 1024 * 1024) {
-        throw new RuntimeException('Badge image must be smaller than 2MB.');
+        throw new RuntimeException(t('admin.badge_too_large'));
     }
 
     $tmpName = (string) ($file['tmp_name'] ?? '');
     if ($tmpName === '' || !is_uploaded_file($tmpName)) {
-        throw new RuntimeException('Invalid uploaded badge image.');
+        throw new RuntimeException(t('admin.badge_image_invalid'));
     }
 
     $extension = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
@@ -230,12 +230,12 @@ function admin_badge_uploaded_image_url(?array $file): ?string
 
     $allowedExtensions = ['png', 'jpg', 'gif', 'webp'];
     if (!in_array($extension, $allowedExtensions, true)) {
-        throw new RuntimeException('Badge upload must be PNG, JPG, GIF, or WEBP.');
+        throw new RuntimeException(t('admin.badge_image_type'));
     }
 
     $imageInfo = @getimagesize($tmpName);
     if ($imageInfo === false) {
-        throw new RuntimeException('Uploaded badge file is not a valid image.');
+        throw new RuntimeException(t('admin.badge_image_not_valid'));
     }
 
     $imageExtensions = [
@@ -245,18 +245,18 @@ function admin_badge_uploaded_image_url(?array $file): ?string
         IMAGETYPE_WEBP => 'webp',
     ];
     if (($imageExtensions[(int) ($imageInfo[2] ?? 0)] ?? null) !== $extension) {
-        throw new RuntimeException('Badge file extension does not match its image type.');
+        throw new RuntimeException(t('admin.badge_extension_mismatch'));
     }
 
     $targetDir = dirname(__DIR__) . '/assets/badges';
     if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
-        throw new RuntimeException('Could not create badge image folder.');
+        throw new RuntimeException(t('admin.badge_folder_failed'));
     }
 
     $fileName = 'badge-' . date('YmdHis') . '-' . bin2hex(random_bytes(4)) . '.' . $extension;
     $targetPath = $targetDir . DIRECTORY_SEPARATOR . $fileName;
     if (!move_uploaded_file($tmpName, $targetPath)) {
-        throw new RuntimeException('Could not save badge image.');
+        throw new RuntimeException(t('admin.badge_save_failed'));
     }
 
     return 'assets/badges/' . $fileName;
@@ -783,7 +783,7 @@ if (method_is_post()) {
 
         $topOneInput = trim((string) ($_POST['top1_points'] ?? ''));
         if ($topOneInput === '' || !is_numeric($topOneInput)) {
-            flash('error', 'Top #1 points must be a valid number.');
+            flash('error', t('admin.scoring_invalid_top1'));
             redirect(admin_section_url('admin-scoring'));
         }
 
@@ -795,34 +795,31 @@ if (method_is_post()) {
         ) {
             flash(
                 'error',
-                'Top #1 points must be between '
-                . number_format(demonlist_top1_points_min(), 2)
-                . ' and '
-                . number_format(demonlist_top1_points_max(), 2)
-                . '.'
+                t('admin.scoring_range', [
+                    'min' => number_format(demonlist_top1_points_min(), 2),
+                    'max' => number_format(demonlist_top1_points_max(), 2),
+                ])
             );
             redirect(admin_section_url('admin-scoring'));
         }
 
-        $syncMessage = '. Demon score values are now scaled proportionally.';
         try {
             $syncSummary = demonlist_sync_user_points();
-            $syncMessage .= ' Updated '
-                . (int) ($syncSummary['updated_users'] ?? 0)
-                . ' / '
-                . (int) ($syncSummary['processed_users'] ?? 0)
-                . ' user point totals.';
+            $syncMessage = t('admin.scoring_sync_ok', [
+                'updated' => (int) ($syncSummary['updated_users'] ?? 0),
+                'processed' => (int) ($syncSummary['processed_users'] ?? 0),
+            ]);
         } catch (Throwable) {
-            $syncMessage .= ' Point sync failed in this request. Open Stats Viewer once to refresh points.';
+            $syncMessage = t('admin.scoring_sync_failed');
         }
 
         flash(
             'success',
-            'Updated top #1 points to '
-            . number_format($topOnePoints, 2)
-            . '. Legacy scoring: '
-            . ($legacyCountsForScore ? 'enabled' : 'disabled')
-            . $syncMessage
+            t('admin.scoring_saved', [
+                'points' => number_format($topOnePoints, 2),
+                'legacy' => t($legacyCountsForScore ? 'admin.enabled' : 'admin.disabled'),
+                'sync' => $syncMessage,
+            ])
         );
         redirect(admin_section_url('admin-scoring'));
     }
@@ -845,7 +842,7 @@ if (method_is_post()) {
             || $extendedListLimitInput === ''
             || preg_match('/^\d+$/', $extendedListLimitInput) !== 1
         ) {
-            flash('error', 'Main/Extended max rank must be whole numbers.');
+            flash('error', t('admin.list_limits_invalid'));
             redirect(admin_section_url('admin-list-visibility'));
         }
 
@@ -854,13 +851,10 @@ if (method_is_post()) {
         if (!demonlist_list_limits_are_valid($mainListLimit, $extendedListLimit)) {
             flash(
                 'error',
-                'Main max rank must be between '
-                . demonlist_list_limit_min()
-                . ' and '
-                . demonlist_list_limit_max()
-                . '. Extended max rank must be >= Main max rank and <= '
-                . demonlist_list_limit_max()
-                . '.'
+                t('admin.list_limits_range', [
+                    'min' => demonlist_list_limit_min(),
+                    'max' => demonlist_list_limit_max(),
+                ])
             );
             redirect(admin_section_url('admin-list-visibility'));
         }
@@ -871,38 +865,33 @@ if (method_is_post()) {
             || !demonlist_set_show_legacy_list($showLegacyList)
             || !demonlist_set_list_limits($mainListLimit, $extendedListLimit)
         ) {
-            flash('error', 'Could not save list settings. Please try again.');
+            flash('error', t('admin.list_settings_failed'));
             redirect(admin_section_url('admin-list-visibility'));
         }
 
-        $syncMessage = '';
         try {
             $syncSummary = demonlist_sync_user_points();
-            $syncMessage = ' Synced '
-                . (int) ($syncSummary['updated_users'] ?? 0)
-                . ' / '
-                . (int) ($syncSummary['processed_users'] ?? 0)
-                . ' user point totals.';
+            $syncMessage = t('admin.scoring_sync_ok', [
+                'updated' => (int) ($syncSummary['updated_users'] ?? 0),
+                'processed' => (int) ($syncSummary['processed_users'] ?? 0),
+            ]);
         } catch (Throwable) {
-            $syncMessage = ' Point sync failed in this request. Open Stats Viewer once to refresh points.';
+            $syncMessage = t('admin.scoring_sync_failed');
         }
 
         flash(
             'success',
-            'Saved list settings. Main: #1-#'
-            . $mainListLimit
-            . ', Extended: '
-            . ($extendedListLimit > $mainListLimit
-                ? ('#' . ($mainListLimit + 1) . '-#' . $extendedListLimit)
-                : 'none')
-            . '. Visibility -> Extended: '
-            . ($showExtendedList ? 'ON' : 'OFF')
-            . ', Legacy: '
-            . ($showLegacyList ? 'ON' : 'OFF')
-            . ', ' . t('list.ratedplus') . ': '
-            . ($ratedPlusEnabled ? 'ON' : 'OFF')
-            . '.'
-            . $syncMessage
+            t('admin.list_settings_saved', [
+                'main' => $mainListLimit,
+                'extended' => $extendedListLimit > $mainListLimit
+                    ? ('#' . ($mainListLimit + 1) . '-#' . $extendedListLimit)
+                    : t('admin.none'),
+                'extended_visible' => t($showExtendedList ? 'admin.on' : 'admin.off'),
+                'legacy_visible' => t($showLegacyList ? 'admin.on' : 'admin.off'),
+                'ratedplus' => t('list.ratedplus'),
+                'ratedplus_visible' => t($ratedPlusEnabled ? 'admin.on' : 'admin.off'),
+                'sync' => $syncMessage,
+            ])
         );
         redirect(admin_section_url('admin-list-visibility'));
     }
@@ -916,9 +905,9 @@ if (method_is_post()) {
         $mode = strtolower(trim((string) ($_POST['mode'] ?? 'save')));
         if ($mode === 'restore') {
             if (demon_level_info_restore_default_rows()) {
-                flash('success', 'Restored Level Info rows to the default layout.');
+                flash('success', t('admin.level_info_restored'));
             } else {
-                flash('error', 'Could not restore Level Info rows.');
+                flash('error', t('admin.level_info_restore_failed'));
             }
             redirect(admin_section_url('admin-level-info-rows'));
         }
@@ -935,7 +924,7 @@ if (method_is_post()) {
             || !is_array($labels)
             || !is_array($defaultValues)
         ) {
-            flash('error', 'Invalid Level Info rows payload.');
+            flash('error', t('admin.level_info_invalid_payload'));
             redirect(admin_section_url('admin-level-info-rows'));
         }
 
@@ -957,11 +946,11 @@ if (method_is_post()) {
         }
 
         if (!demon_level_info_set_rows($rows)) {
-            flash('error', 'Could not save Level Info rows.');
+            flash('error', t('admin.level_info_save_failed'));
             redirect(admin_section_url('admin-level-info-rows'));
         }
 
-        flash('success', 'Saved Level Info rows.');
+        flash('success', t('admin.level_info_saved'));
         redirect(admin_section_url('admin-level-info-rows'));
     }
 
@@ -975,7 +964,7 @@ if (method_is_post()) {
         $levelNameInput = trim((string) ($_POST['comment_level_name'] ?? ''));
         $levelCommentStatus = strtolower(trim((string) ($_POST['level_comment_status'] ?? 'keep')));
         if (!in_array($levelCommentStatus, ['keep', 'enabled', 'disabled'], true)) {
-            flash('error', 'Invalid level comment status.');
+            flash('error', t('admin.invalid_comment_status'));
             redirect(admin_section_url('admin-level-comments'));
         }
 
@@ -1020,12 +1009,17 @@ if (method_is_post()) {
                     ':id' => (int) $target['id'],
                 ]);
 
-                $levelMessage = ' Level "' . (string) $target['name'] . '" comments: '
-                    . ($levelCommentsDisabled === 1 ? 'disabled' : 'enabled') . '.';
+                $levelMessage = t('admin.level_comments_saved', [
+                    'level' => (string) $target['name'],
+                    'status' => t($levelCommentsDisabled === 1 ? 'admin.disabled' : 'admin.enabled'),
+                ]);
             }
 
             $pdo->commit();
-            flash('success', 'Comments are now ' . ($commentsEnabled ? 'enabled' : 'disabled') . ' for the list.' . $levelMessage);
+            flash('success', t('admin.comments_saved', [
+                'status' => t($commentsEnabled ? 'admin.enabled' : 'admin.disabled'),
+                'level' => $levelMessage,
+            ]));
         } catch (Throwable $throwable) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
@@ -1044,7 +1038,7 @@ if (method_is_post()) {
 
         $commentId = (int) ($_POST['comment_id'] ?? 0);
         if ($commentId < 1) {
-            flash('error', 'Choose a reported comment to delete.');
+            flash('error', t('admin.reported_comment_required'));
             redirect(admin_section_url('admin-level-comments'));
         }
 
@@ -1065,7 +1059,7 @@ if (method_is_post()) {
 
             $delete = $pdo->prepare('DELETE FROM level_comments WHERE id = :id');
             $delete->execute([':id' => $commentId]);
-            flash('success', 'Deleted reported comment from ' . (string) $comment['demon_name'] . '.');
+            flash('success', t('admin.reported_comment_deleted', ['level' => (string) $comment['demon_name']]));
         } catch (Throwable $throwable) {
             flash('error', $throwable->getMessage());
         }
@@ -1081,7 +1075,7 @@ if (method_is_post()) {
 
         $postedPermissions = $_POST['permissions'] ?? [];
         if (!is_array($postedPermissions)) {
-            flash('error', 'Invalid permission payload.');
+            flash('error', t('admin.permission_payload_invalid'));
             redirect(admin_section_url('admin-role-permissions'));
         }
 
@@ -1108,7 +1102,7 @@ if (method_is_post()) {
                 }
             }
 
-            flash('success', 'Saved custom permissions for List Editor and List Helper (' . $updatedCount . ' values).');
+            flash('success', t('admin.permissions_saved', ['count' => $updatedCount]));
         } catch (Throwable $throwable) {
             flash('error', $throwable->getMessage());
         }
@@ -1131,11 +1125,11 @@ if (method_is_post()) {
             redirect(admin_section_url('admin-badges'));
         }
         if ($badgeName === '') {
-            flash('error', 'Badge name is required.');
+            flash('error', t('admin.badge_name_required'));
             redirect(admin_section_url('admin-badges'));
         }
         if ($badgeImageUrl === null || $badgeImageUrl === '') {
-            flash('error', 'Badge image is required. Please upload a PNG, JPG, GIF, or WEBP image.');
+            flash('error', t('admin.badge_image_required'));
             redirect(admin_section_url('admin-badges'));
         }
 
@@ -1151,7 +1145,7 @@ if (method_is_post()) {
                 ':created_by_user_id' => current_user_id(),
             ]);
 
-            flash('success', 'Created badge "' . $badgeName . '".');
+            flash('success', t('admin.badge_created', ['name' => $badgeName]));
         } catch (Throwable $throwable) {
             $message = $throwable instanceof PDOException && (string) $throwable->getCode() === '23000'
                 ? 'A badge with that name already exists.'
@@ -1173,7 +1167,7 @@ if (method_is_post()) {
         $badgeDescription = normalize_badge_description((string) ($_POST['badge_description'] ?? ''));
 
         if ($badgeId < 1 || $badgeName === '') {
-            flash('error', 'Choose a badge and enter a badge name.');
+            flash('error', t('admin.badge_update_required'));
             redirect(admin_section_url('admin-badges'));
         }
 
@@ -1210,7 +1204,7 @@ if (method_is_post()) {
                 ':id' => $badgeId,
             ]);
 
-            flash('success', 'Updated badge "' . $badgeName . '".');
+            flash('success', t('admin.badge_updated', ['name' => $badgeName]));
         } catch (Throwable $throwable) {
             $message = $throwable instanceof PDOException && (string) $throwable->getCode() === '23000'
                 ? 'A badge with that name already exists.'
@@ -1229,7 +1223,7 @@ if (method_is_post()) {
 
         $badgeId = (int) ($_POST['badge_id'] ?? 0);
         if ($badgeId < 1) {
-            flash('error', 'Choose a badge to delete.');
+            flash('error', t('admin.badge_delete_required'));
             redirect(admin_section_url('admin-badges'));
         }
 
@@ -1251,12 +1245,12 @@ if (method_is_post()) {
             $deleteBadge->execute([':id' => $badgeId]);
 
             $pdo->commit();
-            flash('success', 'Deleted badge "' . (string) $badge['name'] . '".');
+            flash('success', t('admin.badge_deleted', ['name' => (string) $badge['name']]));
         } catch (Throwable $throwable) {
             if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            flash('error', 'Could not delete badge: ' . $throwable->getMessage());
+            flash('error', t('admin.badge_delete_failed', ['error' => $throwable->getMessage()]));
         }
 
         redirect(admin_section_url('admin-badges'));
@@ -1273,7 +1267,7 @@ if (method_is_post()) {
         $mode = strtolower(trim((string) ($_POST['badge_mode'] ?? 'assign')));
 
         if ($badgeId < 1 || $targetUsername === '' || !in_array($mode, ['assign', 'remove'], true)) {
-            flash('error', 'Choose a badge, user, and valid action.');
+            flash('error', t('admin.badge_assignment_invalid'));
             redirect(admin_section_url('admin-badges'));
         }
 
@@ -1301,14 +1295,14 @@ if (method_is_post()) {
                     ':badge_id' => $badgeId,
                     ':assigned_by_user_id' => current_user_id(),
                 ]);
-                flash('success', 'Assigned "' . (string) $badge['name'] . '" to ' . $targetUsername . '.');
+                flash('success', t('admin.badge_assigned', ['badge' => (string) $badge['name'], 'user' => $targetUsername]));
             } else {
                 $remove = $pdo->prepare('DELETE FROM user_badges WHERE user_id = :user_id AND badge_id = :badge_id');
                 $remove->execute([
                     ':user_id' => $userId,
                     ':badge_id' => $badgeId,
                 ]);
-                flash('success', 'Removed "' . (string) $badge['name'] . '" from ' . $targetUsername . '.');
+                flash('success', t('admin.badge_removed', ['badge' => (string) $badge['name'], 'user' => $targetUsername]));
             }
         } catch (Throwable $throwable) {
             flash('error', $throwable->getMessage());
@@ -1331,7 +1325,7 @@ if (method_is_post()) {
             : null;
 
         if ($tagName === '') {
-            flash('error', 'Tag name is required.');
+            flash('error', t('admin.tag_name_required'));
             redirect(admin_section_url('admin-tags'));
         }
 
@@ -1348,7 +1342,7 @@ if (method_is_post()) {
                 ':created_by_user_id' => current_user_id(),
             ]);
 
-            flash('success', 'Created tag "' . $tagName . '".');
+            flash('success', t('admin.tag_created', ['name' => $tagName]));
         } catch (Throwable $throwable) {
             $message = $throwable instanceof PDOException && (string) $throwable->getCode() === '23000'
                 ? 'A tag with that name already exists.'
@@ -1374,7 +1368,7 @@ if (method_is_post()) {
             : null;
 
         if ($tagId < 1 || $tagName === '') {
-            flash('error', 'Choose a tag and enter a tag name.');
+            flash('error', t('admin.tag_update_required'));
             redirect(admin_section_url('admin-tags'));
         }
 
@@ -1388,7 +1382,7 @@ if (method_is_post()) {
                 ':id' => $tagId,
             ]);
 
-            flash('success', 'Updated tag "' . $tagName . '".');
+            flash('success', t('admin.tag_updated', ['name' => $tagName]));
         } catch (Throwable $throwable) {
             $message = $throwable instanceof PDOException && (string) $throwable->getCode() === '23000'
                 ? 'A tag with that name already exists.'
@@ -1407,7 +1401,7 @@ if (method_is_post()) {
 
         $tagId = (int) ($_POST['tag_id'] ?? 0);
         if ($tagId < 1) {
-            flash('error', 'Choose a tag to delete.');
+            flash('error', t('admin.tag_delete_required'));
             redirect(admin_section_url('admin-tags'));
         }
 
@@ -1415,9 +1409,9 @@ if (method_is_post()) {
             $stmt = db()->prepare('DELETE FROM demon_tags WHERE id = :id');
             $stmt->execute([':id' => $tagId]);
 
-            flash('success', 'Deleted the tag.');
+            flash('success', t('admin.tag_deleted'));
         } catch (Throwable $throwable) {
-            flash('error', 'Could not delete tag: ' . $throwable->getMessage());
+            flash('error', t('admin.tag_delete_failed', ['error' => $throwable->getMessage()]));
         }
 
         redirect(admin_section_url('admin-tags'));

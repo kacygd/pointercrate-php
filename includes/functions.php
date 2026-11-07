@@ -2273,7 +2273,7 @@ function demonlist_normalize_list(?string $list): string
         return 'demonlist';
     }
 
-    return strtolower(trim((string) $list)) === 'demonlist' ? 'demonlist' : 'ratedplus';
+    return strtolower(trim((string) $list)) === 'ratedplus' ? 'ratedplus' : 'demonlist';
 }
 
 function demonlist_active_list(): string

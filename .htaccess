@@ -5,7 +5,7 @@ DirectoryIndex pages/index.php
 # Block access to sensitive files and runtime directories.
 RewriteRule ^(db|includes|\.update|\.git)(/|$) - [F,L]
 
-<FilesMatch "^(config\.php|config\.example\.php|bootstrap\.php|update\.php|update_db_schema\.php|README\.md)$">
+<FilesMatch "^(config\.php|config\.example\.php|bootstrap\.php|update\.php|README\.md)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>

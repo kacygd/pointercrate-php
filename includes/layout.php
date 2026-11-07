@@ -162,6 +162,18 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
             </a>
         </div>
 
+        <div class="nav-group nav-list-menu <?= $activeList === 'demonlist' && $demonlistActive ? 'is-current-list' : '' ?>">
+            <a class="nav-item hover white nav-list-trigger" href="<?= e(demonlist_list_url('index.php', 'demonlist')) ?>" title="<?= e($appName) ?>">
+                <span class="nav-list-title"><?= e($appName) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
+            </a>
+            <ul class="nav-hover-dropdown white nav-list-dropdown">
+                <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(demonlist_list_url('guidelines.php', 'demonlist')) ?>"><?= e(t('nav.guidelines')) ?></a></li>
+                <li><a class="white hover <?= $statsViewerActive ? 'active' : '' ?>" href="<?= e(demonlist_list_url('players.php', 'demonlist')) ?>"><?= e(t('nav.stats')) ?></a></li>
+                <li><a class="white hover <?= $activeNav === 'roulette' ? 'active' : '' ?>" href="<?= e(demonlist_list_url('roulette.php', 'demonlist')) ?>"><?= e(t('nav.roulette')) ?></a></li>
+                <li><a class="white hover <?= $timeMachineActive ? 'active' : '' ?>" href="<?= e(demonlist_list_url('time-machine.php', 'demonlist')) ?>"><?= e(t('nav.time_machine')) ?></a></li>
+            </ul>
+        </div>
+
         <?php if ($ratedPlusEnabled): ?>
         <div class="nav-group nav-list-menu <?= $activeList === 'ratedplus' && $demonlistActive ? 'is-current-list' : '' ?>">
             <a class="nav-item hover white nav-list-trigger" href="<?= e(demonlist_list_url('index.php', 'ratedplus')) ?>" title="<?= e(t('list.ratedplus')) ?>">
@@ -175,18 +187,6 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
             </ul>
         </div>
         <?php endif; ?>
-
-        <div class="nav-group nav-list-menu <?= $activeList === 'demonlist' && $demonlistActive ? 'is-current-list' : '' ?>">
-            <a class="nav-item hover white nav-list-trigger" href="<?= e(demonlist_list_url('index.php', 'demonlist')) ?>" title="<?= e($appName) ?>">
-                <span class="nav-list-title"><?= e($appName) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
-            </a>
-            <ul class="nav-hover-dropdown white nav-list-dropdown">
-                <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(demonlist_list_url('guidelines.php', 'demonlist')) ?>"><?= e(t('nav.guidelines')) ?></a></li>
-                <li><a class="white hover <?= $statsViewerActive ? 'active' : '' ?>" href="<?= e(demonlist_list_url('players.php', 'demonlist')) ?>">Stats Viewer</a></li>
-                <li><a class="white hover <?= $activeNav === 'roulette' ? 'active' : '' ?>" href="<?= e(demonlist_list_url('roulette.php', 'demonlist')) ?>"><?= e(t('nav.roulette')) ?></a></li>
-                <li><a class="white hover <?= $timeMachineActive ? 'active' : '' ?>" href="<?= e(demonlist_list_url('time-machine.php', 'demonlist')) ?>"><?= e(t('nav.time_machine')) ?></a></li>
-            </ul>
-        </div>
 
         <div class="nav-right-cluster">
             <div class="nav-tools nav-tools-right">

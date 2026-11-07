@@ -3,18 +3,52 @@ declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
 
-if (PHP_SAPI !== 'cli') {
-    http_response_code(404);
+$isCli = PHP_SAPI === 'cli';
+
+function update_schema_output(array $lines, bool $isCli): never
+{
+    if ($isCli) {
+        echo implode(PHP_EOL, $lines) . PHP_EOL;
+        exit;
+    }
+
+    render_header(t('schema.title'), 'admin');
+    ?>
+    <section class="panel panel-narrow fade">
+        <div class="panel-head"><h1><?= e(t('schema.title')) ?></h1><p><?= e(t('schema.finished')) ?></p></div>
+        <pre class="admin-update-log"><?= e(implode(PHP_EOL, $lines)) ?></pre>
+        <p><a class="button blue hover" href="<?= e(base_url('admin.php')) ?>"><?= e(t('schema.back_to_admin')) ?></a></p>
+    </section>
+    <?php
+    render_footer();
     exit;
 }
 
-function out(array $lines): void
-{
-    $text = implode(PHP_EOL, $lines) . PHP_EOL;
-    if (PHP_SAPI !== 'cli') {
-        header('Content-Type: text/plain; charset=UTF-8');
+if (!$isCli) {
+    if (!(is_logged_in() && has_owner_access())) {
+        http_response_code(403);
+        exit('Forbidden');
     }
-    echo $text;
+
+    if (!method_is_post()) {
+        render_header(t('schema.title'), 'admin');
+        ?>
+        <section class="panel panel-narrow fade">
+            <div class="panel-head"><h1><?= e(t('schema.title')) ?></h1><p><?= e(t('schema.intro')) ?></p></div>
+            <form method="post" action="<?= e(base_url('update_db_schema.php')) ?>">
+                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                <button class="button blue hover" type="submit"><?= e(t('schema.run')) ?></button>
+            </form>
+        </section>
+        <?php
+        render_footer();
+        exit;
+    }
+
+    if (!validate_csrf($_POST['_token'] ?? null)) {
+        http_response_code(403);
+        exit(t('schema.invalid_token'));
+    }
 }
 
 $pdo = db();
@@ -39,9 +73,8 @@ try {
         $logs[] = '[WARN] Could not write app.updated to config.php (check file permission).';
     }
 
-    out($logs);
+    update_schema_output($logs, $isCli);
 } catch (Throwable $e) {
     $logs[] = '[ERROR] ' . $e->getMessage();
-    out($logs);
-    exit(1);
+    update_schema_output($logs, $isCli);
 }
