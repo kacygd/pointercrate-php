@@ -262,6 +262,66 @@ function admin_badge_uploaded_image_url(?array $file): ?string
     return 'assets/badges/' . $fileName;
 }
 
+function admin_thumbnail_uploaded_image_url(?array $file): ?string
+{
+    if (!is_array($file) || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+
+    $error = (int) ($file['error'] ?? UPLOAD_ERR_OK);
+    if ($error !== UPLOAD_ERR_OK) {
+        throw new RuntimeException(t('admin.thumbnail_upload_failed'));
+    }
+
+    $size = (int) ($file['size'] ?? 0);
+    if ($size < 1 || $size > 2 * 1024 * 1024) {
+        throw new RuntimeException(t('admin.thumbnail_too_large'));
+    }
+
+    $tmpName = (string) ($file['tmp_name'] ?? '');
+    if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+        throw new RuntimeException(t('admin.thumbnail_image_invalid'));
+    }
+
+    $extension = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION));
+    if ($extension === 'jpeg') {
+        $extension = 'jpg';
+    }
+
+    $allowedExtensions = ['png', 'jpg', 'gif', 'webp'];
+    if (!in_array($extension, $allowedExtensions, true)) {
+        throw new RuntimeException(t('admin.thumbnail_image_type'));
+    }
+
+    $imageInfo = @getimagesize($tmpName);
+    if ($imageInfo === false) {
+        throw new RuntimeException(t('admin.thumbnail_image_not_valid'));
+    }
+
+    $imageExtensions = [
+        IMAGETYPE_PNG => 'png',
+        IMAGETYPE_JPEG => 'jpg',
+        IMAGETYPE_GIF => 'gif',
+        IMAGETYPE_WEBP => 'webp',
+    ];
+    if (($imageExtensions[(int) ($imageInfo[2] ?? 0)] ?? null) !== $extension) {
+        throw new RuntimeException(t('admin.thumbnail_extension_mismatch'));
+    }
+
+    $targetDir = dirname(__DIR__) . '/assets/thumbnails';
+    if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+        throw new RuntimeException(t('admin.thumbnail_folder_failed'));
+    }
+
+    $fileName = 'thumb-' . date('YmdHis') . '-' . bin2hex(random_bytes(4)) . '.' . $extension;
+    $targetPath = $targetDir . DIRECTORY_SEPARATOR . $fileName;
+    if (!move_uploaded_file($tmpName, $targetPath)) {
+        throw new RuntimeException(t('admin.thumbnail_save_failed'));
+    }
+
+    return 'assets/thumbnails/' . $fileName;
+}
+
 function admin_webhook_actor_label(): string
 {
     $name = trim((string) (current_user_display_name() ?? 'System'));
@@ -865,6 +925,14 @@ if (method_is_post()) {
             || !demonlist_set_show_legacy_list($showLegacyList)
             || !demonlist_set_list_limits($mainListLimit, $extendedListLimit)
         ) {
+            flash('error', t('admin.list_settings_failed'));
+            redirect(admin_section_url('admin-list-visibility'));
+        }
+
+        $tabNameMain = trim((string) ($_POST['tab_name_main'] ?? ''));
+        $tabNameRatedPlus = trim((string) ($_POST['tab_name_ratedplus'] ?? ''));
+        if (!demonlist_set_tab_name_main($tabNameMain)
+            || !demonlist_set_tab_name_ratedplus($tabNameRatedPlus)) {
             flash('error', t('admin.list_settings_failed'));
             redirect(admin_section_url('admin-list-visibility'));
         }
@@ -1592,7 +1660,15 @@ if (method_is_post()) {
         $verifier = trim((string) ($_POST['verifier'] ?? ''));
         $description = normalize_demon_description((string) ($_POST['description'] ?? ''));
         $videoUrl = trim((string) ($_POST['video_url'] ?? ''));
-        $thumbnail = trim((string) ($_POST['thumbnail_url'] ?? ''));
+        $thumbnailUrlInput = trim((string) ($_POST['thumbnail_url'] ?? ''));
+        try {
+            $uploadedThumbnail = admin_thumbnail_uploaded_image_url($_FILES['thumbnail_image_file'] ?? null);
+        } catch (Throwable $throwable) {
+            $uploadedThumbnail = null;
+            flash('error', $throwable->getMessage());
+            redirect(admin_section_url('admin-add-level'));
+        }
+        $thumbnail = $uploadedThumbnail !== null ? $uploadedThumbnail : $thumbnailUrlInput;
         $levelId = trim((string) ($_POST['level_id'] ?? ''));
         $levelLength = trim((string) ($_POST['level_length'] ?? ''));
         $song = trim((string) ($_POST['song'] ?? ''));
@@ -1792,7 +1868,15 @@ if (method_is_post()) {
         $descriptionInput = normalize_demon_description((string) ($_POST['description'] ?? ''));
         $clearDescription = !empty($_POST['clear_description']);
         $videoUrlInput = trim((string) ($_POST['video_url'] ?? ''));
-        $thumbnailInput = trim((string) ($_POST['thumbnail_url'] ?? ''));
+        $thumbnailUrlInput = trim((string) ($_POST['thumbnail_url'] ?? ''));
+        try {
+            $uploadedThumbnail = admin_thumbnail_uploaded_image_url($_FILES['thumbnail_image_file'] ?? null);
+        } catch (Throwable $throwable) {
+            $uploadedThumbnail = null;
+            flash('error', $throwable->getMessage());
+            redirect(admin_section_url('admin-edit-level'));
+        }
+        $thumbnailInput = $uploadedThumbnail !== null ? $uploadedThumbnail : $thumbnailUrlInput;
         $levelIdInput = trim((string) ($_POST['level_id'] ?? ''));
         $levelLengthInput = trim((string) ($_POST['level_length'] ?? ''));
         $songInput = trim((string) ($_POST['song'] ?? ''));
@@ -3061,6 +3145,8 @@ if ($activeSection === 'admin-list-visibility') {
     $extendedListLimit = demonlist_extended_list_limit();
     $listLimitMinInput = (string) demonlist_list_limit_min();
     $listLimitMaxInput = (string) demonlist_list_limit_max();
+    $tabNameMain = demonlist_tab_name_main();
+    $tabNameRatedPlus = demonlist_tab_name_ratedplus();
 }
 
 $hasPublisherClaimColumn = false;
@@ -3908,6 +3994,20 @@ render_header(t('admin.title'), 'admin');
             ])) ?>
         </small>
 
+        <label class="field">
+            <span><?= e(t('admin.tab_name_main')) ?></span>
+            <input type="text" name="tab_name_main" value="<?= e((string) ($tabNameMain ?? demonlist_tab_name_main())) ?>" placeholder="<?= e(t('list.main')) ?>">
+        </label>
+
+        <label class="field">
+            <span><?= e(t('admin.tab_name_ratedplus')) ?></span>
+            <input type="text" name="tab_name_ratedplus" value="<?= e((string) ($tabNameRatedPlus ?? demonlist_tab_name_ratedplus())) ?>" placeholder="<?= e(t('list.ratedplus_title')) ?>">
+        </label>
+
+        <small class="muted" style="text-align: left;">
+            <?= e(t('admin.tab_name_help')) ?>
+        </small>
+
         <button class="button blue hover" type="submit"><?= e(t('admin.save_list_settings')) ?></button>
     </form>
 </section>
@@ -4209,7 +4309,7 @@ render_header(t('admin.title'), 'admin');
         <p><?= e(t('admin.add_level_intro')) ?></p>
     </div>
 
-    <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-add-level')) ?>">
+    <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-add-level')) ?>" enctype="multipart/form-data">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="add_level">
 
@@ -4258,6 +4358,12 @@ render_header(t('admin.title'), 'admin');
         <label class="field">
             <span><?= e(t('admin.thumbnail_url_optional')) ?></span>
             <input type="url" name="thumbnail_url">
+        </label>
+
+        <label class="field">
+            <span><?= e(t('admin.thumbnail_image_file')) ?></span>
+            <input type="file" name="thumbnail_image_file" accept="image/png,image/jpeg,image/gif,image/webp">
+            <small><?= e(t('admin.thumbnail_image_file_hint')) ?></small>
         </label>
 
         <label class="field">
@@ -4350,7 +4456,7 @@ render_header(t('admin.title'), 'admin');
         <p><?= e(t('admin.edit_level_intro')) ?></p>
     </div>
 
-    <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-edit-level')) ?>">
+    <form class="stack-form" method="post" action="<?= e(admin_section_url('admin-edit-level')) ?>" enctype="multipart/form-data">
         <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="action" value="edit_level">
 
@@ -4402,6 +4508,12 @@ render_header(t('admin.title'), 'admin');
                 <input type="url" name="thumbnail_url" placeholder="<?= e(t('admin.keep_current')) ?>">
             </label>
         </div>
+
+        <label class="field">
+            <span><?= e(t('admin.thumbnail_image_file')) ?></span>
+            <input type="file" name="thumbnail_image_file" accept="image/png,image/jpeg,image/gif,image/webp">
+            <small><?= e(t('admin.thumbnail_image_file_hint')) ?></small>
+        </label>
 
         <label class="field">
             <span><?= e(t('admin.level_description_optional')) ?></span>

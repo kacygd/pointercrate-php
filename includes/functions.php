@@ -245,14 +245,23 @@ function valid_http_url(string $url): bool
 function valid_thumbnail_url(string $url): bool
 {
     $url = trim($url);
-    if (strlen($url) > 2048 || !valid_http_url($url)) {
+    if ($url === '') {
+        return false;
+    }
+    if (strlen($url) > 2048) {
         return false;
     }
 
-    $parts = parse_url($url);
-    $path = is_array($parts) ? trim((string) ($parts['path'] ?? '')) : '';
+    if (preg_match('#^https?://#i', $url) === 1) {
+        if (!valid_http_url($url)) {
+            return false;
+        }
+        $parts = parse_url($url);
+        $path = is_array($parts) ? trim((string) ($parts['path'] ?? '')) : '';
+        return $path !== '' && $path !== '/';
+    }
 
-    return $path !== '' && $path !== '/';
+    return preg_match('#^[A-Za-z0-9_./~%-]+\.(?:png|jpe?g|gif|webp|svg)$#i', ltrim($url, '/')) === 1;
 }
 
 function safe_href_url(mixed $url): string
@@ -2267,6 +2276,34 @@ function demonlist_set_ratedplus_enabled(bool $enabled): bool
     return app_setting_set('list.ratedplus_enabled', $enabled ? '1' : '0');
 }
 
+function demonlist_tab_name_main(): string
+{
+    $custom = app_setting_get('list.tab_name_main', null);
+    if ($custom !== null && trim($custom) !== '') {
+        return trim($custom);
+    }
+    return t('list.main');
+}
+
+function demonlist_tab_name_ratedplus(): string
+{
+    $custom = app_setting_get('list.tab_name_ratedplus', null);
+    if ($custom !== null && trim($custom) !== '') {
+        return trim($custom);
+    }
+    return t('list.ratedplus_title');
+}
+
+function demonlist_set_tab_name_main(string $name): bool
+{
+    return app_setting_set('list.tab_name_main', trim($name));
+}
+
+function demonlist_set_tab_name_ratedplus(string $name): bool
+{
+    return app_setting_set('list.tab_name_ratedplus', trim($name));
+}
+
 function demonlist_normalize_list(?string $list): string
 {
     if (!demonlist_ratedplus_enabled()) {
@@ -2319,6 +2356,7 @@ function demonlist_apply_list_context(array $demons, string $list): array
         $demon['ratedplus_position'] = $ratedPlusPosition;
         $demon['list_position'] = $position;
         $demon['position'] = $position;
+        $demon['_db_legacy'] = (int) ($demon['legacy'] ?? 0);
         $demon['legacy'] = 0;
         $result[] = $demon;
     }
@@ -2887,6 +2925,7 @@ function discord_bot_api_request(string $method, string $endpoint, ?array $paylo
     $body = '';
     $status = 0;
     $transportError = '';
+    $transport = function_exists('curl_init') ? 'cURL' : 'PHP stream';
 
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
@@ -2925,6 +2964,11 @@ function discord_bot_api_request(string $method, string $endpoint, ?array $paylo
 
         $response = @file_get_contents($url, false, $context);
         $body = is_string($response) ? $response : '';
+        if ($response === false && $body === '') {
+            $transportError = (bool) ini_get('allow_url_fopen')
+                ? 'PHP stream request failed (DNS, SSL, firewall, or outbound HTTPS restriction).'
+                : 'cURL is unavailable and allow_url_fopen is disabled.';
+        }
         if (isset($http_response_header) && is_array($http_response_header) && $http_response_header !== []
             && preg_match('/\s(\d{3})\s/', (string) $http_response_header[0], $match) === 1) {
             $status = (int) $match[1];
@@ -2951,6 +2995,8 @@ function discord_bot_api_request(string $method, string $endpoint, ?array $paylo
         'ok' => $status >= 200 && $status < 300,
         'status' => $status,
         'data' => $decoded,
+        'transport' => $transport,
+        'error' => $transportError,
     ];
 }
 

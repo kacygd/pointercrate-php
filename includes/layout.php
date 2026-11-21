@@ -164,7 +164,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
 
         <div class="nav-group nav-list-menu <?= $activeList === 'demonlist' && $demonlistActive ? 'is-current-list' : '' ?>">
             <a class="nav-item hover white nav-list-trigger" href="<?= e(demonlist_list_url('index.php', 'demonlist')) ?>" title="<?= e($appName) ?>">
-                <span class="nav-list-title"><?= e($appName) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
+                <span class="nav-list-title"><?= e(demonlist_tab_name_main()) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
             </a>
             <ul class="nav-hover-dropdown white nav-list-dropdown">
                 <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(demonlist_list_url('guidelines.php', 'demonlist')) ?>"><?= e(t('nav.guidelines')) ?></a></li>
@@ -177,7 +177,7 @@ function render_header(string $title, string $activeNav = '', array $meta = []):
         <?php if ($ratedPlusEnabled): ?>
         <div class="nav-group nav-list-menu <?= $activeList === 'ratedplus' && $demonlistActive ? 'is-current-list' : '' ?>">
             <a class="nav-item hover white nav-list-trigger" href="<?= e(demonlist_list_url('index.php', 'ratedplus')) ?>" title="<?= e(t('list.ratedplus')) ?>">
-                <span class="nav-list-title"><?= e(t('list.ratedplus_title')) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
+                <span class="nav-list-title"><?= e(demonlist_tab_name_ratedplus()) ?> <i class="fas fa-sort-down" aria-hidden="true"></i></span>
             </a>
             <ul class="nav-hover-dropdown white nav-list-dropdown">
                 <li><a class="white hover <?= $activeNav === 'guidelines' ? 'active' : '' ?>" href="<?= e(demonlist_list_url('guidelines.php', 'ratedplus')) ?>"><?= e(t('nav.guidelines')) ?></a></li>

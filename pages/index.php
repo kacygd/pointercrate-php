@@ -168,7 +168,7 @@ $showLegacyList = demonlist_show_legacy_list();
 
 foreach ($allDemons as $demon) {
     $position = (int) $demon['position'];
-    $isLegacy = (int) ($demon['legacy'] ?? 0) === 1;
+    $isLegacy = (int) ($demon['_db_legacy'] ?? $demon['legacy'] ?? 0) === 1;
     // Rated+ templates remain visible even when the main site's legacy section
     // is hidden. They are intentionally exclusive to the Rated+ view.
     if ($activeList === 'ratedplus' && (int) ($demon['rated'] ?? 0) !== 1) {

@@ -1,5 +1,5 @@
 (() => {
-  console.info('list v2.2');
+  console.info('list v2.21');
 
   const i18n = window.DEMONLIST_I18N && typeof window.DEMONLIST_I18N === 'object'
     ? window.DEMONLIST_I18N
