@@ -3001,6 +3001,64 @@ if (method_is_post()) {
 
         redirect(admin_section_url('admin-pending-submissions'));
     }
+    if ($action === 'delete_completion' && can_review_submissions()) {
+        if (!validate_csrf($_POST['_token'] ?? null)) {
+            flash('error', t('flash.invalid_token'));
+            redirect(admin_section_url('admin-records'));
+        }
+
+        $completionId = (int) ($_POST['completion_id'] ?? 0);
+        if ($completionId < 1) {
+            flash('error', 'Invalid completion record.');
+            redirect(admin_section_url('admin-records'));
+        }
+
+        $levelSearch = is_string($_POST['completion_level_q'] ?? null) ? trim($_POST['completion_level_q']) : '';
+        $playerSearch = is_string($_POST['completion_player_q'] ?? null) ? trim($_POST['completion_player_q']) : '';
+        $recordsUrl = admin_section_url('admin-records', [
+            'completion_level_q' => $levelSearch,
+            'completion_player_q' => $playerSearch,
+        ]);
+
+        $pdo = db();
+        try {
+            $pdo->beginTransaction();
+
+            $completionStmt = $pdo->prepare('SELECT c.id, c.player, d.name AS demon_name
+                                             FROM completions c
+                                             INNER JOIN demons d ON d.id = c.demon_id
+                                             WHERE c.id = :id
+                                             LIMIT 1
+                                             FOR UPDATE');
+            $completionStmt->execute([':id' => $completionId]);
+            $completion = $completionStmt->fetch();
+            if ($completion === false) {
+                throw new RuntimeException('Completion record not found.');
+            }
+
+            $deleteStmt = $pdo->prepare('DELETE FROM completions WHERE id = :id');
+            $deleteStmt->execute([':id' => $completionId]);
+            if ($deleteStmt->rowCount() !== 1) {
+                throw new RuntimeException('Completion record could not be deleted.');
+            }
+
+            demonlist_sync_user_points($pdo);
+            $pdo->commit();
+
+            flash('success', t('admin.record_deleted', [
+                'id' => $completionId,
+                'player' => (string) $completion['player'],
+                'level' => (string) $completion['demon_name'],
+            ]));
+        } catch (Throwable $throwable) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            flash('error', $throwable->getMessage());
+        }
+
+        redirect($recordsUrl);
+    }
     flash('error', t('flash.no_permission'));
     redirect(admin_section_url('overview'));
 
@@ -3081,6 +3139,7 @@ $sectionCapability = [
     'admin-ip-bans'              => $canManageUsers,
     'admin-pending-submissions'  => $canReviewSubmissions,
     'admin-reviewed-submissions' => $canReviewSubmissions,
+    'admin-records'              => $canReviewSubmissions,
     'admin-badges'               => $canManageBadges,
     'admin-tags'                 => $canManageTags,
 ];
@@ -3090,7 +3149,7 @@ $activeSection = ($requestedSection !== 'overview'
     && $sectionCapability[$requestedSection])
     ? $requestedSection
     : 'overview';
-$needsDemonList = in_array($activeSection, ['admin-edit-level', 'admin-claims', 'admin-level-comments', 'admin-delete-level', 'admin-tags'], true);
+$needsDemonList = in_array($activeSection, ['admin-edit-level', 'admin-claims', 'admin-level-comments', 'admin-delete-level', 'admin-tags', 'admin-records'], true);
 $needsLevelInfoCustomRows = in_array($activeSection, ['admin-add-level', 'admin-edit-level', 'admin-level-info-rows'], true);
 
 $openCommentReportCount = 0;
@@ -3115,6 +3174,36 @@ if ($activeSection === 'admin-reviewed-submissions') {
                              WHERE s.status <> "pending"
                              ORDER BY s.reviewed_at DESC
                              LIMIT 30')->fetchAll();
+}
+
+$completionRecords = [];
+$completionPlayers = [];
+$completionLevelQuery = is_string($_GET['completion_level_q'] ?? null) ? trim($_GET['completion_level_q']) : '';
+$completionPlayerQuery = is_string($_GET['completion_player_q'] ?? null) ? trim($_GET['completion_player_q']) : '';
+if ($activeSection === 'admin-records') {
+    $completionPlayers = db()->query('SELECT DISTINCT player FROM completions WHERE player <> "" ORDER BY player ASC')->fetchAll(PDO::FETCH_COLUMN);
+
+    if ($completionLevelQuery !== '' || $completionPlayerQuery !== '') {
+        $where = [];
+        $params = [];
+        if ($completionLevelQuery !== '') {
+            $where[] = "d.name LIKE :level_search ESCAPE '!'";
+            $params[':level_search'] = '%' . strtr($completionLevelQuery, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+        }
+        if ($completionPlayerQuery !== '') {
+            $where[] = "c.player LIKE :player_search ESCAPE '!'";
+            $params[':player_search'] = '%' . strtr($completionPlayerQuery, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+        }
+
+        $recordsSql = 'SELECT c.id, c.player, c.progress, c.placement, c.created_at, d.name AS demon_name
+                       FROM completions c
+                       INNER JOIN demons d ON d.id = c.demon_id
+                       WHERE ' . implode(' AND ', $where) . '
+                       ORDER BY c.created_at DESC, c.id DESC';
+        $recordsStmt = db()->prepare($recordsSql);
+        $recordsStmt->execute($params);
+        $completionRecords = $recordsStmt->fetchAll();
+    }
 }
 
 $topOnePoints = 0.0;
@@ -3384,6 +3473,10 @@ render_header(t('admin.title'), 'admin');
                     <a class="admin-action-tile<?= $activeSection === 'admin-reviewed-submissions' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-reviewed-submissions')) ?>">
                         <span class="admin-action-title"><?= e(t('admin.recently_reviewed')) ?></span>
                         <small><?= e(t('admin.recently_reviewed_desc')) ?></small>
+                    </a>
+                    <a class="admin-action-tile<?= $activeSection === 'admin-records' ? ' is-active' : '' ?>" href="<?= e(admin_section_url('admin-records')) ?>">
+                        <span class="admin-action-title"><?= e(t('admin.completion_records')) ?></span>
+                        <small><?= e(t('admin.completion_records_desc')) ?></small>
                     </a>
                 </div>
             </div>
@@ -4660,7 +4753,7 @@ render_header(t('admin.title'), 'admin');
         <div class="admin-user-search-grid">
             <label class="field">
                 <span><?= e(t('admin.search_username')) ?></span>
-                <input id="admin-user-search" type="text" name="users_q" value="<?= e($usersQuery) ?>" placeholder="<?= e(t('admin.type_username')) ?>">
+                <input id="admin-user-search" type="text" name="users_q" data-suggest-list="admin-user-claim-list" value="<?= e($usersQuery) ?>" placeholder="<?= e(t('admin.type_username')) ?>" autocomplete="off">
             </label>
             <div class="admin-user-search-actions">
                 <button class="button white hover" type="submit"><?= e(t('common.search')) ?></button>
@@ -4670,6 +4763,11 @@ render_header(t('admin.title'), 'admin');
             </div>
         </div>
     </form>
+    <datalist id="admin-user-claim-list">
+        <?php foreach ($claimUsers as $claimUser): ?>
+            <option value="<?= e((string) ($claimUser['username'] ?? '')) ?>"></option>
+        <?php endforeach; ?>
+    </datalist>
     <div class="table-wrap">
         <table class="data-table admin-user-table">
             <thead>
@@ -4903,6 +5001,86 @@ render_header(t('admin.title'), 'admin');
 </section>
 <?php endif; ?>
 
+<?php if ($activeSection === 'admin-records'): ?>
+<section class="panel fade admin-tool-section admin-list-section" id="admin-records">
+    <div class="panel-head">
+        <h2><?= e(t('admin.completion_records')) ?></h2>
+    </div>
+    <p class="muted"><?= e(t('admin.completion_records_desc')) ?></p>
+    <form class="admin-records-toolbar" method="get" action="<?= e(base_url('admin.php')) ?>">
+        <input type="hidden" name="section" value="admin-records">
+        <div class="admin-records-filter-grid">
+            <label class="field">
+                <span><?= e(t('admin.search_level')) ?></span>
+                <input type="text" name="completion_level_q" data-suggest-list="admin-demon-list" value="<?= e($completionLevelQuery) ?>" placeholder="<?= e(t('admin.type_level_name')) ?>" autocomplete="off">
+            </label>
+            <label class="field">
+                <span><?= e(t('admin.search_player')) ?></span>
+                <input type="text" name="completion_player_q" data-suggest-list="admin-completion-player-list" value="<?= e($completionPlayerQuery) ?>" placeholder="<?= e(t('admin.type_player_name')) ?>" autocomplete="off">
+            </label>
+            <div class="admin-records-filter-actions">
+                <button class="button white hover" type="submit"><?= e(t('common.search')) ?></button>
+                <?php if ($completionLevelQuery !== '' || $completionPlayerQuery !== ''): ?>
+                    <a class="button ghost hover" href="<?= e(admin_section_url('admin-records')) ?>"><?= e(t('common.clear')) ?></a>
+                <?php endif; ?>
+            </div>
+        </div>
+    </form>
+    <datalist id="admin-completion-player-list">
+        <?php foreach ($completionPlayers as $completionPlayer): ?>
+            <option value="<?= e((string) $completionPlayer) ?>"></option>
+        <?php endforeach; ?>
+    </datalist>
+    <?php if ($completionLevelQuery === '' && $completionPlayerQuery === ''): ?>
+        <p class="muted"><?= e(t('admin.search_completion_records_hint')) ?></p>
+    <?php else: ?>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th><?= e(t('common.demon')) ?></th>
+                    <th><?= e(t('common.player')) ?></th>
+                    <th><?= e(t('common.progress')) ?></th>
+                    <th><?= e(t('admin.record_placement')) ?></th>
+                    <th><?= e(t('common.created')) ?></th>
+                    <th><?= e(t('common.delete')) ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if ($completionRecords === []): ?>
+                    <tr><td colspan="7" class="muted"><?= e(t('admin.no_completion_records')) ?></td></tr>
+                <?php endif; ?>
+                <?php foreach ($completionRecords as $record): ?>
+                    <tr>
+                        <td>#<?= (int) $record['id'] ?></td>
+                        <td><?= e((string) $record['demon_name']) ?></td>
+                        <td><?= e((string) $record['player']) ?></td>
+                        <td><?= (int) $record['progress'] ?>%</td>
+                        <td><?= $record['placement'] !== null ? '#' . (int) $record['placement'] : '-' ?></td>
+                        <td><?= e((string) $record['created_at']) ?></td>
+                        <td>
+                            <form method="post" action="<?= e(admin_section_url('admin-records')) ?>">
+                                <input type="hidden" name="_token" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="action" value="delete_completion">
+                                <input type="hidden" name="completion_id" value="<?= (int) $record['id'] ?>">
+                                <input type="hidden" name="completion_level_q" value="<?= e($completionLevelQuery) ?>">
+                                <input type="hidden" name="completion_player_q" value="<?= e($completionPlayerQuery) ?>">
+                                <button class="button red hover small" type="submit" data-confirm="<?= e(t('admin.delete_record_confirm', [
+                                    'player' => (string) $record['player'],
+                                    'level' => (string) $record['demon_name'],
+                                ])) ?>"><?= e(t('common.delete')) ?></button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php endif; ?>
+</section>
+<?php endif; ?>
+
 <?php if ($activeSection === 'admin-reviewed-submissions'): ?>
 <section class="panel fade admin-tool-section admin-list-section" id="admin-reviewed-submissions">
     <div class="panel-head">
@@ -4942,11 +5120,3 @@ render_header(t('admin.title'), 'admin');
     </div>
 </div>
 <?php render_footer(); ?>
-
-
-
-
-
-
-
-
