@@ -929,6 +929,15 @@
     };
 
     const setBackground = (element, url) => {
+      let isYoutubeThumbnail = false;
+      try {
+        const host = new URL(url, window.location.href).hostname.toLowerCase();
+        isYoutubeThumbnail = host === 'i.ytimg.com' || host === 'img.youtube.com';
+      } catch {
+        isYoutubeThumbnail = false;
+      }
+
+      element.classList.toggle('youtube-thumb', isYoutubeThumbnail);
       if (url !== '') {
         element.style.backgroundImage = `url('${url.replace(/'/g, '%27')}')`;
       } else {

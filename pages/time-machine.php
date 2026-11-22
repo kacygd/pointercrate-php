@@ -126,6 +126,7 @@ render_header(t('time.title'), 'time_machine', [
             <?php
             $thumb = card_thumbnail_url($demon);
             $thumbStyle = css_background_image($thumb);
+            $thumbClass = thumbnail_is_youtube($thumb) ? ' youtube-thumb' : '';
             $creatorSearchText = implode(' ', demon_creator_names($demon));
             $publisher = trim((string) ($demon['publisher'] ?? ''));
             $verifier = trim((string) ($demon['verifier'] ?? ''));
@@ -155,7 +156,7 @@ render_header(t('time.title'), 'time_machine', [
                 data-roulette-bucket="<?= e($bucket) ?>"
             >
                 <a
-                    class="thumb ratio-16-9"
+                    class="thumb ratio-16-9<?= $thumbClass ?>"
                     href="<?= e($demonUrl) ?>"
                     style="position: relative; <?= e($thumbStyle) ?>"
                 ></a>

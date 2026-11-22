@@ -713,9 +713,7 @@ $extended = [];
 $legacy = [];
 
 foreach ($allDemons as $entry) {
-    $position = (int) $entry['position'];
-    $isLegacy = (int) ($entry['legacy'] ?? 0) === 1;
-    $listBucket = demonlist_list_bucket($position, $isLegacy);
+    $listBucket = demonlist_bucket_for_entry($entry);
 
     if ($listBucket === 'main') {
         $main[] = $entry;
@@ -1016,7 +1014,7 @@ render_header((string) $demon['name'], 'list', [
     <main class="left">
         <section class="panel fade demon-hero-panel">
             <div class="flex mobile-col demon-hero">
-                <a class="thumb ratio-16-9 demon-hero-thumb" href="<?= e(safe_href_url((string) $demon['video_url'])) ?>" target="_blank" rel="noreferrer" style="<?= e($thumbStyle) ?>">
+                <a class="thumb ratio-16-9 demon-hero-thumb<?= thumbnail_is_youtube($thumbUrl) ? ' youtube-thumb' : '' ?>" href="<?= e(safe_href_url((string) $demon['video_url'])) ?>" target="_blank" rel="noreferrer" style="<?= e($thumbStyle) ?>">
                     <?php if ($thumbUrl !== ''): ?>
                         <img src="<?= e($thumbUrl) ?>" alt="<?= e(t('demon.thumbnail_alt', ['name' => (string) $demon['name']])) ?>" loading="lazy">
                     <?php endif; ?>

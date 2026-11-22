@@ -2342,6 +2342,10 @@ body {
   background-position: center;
 }
 
+.thumb.youtube-thumb {
+  background-size: cover;
+}
+
 #demon-list .panel {
   margin-top: 16px;
   margin-bottom: 16px;
@@ -2552,6 +2556,10 @@ body {
   background-repeat: no-repeat;
   background-position: center;
   background-color: #111;
+}
+
+.roulette-demon-thumb.youtube-thumb {
+  background-size: cover;
 }
 
 .roulette-demon-body {
@@ -3356,6 +3364,14 @@ header nav .nav-profile-dropdown button:hover {
   object-fit: contain;
 }
 
+.demon-hero-thumb.youtube-thumb {
+  background-size: cover;
+}
+
+.demon-hero-thumb.youtube-thumb img {
+  object-fit: cover;
+}
+
 .demon-hero-content {
   display: flex;
   flex-direction: column;
@@ -4103,6 +4119,10 @@ header nav .nav-profile-dropdown button {
 
 .demon-hero-thumb {
   background-size: contain;
+}
+
+.demon-hero-thumb.youtube-thumb {
+  background-size: cover;
 }
 
 @keyframes soft-page-enter {

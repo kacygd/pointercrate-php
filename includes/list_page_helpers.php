@@ -11,10 +11,17 @@ function card_thumbnail_url(array $demon): string
     $videoUrl = trim((string) ($demon['video_url'] ?? ''));
     $youtubeId = youtube_video_id($videoUrl);
     if ($youtubeId !== null && $youtubeId !== '') {
-        return 'https://i.ytimg.com/vi/' . rawurlencode($youtubeId) . '/hqdefault.jpg';
+        return 'https://i.ytimg.com/vi/' . rawurlencode($youtubeId) . '/mqdefault.jpg';
     }
 
     return '';
+}
+
+function thumbnail_is_youtube(string $url): bool
+{
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+
+    return in_array($host, ['i.ytimg.com', 'img.youtube.com'], true);
 }
 
 function css_background_image(string $url): string

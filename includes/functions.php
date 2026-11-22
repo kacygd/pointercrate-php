@@ -2183,6 +2183,14 @@ function demonlist_list_bucket(int $position, bool $legacy): string
     return demonlist_show_legacy_list() ? 'legacy' : 'main';
 }
 
+function demonlist_bucket_for_entry(array $entry): string
+{
+    $position = (int) ($entry['position'] ?? 0);
+    $legacy = (int) ($entry['_db_legacy'] ?? $entry['legacy'] ?? 0) === 1;
+
+    return demonlist_list_bucket($position, $legacy);
+}
+
 function demonlist_position_label(int $position, bool $legacyList): string
 {
     if ($legacyList && !demonlist_legacy_counts_for_score()) {

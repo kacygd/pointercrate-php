@@ -168,17 +168,9 @@ $showLegacyList = demonlist_show_legacy_list();
 
 foreach ($allDemons as $demon) {
     $position = (int) $demon['position'];
-    $isLegacy = (int) ($demon['_db_legacy'] ?? $demon['legacy'] ?? 0) === 1;
-    // Rated+ templates remain visible even when the main site's legacy section
-    // is hidden. They are intentionally exclusive to the Rated+ view.
-    if ($activeList === 'ratedplus' && (int) ($demon['rated'] ?? 0) !== 1) {
-        $main[] = $demon;
-        $showcase[] = $demon;
-        continue;
-    }
     $listBucket = $isTimeMachineView
         ? historical_list_bucket($position)
-        : demonlist_list_bucket($position, $isLegacy);
+        : demonlist_bucket_for_entry($demon);
 
     if ($listBucket === 'main') {
         $main[] = $demon;
@@ -524,6 +516,7 @@ render_header(t('home.title'), 'list', [
             <?php
             $thumb = card_thumbnail_url($demon);
             $thumbStyle = css_background_image($thumb);
+            $thumbClass = thumbnail_is_youtube($thumb) ? ' youtube-thumb' : '';
             $creator = demon_creator_name($demon);
             $creatorSearchText = implode(' ', demon_creator_names($demon));
             $publisher = trim((string) ($demon['publisher'] ?? ''));
@@ -558,7 +551,7 @@ render_header(t('home.title'), 'list', [
                 data-roulette-bucket="<?= e($bucket) ?>"
             >
                 <a
-                    class="thumb ratio-16-9"
+                    class="thumb ratio-16-9<?= $thumbClass ?>"
                     href="<?= e($demonUrl) ?>"
                     style="position: relative; <?= e($thumbStyle) ?>"
                 ></a>
